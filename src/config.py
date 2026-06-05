@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     reasoning_model: str = "claude-sonnet-4-6"
 
     # Search
-    tavily_api_key: str
+    tavily_api_key: str = ""
     tavily_max_results: int = 10
     tavily_search_depth: str = "basic"
 

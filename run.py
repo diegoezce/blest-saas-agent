@@ -5,6 +5,7 @@ Blest Lead Discovery Agent
 Usage:
   python run.py                        Run discovery once and show dashboard
   python run.py --schedule             Start daily scheduler daemon
+  python run.py --web                  Start web UI + embedded daily scheduler
   python run.py --report               Show last run's dashboard
   python run.py --report --date DATE   Show report for DATE (YYYY-MM-DD)
   python run.py --setup                Initialize database tables only
@@ -52,6 +53,7 @@ def main() -> None:
     )
     parser.add_argument("--setup", action="store_true", help="Initialize database and exit")
     parser.add_argument("--schedule", action="store_true", help="Start daily scheduler daemon")
+    parser.add_argument("--web", action="store_true", help="Start web UI + embedded daily scheduler")
     parser.add_argument("--report", action="store_true", help="Show last (or dated) report")
     parser.add_argument("--date", type=str, help="Date for --report (YYYY-MM-DD)", default=None)
     args = parser.parse_args()
@@ -81,6 +83,11 @@ def main() -> None:
     if args.schedule:
         from src.scheduler import start_scheduler
         start_scheduler()
+        return
+
+    if args.web:
+        from src.web import start_web_server
+        start_web_server()
         return
 
     # Default: run once

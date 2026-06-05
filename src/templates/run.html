@@ -1,0 +1,215 @@
+{% extends "base.html" %}
+{% block title %}{{ run.run_date }} Report — Blest{% endblock %}
+
+{% block content %}
+{% set quick_wins = report.get('quick_wins', []) %}
+{% set strategic = report.get('strategic_opportunities', []) %}
+{% set insights = report.get('top_insights', []) %}
+{% set drafts = report.get('outreach_drafts', []) %}
+{% set follow_ups = report.get('follow_up_suggestions', []) %}
+{% set all_opps = quick_wins + strategic %}
+
+<!-- Page header -->
+<div style="margin-bottom:1.75rem">
+  <a href="/" class="text-muted" style="font-size:0.85rem">← All Runs</a>
+  <div class="flex items-center justify-between wrap mt-1" style="gap:1rem;margin-top:0.5rem">
+    <div>
+      <h1 style="font-size:1.6rem;font-weight:700">Report — {{ run.run_date }}</h1>
+      <div style="font-size:0.85rem;color:var(--muted);margin-top:0.2rem">Run #{{ run.id }}
+        {% if run.status == 'completed' %}
+          &nbsp;<span class="badge badge-green">✓ completed</span>
+        {% elif run.status == 'running' %}
+          &nbsp;<span class="badge badge-blue">⟳ running</span>
+        {% elif run.status == 'failed' %}
+          &nbsp;<span class="badge badge-red">✗ failed</span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Summary stats -->
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:1rem;margin-bottom:2rem">
+  <div class="card" style="text-align:center">
+    <div style="font-size:2rem;font-weight:800">{{ run.companies_found }}</div>
+    <div class="text-muted" style="font-size:0.8rem;margin-top:0.2rem">Companies Found</div>
+  </div>
+  <div class="card" style="text-align:center">
+    <div style="font-size:2rem;font-weight:800;color:var(--green)">{{ quick_wins|length }}</div>
+    <div class="text-muted" style="font-size:0.8rem;margin-top:0.2rem">⚡ Quick Wins</div>
+  </div>
+  <div class="card" style="text-align:center">
+    <div style="font-size:2rem;font-weight:800;color:var(--amber)">{{ strategic|length }}</div>
+    <div class="text-muted" style="font-size:0.8rem;margin-top:0.2rem">📈 Strategic</div>
+  </div>
+  <div class="card" style="text-align:center">
+    <div style="font-size:2rem;font-weight:800;color:var(--accent)">{{ drafts|length }}</div>
+    <div class="text-muted" style="font-size:0.8rem;margin-top:0.2rem">✉ Outreach Drafts</div>
+  </div>
+</div>
+
+{% if run.error_message %}
+  <div style="padding:1rem;background:#450a0a;border:1px solid #7f1d1d;border-radius:8px;color:var(--red);margin-bottom:1.5rem;font-size:0.9rem">
+    <strong>Error:</strong> {{ run.error_message }}
+  </div>
+{% endif %}
+
+<!-- Opportunities -->
+{% if all_opps %}
+<div style="margin-bottom:2rem">
+  <div class="section-title">Top Opportunities</div>
+  <div class="card" style="padding:0;overflow:hidden">
+    <table style="width:100%;border-collapse:collapse">
+      <thead>
+        <tr style="background:rgba(255,255,255,0.03);border-bottom:1px solid var(--border)">
+          <th style="padding:0.75rem 1.25rem;text-align:left;font-size:0.8rem;color:var(--muted);font-weight:600">#</th>
+          <th style="padding:0.75rem 1rem;text-align:left;font-size:0.8rem;color:var(--muted);font-weight:600">Company</th>
+          <th style="padding:0.75rem 1rem;text-align:center;font-size:0.8rem;color:var(--muted);font-weight:600">Score</th>
+          <th style="padding:0.75rem 1rem;text-align:left;font-size:0.8rem;color:var(--muted);font-weight:600">Priority</th>
+          <th style="padding:0.75rem 1rem;text-align:left;font-size:0.8rem;color:var(--muted);font-weight:600">Why</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for opp in all_opps[:15] %}
+        {% set score = opp.get('score', 0) %}
+        {% set priority = opp.get('priority', '') %}
+        <tr style="border-bottom:1px solid var(--border){% if not loop.last %}{% endif %}" onmouseover="this.style.background='rgba(255,255,255,0.02)'" onmouseout="this.style.background=''">
+          <td style="padding:0.85rem 1.25rem;color:var(--muted);font-size:0.85rem">{{ loop.index }}</td>
+          <td style="padding:0.85rem 1rem">
+            <div style="font-weight:600;font-size:0.95rem">{{ opp.get('company_name', '—') }}</div>
+            {% if opp.get('industry') %}
+              <div class="text-muted" style="font-size:0.78rem">{{ opp.get('industry') }}</div>
+            {% endif %}
+          </td>
+          <td style="padding:0.85rem 1rem;text-align:center">
+            {% if score >= 70 %}
+              <span class="score score-high">{{ score }}</span>
+            {% elif score >= 50 %}
+              <span class="score score-mid">{{ score }}</span>
+            {% else %}
+              <span class="score score-low">{{ score }}</span>
+            {% endif %}
+          </td>
+          <td style="padding:0.85rem 1rem">
+            {% if priority == 'quick_win' %}
+              <span class="badge badge-green">⚡ Quick Win</span>
+            {% elif priority == 'strategic' %}
+              <span class="badge badge-amber">📈 Strategic</span>
+            {% else %}
+              <span class="badge badge-muted">{{ priority or '—' }}</span>
+            {% endif %}
+          </td>
+          <td style="padding:0.85rem 1rem;font-size:0.85rem;color:var(--muted);max-width:350px">
+            {{ (opp.get('score_explanation') or '')[:140] }}{% if (opp.get('score_explanation') or '')|length > 140 %}…{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<!-- Insights -->
+{% if insights %}
+<div style="margin-bottom:2rem">
+  <div class="section-title">💡 Company Insights</div>
+  <div class="grid-2">
+    {% for insight in insights %}
+    <div class="card">
+      <div style="font-weight:700;font-size:1rem;margin-bottom:0.75rem">{{ insight.get('company_name', '') }}</div>
+      {% if insight.get('why_they_need_training') %}
+        <div style="margin-bottom:0.75rem">
+          <div style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);margin-bottom:0.25rem">Why they need training</div>
+          <div style="font-size:0.9rem">{{ insight.get('why_they_need_training') }}</div>
+        </div>
+      {% endif %}
+      {% if insight.get('suggested_approach') %}
+        <div style="margin-bottom:0.75rem">
+          <div style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);margin-bottom:0.25rem">Suggested approach</div>
+          <div style="font-size:0.9rem">{{ insight.get('suggested_approach') }}</div>
+        </div>
+      {% endif %}
+      {% if insight.get('conversation_starter') %}
+        <div style="background:rgba(56,189,248,0.08);border:1px solid rgba(56,189,248,0.2);border-radius:6px;padding:0.6rem 0.85rem">
+          <div style="font-size:0.75rem;color:var(--accent);margin-bottom:0.2rem;font-weight:600">Conversation starter</div>
+          <div style="font-size:0.88rem;font-style:italic">"{{ insight.get('conversation_starter') }}"</div>
+        </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<!-- Outreach Drafts -->
+{% if drafts %}
+<div style="margin-bottom:2rem">
+  <div class="section-title">✉ Outreach Drafts</div>
+  <div style="display:flex;flex-direction:column;gap:1rem">
+    {% set seen = [] %}
+    {% for draft in drafts %}
+    {% set key = draft.get('company_name','') + '_' + draft.get('channel','') %}
+    {% if key not in seen %}
+    {% set _ = seen.append(key) %}
+    <div class="card">
+      <div class="flex items-center justify-between" style="margin-bottom:0.75rem;gap:1rem">
+        <div>
+          <span style="font-weight:700">{{ draft.get('company_name', '') }}</span>
+          {% if draft.get('channel') %}
+            <span class="badge badge-blue" style="margin-left:0.5rem">{{ draft.get('channel')|upper }}</span>
+          {% endif %}
+        </div>
+        <button
+          onclick="copyText(this, {{ draft.get('body', '')|tojson }})"
+          style="background:var(--surface-hover);border:1px solid var(--border);color:var(--text);padding:0.3rem 0.75rem;border-radius:6px;cursor:pointer;font-size:0.8rem"
+        >Copy</button>
+      </div>
+      {% if draft.get('subject_line') %}
+        <div style="font-size:0.8rem;color:var(--muted);margin-bottom:0.5rem">
+          <strong>Subject:</strong> {{ draft.get('subject_line') }}
+        </div>
+      {% endif %}
+      <pre style="white-space:pre-wrap;font-family:inherit;font-size:0.88rem;color:var(--muted);line-height:1.7;background:rgba(0,0,0,0.2);padding:0.85rem;border-radius:6px;border:1px solid var(--border)">{{ draft.get('body', '') }}</pre>
+    </div>
+    {% endif %}
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<!-- Follow-up suggestions -->
+{% if follow_ups %}
+<div style="margin-bottom:2rem">
+  <div class="section-title">📋 Follow-Up Suggestions</div>
+  <div class="card">
+    <ul style="list-style:none;display:flex;flex-direction:column;gap:0.6rem">
+      {% for suggestion in follow_ups %}
+      <li style="display:flex;gap:0.6rem;align-items:flex-start;font-size:0.9rem">
+        <span style="color:var(--accent);margin-top:0.1rem">→</span>
+        {{ suggestion }}
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+</div>
+{% endif %}
+
+{% if not all_opps and not insights and not drafts %}
+<div class="card" style="text-align:center;padding:3rem;color:var(--muted)">
+  <div style="font-size:2rem;margin-bottom:0.75rem">📊</div>
+  <p>No report data available for this run yet.</p>
+</div>
+{% endif %}
+
+<script>
+function copyText(btn, text) {
+  navigator.clipboard.writeText(text).then(() => {
+    const orig = btn.textContent;
+    btn.textContent = 'Copied!';
+    btn.style.color = 'var(--green)';
+    setTimeout(() => { btn.textContent = orig; btn.style.color = ''; }, 1500);
+  });
+}
+</script>
+{% endblock %}
