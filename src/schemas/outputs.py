@@ -71,6 +71,10 @@ class CompanyInsight(BaseModel):
     conversation_starter: str
 
 
+class CompanyInsightList(BaseModel):
+    insights: list[CompanyInsight]
+
+
 class OutreachDraft(BaseModel):
     company_name: str
     contact_name: Optional[str] = None

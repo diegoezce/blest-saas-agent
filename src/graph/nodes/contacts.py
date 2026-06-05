@@ -3,13 +3,44 @@ import anthropic
 import instructor
 
 from src.graph.state import AgentState
-from src.prompts.contacts import CONTACTS_PROMPT
 from src.schemas.outputs import CompanyContacts
 from src.tools.search import search
 
 logger = logging.getLogger(__name__)
 
 _client = None
+
+_CONTACTS_STATIC = """\
+You are a B2B sales researcher identifying decision makers at Argentine companies for a \
+corporate English training proposal.
+
+PRIORITY ORDER OF TARGET ROLES:
+1. Learning & Development (L&D) Manager / Talent Development / Capacitación
+2. HR Manager / Gerente de Recursos Humanos / People Manager
+3. Chief People Officer / VP People / Head of Talent
+4. Operations Manager (for companies < 50 employees)
+5. Founder / CEO / Managing Director (for companies with < 50 employees)
+
+For each decision maker found, provide:
+- name: Full name if found (null if not identifiable)
+- role: Exact role title as found
+- role_category: One of: hr, talent_ld, operations, founder, other
+- linkedin_url: LinkedIn profile URL if found (null otherwise)
+- email: Email address if found (null otherwise)
+- confidence: "high" (directly confirmed by a reliable source), "medium" (inferred from context), "low" (likely role but not confirmed)
+- notes: Brief explanation of where/how this person was found, or what was searched if not found
+
+Return 1–2 contacts maximum. If no specific individual is found, include one entry with \
+name=null and the most likely role at this type/size of company, with notes explaining \
+what was searched.\
+"""
+
+_CONTACTS_DYNAMIC = """\
+COMPANY: {company_name}
+
+COMPANY CONTEXT AND SEARCH RESULTS:
+{company_context}\
+"""
 
 
 def _llm():
@@ -63,10 +94,20 @@ def run_contacts_node(state: AgentState) -> AgentState:
                 max_tokens=1024,
                 messages=[{
                     "role": "user",
-                    "content": CONTACTS_PROMPT.format(
-                        company_name=company_name,
-                        company_context=context,
-                    ),
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": _CONTACTS_STATIC,
+                            "cache_control": {"type": "ephemeral"},
+                        },
+                        {
+                            "type": "text",
+                            "text": _CONTACTS_DYNAMIC.format(
+                                company_name=company_name,
+                                company_context=context,
+                            ),
+                        },
+                    ],
                 }],
                 response_model=CompanyContacts,
             )

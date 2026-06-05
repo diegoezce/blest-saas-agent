@@ -12,6 +12,9 @@ logger = logging.getLogger(__name__)
 _client = None
 _BATCH_SIZE = 5
 
+_SCORING_STATIC = SCORING_PROMPT.split("COMPANIES TO SCORE:")[0].rstrip()
+_SCORING_DYNAMIC = "COMPANIES TO SCORE:\n{companies_json}"
+
 
 def _llm():
     global _client
@@ -42,7 +45,17 @@ def run_scoring_node(state: AgentState) -> AgentState:
                 max_tokens=4096,
                 messages=[{
                     "role": "user",
-                    "content": SCORING_PROMPT.format(companies_json=companies_json),
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": _SCORING_STATIC,
+                            "cache_control": {"type": "ephemeral"},
+                        },
+                        {
+                            "type": "text",
+                            "text": _SCORING_DYNAMIC.format(companies_json=companies_json),
+                        },
+                    ],
                 }],
                 response_model=ScoredCompanyList,
             )
