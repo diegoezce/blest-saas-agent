@@ -1,8 +1,10 @@
 import os
 import logging
 import threading
+from base64 import b64decode
+from functools import wraps
 
-from flask import Flask, render_template, redirect, url_for, abort, request, flash
+from flask import Flask, render_template, redirect, url_for, abort, request, flash, Response
 
 logger = logging.getLogger(__name__)
 
@@ -11,11 +13,37 @@ _trigger_lock = threading.Lock()
 _trigger_running = False
 
 
+def _check_auth(username: str, password: str) -> bool:
+    from src.config import settings
+    return username == "blest" and password == settings.web_password
+
+
+def _require_auth(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        auth = request.headers.get("Authorization", "")
+        if auth.startswith("Basic "):
+            try:
+                credentials = b64decode(auth[6:]).decode("utf-8")
+                username, password = credentials.split(":", 1)
+                if _check_auth(username, password):
+                    return f(*args, **kwargs)
+            except Exception:
+                pass
+        return Response(
+            "Acceso restringido.",
+            401,
+            {"WWW-Authenticate": 'Basic realm="Blest Lead Discovery"'},
+        )
+    return decorated
+
+
 def create_app() -> Flask:
     app = Flask(__name__, template_folder="templates")
     app.secret_key = os.environ.get("SECRET_KEY", "blest-web-secret")
 
     @app.route("/")
+    @_require_auth
     def index():
         from src.database.session import get_session
         from src.database.models import DiscoveryRun, DailyReport
@@ -41,6 +69,7 @@ def create_app() -> Flask:
         return render_template("runs.html", runs=runs)
 
     @app.route("/trigger", methods=["POST"])
+    @_require_auth
     def trigger():
         global _trigger_running
         from src.config import settings
@@ -69,6 +98,7 @@ def create_app() -> Flask:
         return redirect(url_for("index"))
 
     @app.route("/run/latest")
+    @_require_auth
     def latest():
         from src.database.session import get_session
         from src.database.models import DiscoveryRun
@@ -81,6 +111,7 @@ def create_app() -> Flask:
         return redirect(url_for("run_detail", run_id=run_id))
 
     @app.route("/run/<int:run_id>")
+    @_require_auth
     def run_detail(run_id):
         from src.database.session import get_session
         from src.database.models import DiscoveryRun, DailyReport
