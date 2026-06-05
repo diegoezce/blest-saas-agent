@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     # Database
     database_url: str = "postgresql+psycopg2://blest:blest@localhost:5432/blest_leads"
 
+    # Web UI
+    trigger_password: str = "blest2024"
+
     # Scheduler
     schedule_time: str = "08:00"
     scheduler_timezone: str = "America/Argentina/Buenos_Aires"

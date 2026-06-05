@@ -1,13 +1,19 @@
 import os
 import logging
+import threading
 
-from flask import Flask, render_template, redirect, url_for, abort
+from flask import Flask, render_template, redirect, url_for, abort, request, flash
 
 logger = logging.getLogger(__name__)
 
 
+_trigger_lock = threading.Lock()
+_trigger_running = False
+
+
 def create_app() -> Flask:
     app = Flask(__name__, template_folder="templates")
+    app.secret_key = os.environ.get("SECRET_KEY", "blest-web-secret")
 
     @app.route("/")
     def index():
@@ -33,6 +39,34 @@ def create_app() -> Flask:
                     "error_message": r.error_message,
                 })
         return render_template("runs.html", runs=runs)
+
+    @app.route("/trigger", methods=["POST"])
+    def trigger():
+        global _trigger_running
+        from src.config import settings
+        from src.scheduler import run_workflow_once
+
+        password = request.form.get("password", "")
+        if password != settings.trigger_password:
+            flash("Contraseña incorrecta.", "error")
+            return redirect(url_for("index"))
+
+        with _trigger_lock:
+            if _trigger_running:
+                flash("Ya hay un run en progreso.", "warning")
+                return redirect(url_for("index"))
+            _trigger_running = True
+
+        def _run():
+            global _trigger_running
+            try:
+                run_workflow_once()
+            finally:
+                _trigger_running = False
+
+        threading.Thread(target=_run, daemon=True).start()
+        flash("Run iniciado. Actualizá la página en unos minutos.", "success")
+        return redirect(url_for("index"))
 
     @app.route("/run/latest")
     def latest():
