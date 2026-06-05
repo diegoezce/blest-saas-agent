@@ -2,10 +2,48 @@
 {% block title %}Discovery Runs — Blest{% endblock %}
 
 {% block content %}
+<!-- Flash messages -->
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% for category, message in messages %}
+    <div style="margin-bottom:1rem;padding:0.75rem 1rem;border-radius:8px;font-size:0.9rem;
+      {% if category == 'success' %}background:#14532d;color:#4ade80;border:1px solid #166534;
+      {% elif category == 'error' %}background:#450a0a;color:#f87171;border:1px solid #7f1d1d;
+      {% else %}background:#451a03;color:#fbbf24;border:1px solid #92400e;{% endif %}">
+      {{ message }}
+    </div>
+  {% endfor %}
+{% endwith %}
+
 <div class="flex items-center justify-between mt-2" style="margin-bottom:1.5rem">
   <div>
     <h1 style="font-size:1.5rem;font-weight:700">Discovery Runs</h1>
     <p class="text-muted mt-1" style="font-size:0.9rem">History of all lead discovery executions</p>
+  </div>
+  <button onclick="document.getElementById('trigger-modal').style.display='flex'"
+    style="background:#38bdf8;color:#0f172a;font-weight:700;border:none;padding:0.5rem 1.25rem;border-radius:8px;cursor:pointer;font-size:0.9rem">
+    ▶ Run Now
+  </button>
+</div>
+
+<!-- Trigger modal -->
+<div id="trigger-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:200;align-items:center;justify-content:center">
+  <div class="card" style="width:100%;max-width:380px;padding:2rem">
+    <h2 style="font-size:1.1rem;font-weight:700;margin-bottom:1.25rem">Run Discovery Now</h2>
+    <form method="POST" action="/trigger">
+      <label style="font-size:0.85rem;color:var(--muted);display:block;margin-bottom:0.4rem">Password</label>
+      <input type="password" name="password" autofocus required
+        style="width:100%;padding:0.6rem 0.75rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.95rem;margin-bottom:1rem">
+      <div style="display:flex;gap:0.75rem">
+        <button type="submit"
+          style="flex:1;background:#38bdf8;color:#0f172a;font-weight:700;border:none;padding:0.6rem;border-radius:6px;cursor:pointer">
+          Confirmar
+        </button>
+        <button type="button" onclick="document.getElementById('trigger-modal').style.display='none'"
+          style="flex:1;background:var(--surface-hover);color:var(--text);border:1px solid var(--border);padding:0.6rem;border-radius:6px;cursor:pointer">
+          Cancelar
+        </button>
+      </div>
+    </form>
   </div>
 </div>
 
