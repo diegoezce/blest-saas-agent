@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Discovery Runs — Blest{% endblock %}
+
+{% block content %}
+<div class="flex items-center justify-between mt-2" style="margin-bottom:1.5rem">
+  <div>
+    <h1 style="font-size:1.5rem;font-weight:700">Discovery Runs</h1>
+    <p class="text-muted mt-1" style="font-size:0.9rem">History of all lead discovery executions</p>
+  </div>
+</div>
+
+{% if not runs %}
+  <div class="card" style="text-align:center;padding:3rem;color:var(--muted)">
+    <div style="font-size:2.5rem;margin-bottom:1rem">📭</div>
+    <p style="font-weight:600">No runs yet</p>
+    <p style="font-size:0.9rem;margin-top:0.25rem">Start the agent with <code style="background:var(--bg);padding:0.1rem 0.4rem;border-radius:4px">python run.py</code> to discover leads.</p>
+  </div>
+{% else %}
+  <div style="display:flex;flex-direction:column;gap:0.75rem">
+    {% for run in runs %}
+    <a href="/run/{{ run.id }}" style="text-decoration:none;color:inherit">
+      <div class="card" style="transition:background 0.15s;cursor:pointer" onmouseover="this.style.background='var(--surface-hover)'" onmouseout="this.style.background='var(--surface)'">
+        <div class="flex items-center justify-between wrap gap-2">
+
+          <!-- Date & status -->
+          <div class="flex items-center gap-2" style="gap:0.75rem;min-width:200px">
+            <div>
+              <div style="font-weight:700;font-size:1rem">{{ run.run_date }}</div>
+              {% if run.completed_at %}
+                <div class="text-muted" style="font-size:0.8rem">Completed {{ run.completed_at[:16] }}</div>
+              {% elif run.started_at %}
+                <div class="text-muted" style="font-size:0.8rem">Started {{ run.started_at[:16] }}</div>
+              {% endif %}
+            </div>
+            {% if run.status == 'completed' %}
+              <span class="badge badge-green">✓ completed</span>
+            {% elif run.status == 'running' %}
+              <span class="badge badge-blue">⟳ running</span>
+            {% elif run.status == 'failed' %}
+              <span class="badge badge-red">✗ failed</span>
+            {% else %}
+              <span class="badge badge-muted">{{ run.status }}</span>
+            {% endif %}
+          </div>
+
+          <!-- Stats -->
+          <div class="flex items-center" style="gap:2rem">
+            <div style="text-align:center">
+              <div style="font-size:1.4rem;font-weight:700">{{ run.companies_found }}</div>
+              <div class="text-muted" style="font-size:0.75rem">companies</div>
+            </div>
+            <div style="text-align:center">
+              <div style="font-size:1.4rem;font-weight:700;color:var(--green)">{{ run.quick_wins }}</div>
+              <div class="text-muted" style="font-size:0.75rem">quick wins</div>
+            </div>
+            <div style="text-align:center">
+              <div style="font-size:1.4rem;font-weight:700;color:var(--amber)">{{ run.strategic }}</div>
+              <div class="text-muted" style="font-size:0.75rem">strategic</div>
+            </div>
+            <div style="color:var(--muted);font-size:1.2rem">→</div>
+          </div>
+
+        </div>
+        {% if run.error_message %}
+          <div style="margin-top:0.75rem;padding:0.5rem 0.75rem;background:#450a0a;border-radius:6px;font-size:0.8rem;color:var(--red)">
+            {{ run.error_message[:200] }}
+          </div>
+        {% endif %}
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+{% endif %}
+{% endblock %}

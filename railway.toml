@@ -2,11 +2,9 @@
 builder = "nixpacks"
 
 [deploy]
-# Runs once per schedule and exits — Railway handles the cron, not APScheduler
-startCommand = "python run.py"
-# 11:00 UTC = 08:00 Buenos Aires (ART = UTC-3)
-# Adjust this in the Railway dashboard if needed
-cronSchedule = "0 11 * * 1-5"
+# Web server + embedded APScheduler — runs continuously as a web service
+# Daily discovery fires at 08:00 Buenos Aires (ART = UTC-3) via BackgroundScheduler
+startCommand = "python run.py --web"
 
 [[deploy.envVars]]
 name = "PYTHONUNBUFFERED"
