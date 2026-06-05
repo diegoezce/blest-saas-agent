@@ -9,12 +9,22 @@ _engine = None
 _SessionLocal = None
 
 
+def _normalize_db_url(url: str) -> str:
+    """Rewrite Railway's postgres:// URL to the psycopg2 dialect SQLAlchemy expects."""
+    if url.startswith("postgres://"):
+        return url.replace("postgres://", "postgresql+psycopg2://", 1)
+    if url.startswith("postgresql://") and "+psycopg2" not in url:
+        return url.replace("postgresql://", "postgresql+psycopg2://", 1)
+    return url
+
+
 def get_engine():
     global _engine
     if _engine is None:
         from src.config import settings
+        url = _normalize_db_url(settings.database_url)
         _engine = create_engine(
-            settings.database_url,
+            url,
             pool_pre_ping=True,
             pool_size=5,
             max_overflow=10,
