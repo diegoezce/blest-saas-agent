@@ -4,12 +4,13 @@ import anthropic
 import instructor
 
 from src.graph.state import AgentState
-from src.prompts.insights import INSIGHTS_PROMPT
-from src.schemas.outputs import CompanyInsight
+from src.prompts.insights import INSIGHTS_STATIC, INSIGHTS_BATCH_PROMPT
+from src.schemas.outputs import CompanyInsightList
 
 logger = logging.getLogger(__name__)
 
 _client = None
+_BATCH_SIZE = 3
 
 
 def _llm():
@@ -32,33 +33,47 @@ def run_insights_node(state: AgentState) -> AgentState:
     companies_map = {c["name"]: c for c in state.get("companies", [])}
     contacts_map = {c["company_name"]: c for c in state.get("contacts", [])}
 
-    logger.info(f"Step 4: Generating insights for top {len(top)} companies...")
+    logger.info(f"Step 4: Generating insights for top {len(top)} companies in batches of {_BATCH_SIZE}...")
     insights: list[dict] = []
 
-    for scored_company in top:
-        company_name = scored_company["company_name"]
-        company = companies_map.get(company_name, {})
-        contacts = contacts_map.get(company_name, {})
+    for i in range(0, len(top), _BATCH_SIZE):
+        batch = top[i : i + _BATCH_SIZE]
+        payload = [
+            {
+                "company": companies_map.get(s["company_name"], {}),
+                "scoring": s,
+                "contacts": contacts_map.get(s["company_name"], {}),
+            }
+            for s in batch
+        ]
 
         try:
             result = _llm().messages.create(
                 model=cfg.reasoning_model,
-                max_tokens=2048,
+                max_tokens=4096,
                 messages=[{
                     "role": "user",
-                    "content": INSIGHTS_PROMPT.format(
-                        company_json=json.dumps(company, ensure_ascii=False, indent=2),
-                        scoring_json=json.dumps(scored_company, ensure_ascii=False, indent=2),
-                        contacts_json=json.dumps(contacts, ensure_ascii=False, indent=2),
-                    ),
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": INSIGHTS_STATIC,
+                            "cache_control": {"type": "ephemeral"},
+                        },
+                        {
+                            "type": "text",
+                            "text": INSIGHTS_BATCH_PROMPT.format(
+                                companies_json=json.dumps(payload, ensure_ascii=False, indent=2)
+                            ),
+                        },
+                    ],
                 }],
-                response_model=CompanyInsight,
+                response_model=CompanyInsightList,
             )
-            insights.append(result.model_dump())
-            logger.debug(f"Insight generated for {company_name}")
+            insights.extend(r.model_dump() for r in result.insights)
+            logger.debug(f"Batch {i // _BATCH_SIZE + 1}: got {len(result.insights)} insights")
         except Exception as e:
-            logger.error(f"Insights failed for {company_name}: {e}", exc_info=True)
-            state["errors"].append(f"Insights error ({company_name}): {e}")
+            logger.error(f"Insights batch {i // _BATCH_SIZE + 1} failed: {e}", exc_info=True)
+            state["errors"].append(f"Insights batch error: {e}")
 
     logger.info(f"Generated insights for {len(insights)} companies")
     return {**state, "insights": insights}
