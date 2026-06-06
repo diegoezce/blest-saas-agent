@@ -48,6 +48,16 @@ class Company(Base):
 
     opportunities = relationship("Opportunity", back_populates="company")
     contacts = relationship("Contact", back_populates="company", cascade="all, delete-orphan")
+    contact_status = relationship("ContactStatus", back_populates="company", uselist=False, cascade="all, delete-orphan")
+
+
+class ContactStatus(Base):
+    __tablename__ = "contact_status"
+
+    company_id = Column(Integer, ForeignKey("companies.id"), primary_key=True)
+    contacted_at = Column(DateTime, nullable=False, default=func.now())
+
+    company = relationship("Company", back_populates="contact_status")
 
 
 class Opportunity(Base):

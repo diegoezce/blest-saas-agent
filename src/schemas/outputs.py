@@ -81,6 +81,7 @@ class OutreachDraft(BaseModel):
     subject_line: str
     body: str
     channel: Literal["email", "linkedin"]
+    language: Literal["en", "es"] = "en"
     tone: Literal["warm", "direct", "referral"]
 
 
