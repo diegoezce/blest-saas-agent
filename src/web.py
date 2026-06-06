@@ -1,16 +1,57 @@
 import os
 import logging
 import threading
+import collections
 from base64 import b64decode
 from functools import wraps
 
-from flask import Flask, render_template, redirect, url_for, abort, request, flash, Response
+from flask import Flask, render_template, redirect, url_for, abort, request, flash, Response, jsonify
 
 logger = logging.getLogger(__name__)
 
 
 _trigger_lock = threading.Lock()
 _trigger_running = False
+
+
+class _LogCollector(logging.Handler):
+    def __init__(self):
+        super().__init__()
+        self._lock = threading.Lock()
+        self._counter = 0
+        self._lines = collections.deque(maxlen=300)
+        self.setFormatter(logging.Formatter('%(name)s: %(message)s'))
+
+    def emit(self, record):
+        try:
+            with self._lock:
+                self._counter += 1
+                self._lines.append({
+                    "id": self._counter,
+                    "level": record.levelname,
+                    "text": self.format(record),
+                })
+        except Exception:
+            pass
+
+    def since(self, last_id: int) -> list:
+        with self._lock:
+            return [l for l in self._lines if l["id"] > last_id]
+
+    def last_id(self) -> int:
+        with self._lock:
+            return self._lines[-1]["id"] if self._lines else 0
+
+
+_log_collector = _LogCollector()
+
+
+def _setup_log_collector() -> None:
+    root = logging.getLogger()
+    for h in root.handlers:
+        if isinstance(h, _LogCollector):
+            return
+    root.addHandler(_log_collector)
 
 
 def _check_auth(username: str, password: str) -> bool:
@@ -41,6 +82,13 @@ def _require_auth(f):
 def create_app() -> Flask:
     app = Flask(__name__, template_folder="templates")
     app.secret_key = os.environ.get("SECRET_KEY", "blest-web-secret")
+    _setup_log_collector()
+
+    @app.route("/logs")
+    @_require_auth
+    def logs():
+        last_id = int(request.args.get("since", 0))
+        return jsonify(lines=_log_collector.since(last_id), last_id=_log_collector.last_id())
 
     @app.route("/")
     @_require_auth

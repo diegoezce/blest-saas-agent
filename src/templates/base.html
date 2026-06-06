@@ -125,6 +125,42 @@
     .justify-between { justify-content: space-between; }
     .wrap { flex-wrap: wrap; }
     .grid-2 { display: grid; grid-template-columns: repeat(auto-fill, minmax(480px, 1fr)); gap: 1rem; }
+  
+    /* Log panel */
+    #log-panel {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      background: #0a0f1e;
+      border-top: 1px solid var(--border);
+      z-index: 500;
+      font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+      font-size: 0.78rem;
+    }
+    #log-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.4rem 1rem;
+      cursor: pointer;
+      user-select: none;
+      gap: 1rem;
+    }
+    #log-header:hover { background: rgba(255,255,255,0.03); }
+    #log-body {
+      height: 220px;
+      overflow-y: auto;
+      padding: 0.5rem 1rem 0.75rem;
+      display: none;
+    }
+    #log-body.open { display: block; }
+    .log-line { padding: 0.1rem 0; line-height: 1.5; white-space: pre-wrap; word-break: break-all; }
+    .log-INFO    { color: #64748b; }
+    .log-WARNING { color: var(--amber); }
+    .log-ERROR   { color: var(--red); }
+    .log-DEBUG   { color: #334155; }
+    /* push page content above panel */
+    body { padding-bottom: 36px; }
+    body.logs-open { padding-bottom: 256px; }
   </style>
 </head>
 <body>
@@ -138,5 +174,79 @@
   <main>
     {% block content %}{% endblock %}
   </main>
+
+  <!-- Log panel -->
+  <div id="log-panel">
+    <div id="log-header" onclick="toggleLogs()">
+      <div style="display:flex;align-items:center;gap:0.75rem">
+        <span style="color:var(--muted);font-size:0.8rem;font-family:monospace">Logs</span>
+        <span id="log-badge" style="background:#1e293b;color:var(--muted);padding:0.1rem 0.45rem;border-radius:999px;font-size:0.7rem;font-family:monospace">0</span>
+        <span id="log-status" style="font-size:0.7rem;color:#334155"></span>
+      </div>
+      <span id="log-arrow" style="color:var(--muted);font-size:0.75rem">▲ expandir</span>
+    </div>
+    <div id="log-body">
+      <div id="log-lines"></div>
+    </div>
+  </div>
+
+  <script>
+    var _logOpen = false;
+    var _lastId = 0;
+    var _lineCount = 0;
+    var _atBottom = true;
+
+    function toggleLogs() {
+      _logOpen = !_logOpen;
+      document.getElementById('log-body').classList.toggle('open', _logOpen);
+      document.getElementById('log-arrow').textContent = _logOpen ? '▼ ocultar' : '▲ expandir';
+      document.body.classList.toggle('logs-open', _logOpen);
+      if (_logOpen) scrollToBottom();
+    }
+
+    function scrollToBottom() {
+      var el = document.getElementById('log-body');
+      el.scrollTop = el.scrollHeight;
+    }
+
+    function levelClass(level) {
+      if (level === 'WARNING') return 'log-WARNING';
+      if (level === 'ERROR' || level === 'CRITICAL') return 'log-ERROR';
+      if (level === 'DEBUG') return 'log-DEBUG';
+      return 'log-INFO';
+    }
+
+    function appendLines(lines) {
+      if (!lines.length) return;
+      var container = document.getElementById('log-lines');
+      var body = document.getElementById('log-body');
+      _atBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 40;
+      lines.forEach(function(l) {
+        var div = document.createElement('div');
+        div.className = 'log-line ' + levelClass(l.level);
+        div.textContent = '[' + l.level.substring(0,1) + '] ' + l.text;
+        container.appendChild(div);
+        _lineCount++;
+      });
+      document.getElementById('log-badge').textContent = _lineCount;
+      if (_atBottom && _logOpen) scrollToBottom();
+    }
+
+    function fetchLogs() {
+      fetch('/logs?since=' + _lastId)
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (data.lines && data.lines.length) appendLines(data.lines);
+          if (data.last_id) _lastId = data.last_id;
+          document.getElementById('log-status').textContent = '';
+        })
+        .catch(function() {
+          document.getElementById('log-status').textContent = '● sin conexión';
+        });
+    }
+
+    fetchLogs();
+    setInterval(fetchLogs, 2000);
+  </script>
 </body>
 </html>
