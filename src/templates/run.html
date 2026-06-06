@@ -194,7 +194,7 @@
                 <span class="badge badge-muted">EN</span>
               {% endif %}
             </div>
-            <button onclick="copyText(this, {{ draft.get('body', '')|tojson }})"
+            <button onclick="copyText(this)" data-body="{{ draft.get('body', '')|e }}"
               style="background:var(--surface-hover);border:1px solid var(--border);color:var(--text);padding:0.25rem 0.65rem;border-radius:6px;cursor:pointer;font-size:0.8rem">
               Copiar
             </button>
@@ -242,7 +242,8 @@
 {% endif %}
 
 <script>
-function copyText(btn, text) {
+function copyText(btn) {
+  const text = btn.getAttribute('data-body');
   const fallback = () => {
     const el = document.createElement('textarea');
     el.value = text;
