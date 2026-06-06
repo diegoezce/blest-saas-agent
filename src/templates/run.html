@@ -67,16 +67,19 @@
           <th style="padding:0.75rem 1rem;text-align:center;font-size:0.8rem;color:var(--muted);font-weight:600">Score</th>
           <th style="padding:0.75rem 1rem;text-align:left;font-size:0.8rem;color:var(--muted);font-weight:600">Priority</th>
           <th style="padding:0.75rem 1rem;text-align:left;font-size:0.8rem;color:var(--muted);font-weight:600">Why</th>
+          <th style="padding:0.75rem 1rem;text-align:center;font-size:0.8rem;color:var(--muted);font-weight:600">Contactado</th>
         </tr>
       </thead>
       <tbody>
         {% for opp in all_opps[:15] %}
         {% set score = opp.get('score', 0) %}
         {% set priority = opp.get('priority', '') %}
-        <tr style="border-bottom:1px solid var(--border){% if not loop.last %}{% endif %}" onmouseover="this.style.background='rgba(255,255,255,0.02)'" onmouseout="this.style.background=''">
+        {% set name = opp.get('company_name', '') %}
+        {% set info = contact_info.get(name, {}) %}
+        <tr style="border-bottom:1px solid var(--border)" onmouseover="this.style.background='rgba(255,255,255,0.02)'" onmouseout="this.style.background=''">
           <td style="padding:0.85rem 1.25rem;color:var(--muted);font-size:0.85rem">{{ loop.index }}</td>
           <td style="padding:0.85rem 1rem">
-            <div style="font-weight:600;font-size:0.95rem">{{ opp.get('company_name', '—') }}</div>
+            <div style="font-weight:600;font-size:0.95rem">{{ name or '—' }}</div>
             {% if opp.get('industry') %}
               <div class="text-muted" style="font-size:0.78rem">{{ opp.get('industry') }}</div>
             {% endif %}
@@ -99,8 +102,24 @@
               <span class="badge badge-muted">{{ priority or '—' }}</span>
             {% endif %}
           </td>
-          <td style="padding:0.85rem 1rem;font-size:0.85rem;color:var(--muted);max-width:350px">
+          <td style="padding:0.85rem 1rem;font-size:0.85rem;color:var(--muted);max-width:300px">
             {{ (opp.get('score_explanation') or '')[:140] }}{% if (opp.get('score_explanation') or '')|length > 140 %}…{% endif %}
+          </td>
+          <td style="padding:0.85rem 1rem;text-align:center">
+            {% if info.company_id %}
+            <form method="POST" action="/company/{{ info.company_id }}/toggle-contact" style="display:inline">
+              <label style="cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:0.25rem">
+                <input type="checkbox" onchange="this.form.submit()"
+                  {% if info.contacted %}checked{% endif %}
+                  style="width:18px;height:18px;cursor:pointer;accent-color:var(--green)">
+                {% if info.contacted_at %}
+                  <span style="font-size:0.7rem;color:var(--muted)">{{ info.contacted_at }}</span>
+                {% endif %}
+              </label>
+            </form>
+            {% else %}
+              <span style="color:var(--border)">—</span>
+            {% endif %}
           </td>
         </tr>
         {% endfor %}
@@ -142,38 +161,58 @@
 </div>
 {% endif %}
 
-<!-- Outreach Drafts -->
+<!-- Outreach Drafts grouped by company -->
 {% if drafts %}
 <div style="margin-bottom:2rem">
   <div class="section-title">✉ Outreach Drafts</div>
-  <div style="display:flex;flex-direction:column;gap:1rem">
-    {% set seen = [] %}
-    {% for draft in drafts %}
-    {% set key = draft.get('company_name','') + '_' + draft.get('channel','') %}
-    {% if key not in seen %}
-    {% set _ = seen.append(key) %}
-    <div class="card">
-      <div class="flex items-center justify-between" style="margin-bottom:0.75rem;gap:1rem">
-        <div>
-          <span style="font-weight:700">{{ draft.get('company_name', '') }}</span>
-          {% if draft.get('channel') %}
-            <span class="badge badge-blue" style="margin-left:0.5rem">{{ draft.get('channel')|upper }}</span>
-          {% endif %}
-        </div>
-        <button
-          onclick="copyText(this, {{ draft.get('body', '')|tojson }})"
-          style="background:var(--surface-hover);border:1px solid var(--border);color:var(--text);padding:0.3rem 0.75rem;border-radius:6px;cursor:pointer;font-size:0.8rem"
-        >Copy</button>
-      </div>
-      {% if draft.get('subject_line') %}
-        <div style="font-size:0.8rem;color:var(--muted);margin-bottom:0.5rem">
-          <strong>Subject:</strong> {{ draft.get('subject_line') }}
-        </div>
-      {% endif %}
-      <pre style="white-space:pre-wrap;font-family:inherit;font-size:0.88rem;color:var(--muted);line-height:1.7;background:rgba(0,0,0,0.2);padding:0.85rem;border-radius:6px;border:1px solid var(--border)">{{ draft.get('body', '') }}</pre>
-    </div>
+
+  {% set companies_seen = [] %}
+  {% for draft in drafts %}
+    {% if draft.get('company_name') not in companies_seen %}
+      {% set _ = companies_seen.append(draft.get('company_name')) %}
     {% endif %}
-    {% endfor %}
+  {% endfor %}
+
+  <div style="display:flex;flex-direction:column;gap:1.5rem">
+  {% for company_name in companies_seen %}
+    {% set company_drafts = drafts | selectattr('company_name', 'equalto', company_name) | list %}
+    <div class="card">
+      <div style="font-weight:700;font-size:1rem;margin-bottom:1rem;padding-bottom:0.75rem;border-bottom:1px solid var(--border)">
+        {{ company_name }}
+      </div>
+      <div style="display:flex;flex-direction:column;gap:1rem">
+      {% for draft in company_drafts %}
+        <div>
+          <div class="flex items-center justify-between" style="margin-bottom:0.5rem;gap:0.75rem">
+            <div style="display:flex;gap:0.5rem;align-items:center">
+              {% if draft.get('channel') %}
+                <span class="badge badge-blue">{{ draft.get('channel')|upper }}</span>
+              {% endif %}
+              {% if draft.get('language') == 'es' %}
+                <span class="badge badge-purple" style="background:#3b0764;color:#c084fc">ES</span>
+              {% else %}
+                <span class="badge badge-muted">EN</span>
+              {% endif %}
+            </div>
+            <button onclick="copyText(this, {{ draft.get('body', '')|tojson }})"
+              style="background:var(--surface-hover);border:1px solid var(--border);color:var(--text);padding:0.25rem 0.65rem;border-radius:6px;cursor:pointer;font-size:0.8rem">
+              Copiar
+            </button>
+          </div>
+          {% if draft.get('subject_line') %}
+            <div style="font-size:0.8rem;color:var(--muted);margin-bottom:0.4rem">
+              <strong>Asunto:</strong> {{ draft.get('subject_line') }}
+            </div>
+          {% endif %}
+          <pre style="white-space:pre-wrap;font-family:inherit;font-size:0.88rem;color:var(--muted);line-height:1.7;background:rgba(0,0,0,0.2);padding:0.85rem;border-radius:6px;border:1px solid var(--border);margin:0">{{ draft.get('body', '') }}</pre>
+        </div>
+        {% if not loop.last %}
+          <div style="border-top:1px solid var(--border)"></div>
+        {% endif %}
+      {% endfor %}
+      </div>
+    </div>
+  {% endfor %}
   </div>
 </div>
 {% endif %}
@@ -204,12 +243,26 @@
 
 <script>
 function copyText(btn, text) {
-  navigator.clipboard.writeText(text).then(() => {
+  const fallback = () => {
+    const el = document.createElement('textarea');
+    el.value = text;
+    el.style.cssText = 'position:fixed;opacity:0;pointer-events:none';
+    document.body.appendChild(el);
+    el.select();
+    document.execCommand('copy');
+    document.body.removeChild(el);
+  };
+  const done = () => {
     const orig = btn.textContent;
-    btn.textContent = 'Copied!';
+    btn.textContent = '✓ Copiado';
     btn.style.color = 'var(--green)';
     setTimeout(() => { btn.textContent = orig; btn.style.color = ''; }, 1500);
-  });
+  };
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(text).then(done).catch(() => { fallback(); done(); });
+  } else {
+    fallback(); done();
+  }
 }
 </script>
 {% endblock %}

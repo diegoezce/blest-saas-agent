@@ -114,7 +114,7 @@ def create_app() -> Flask:
     @_require_auth
     def run_detail(run_id):
         from src.database.session import get_session
-        from src.database.models import DiscoveryRun, DailyReport
+        from src.database.models import DiscoveryRun, DailyReport, Company, ContactStatus
 
         with get_session() as session:
             run = session.get(DiscoveryRun, run_id)
@@ -133,7 +133,43 @@ def create_app() -> Flask:
             }
             report_data = dict(report.report_json) if report and report.report_json else {}
 
-        return render_template("run.html", run=run_data, report=report_data)
+            all_opps = report_data.get("quick_wins", []) + report_data.get("strategic_opportunities", [])
+            company_names = [o.get("company_name") for o in all_opps if o.get("company_name")]
+            companies = session.query(Company).filter(Company.name.in_(company_names)).all()
+            company_id_map = {c.name: c.id for c in companies}
+            statuses = session.query(ContactStatus).filter(
+                ContactStatus.company_id.in_(company_id_map.values())
+            ).all()
+            contacted_map = {s.company_id: str(s.contacted_at)[:16] for s in statuses}
+            contact_info = {
+                name: {
+                    "company_id": cid,
+                    "contacted": cid in contacted_map,
+                    "contacted_at": contacted_map.get(cid),
+                }
+                for name, cid in company_id_map.items()
+            }
+
+        return render_template("run.html", run=run_data, report=report_data, contact_info=contact_info)
+
+    @app.route("/company/<int:company_id>/toggle-contact", methods=["POST"])
+    @_require_auth
+    def toggle_contact(company_id):
+        import datetime
+        from src.database.session import get_session
+        from src.database.models import ContactStatus
+
+        with get_session() as session:
+            status = session.get(ContactStatus, company_id)
+            if status:
+                session.delete(status)
+            else:
+                session.add(ContactStatus(
+                    company_id=company_id,
+                    contacted_at=datetime.datetime.utcnow(),
+                ))
+
+        return redirect(request.referrer or url_for("index"))
 
     return app
 
