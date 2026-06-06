@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login — Blest</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #0f172a;
+      color: #f1f5f9;
+      font-family: system-ui, -apple-system, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .card {
+      background: #1e293b;
+      border: 1px solid #2d3f55;
+      border-radius: 12px;
+      padding: 2.5rem;
+      width: 100%;
+      max-width: 360px;
+    }
+    .logo { font-size: 1.1rem; font-weight: 700; margin-bottom: 2rem; color: #f1f5f9; }
+    .logo span { color: #38bdf8; }
+    label { font-size: 0.85rem; color: #94a3b8; display: block; margin-bottom: 0.4rem; }
+    input {
+      width: 100%;
+      padding: 0.65rem 0.85rem;
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 6px;
+      color: #f1f5f9;
+      font-size: 0.95rem;
+      margin-bottom: 1.25rem;
+    }
+    input:focus { outline: none; border-color: #38bdf8; }
+    button {
+      width: 100%;
+      padding: 0.65rem;
+      background: #38bdf8;
+      color: #0f172a;
+      font-weight: 700;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.95rem;
+    }
+    .error {
+      background: #450a0a;
+      color: #f87171;
+      border: 1px solid #7f1d1d;
+      border-radius: 6px;
+      padding: 0.6rem 0.85rem;
+      font-size: 0.85rem;
+      margin-bottom: 1.25rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">🎯 <span>Blest</span> Lead Discovery</div>
+    {% if error %}
+      <div class="error">{{ error }}</div>
+    {% endif %}
+    <form method="POST" action="/login">
+      <label>Password</label>
+      <input type="password" name="password" autofocus required>
+      <button type="submit">Entrar</button>
+    </form>
+  </div>
+</body>
+</html>
