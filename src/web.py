@@ -151,7 +151,7 @@ def start_web_server() -> None:
     scheduler = BackgroundScheduler(timezone=settings.scheduler_timezone)
     scheduler.add_job(
         run_workflow_once,
-        trigger=CronTrigger(hour=int(hour), minute=int(minute)),
+        trigger=CronTrigger(hour=int(hour), minute=int(minute), day_of_week=settings.schedule_days),
         id="daily_discovery",
         name="Blest Daily Lead Discovery",
         replace_existing=True,
