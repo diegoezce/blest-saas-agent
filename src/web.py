@@ -2,10 +2,9 @@ import os
 import logging
 import threading
 import collections
-from base64 import b64decode
 from functools import wraps
 
-from flask import Flask, render_template, redirect, url_for, abort, request, flash, Response, jsonify
+from flask import Flask, render_template, redirect, url_for, abort, request, flash, Response, jsonify, session
 
 logger = logging.getLogger(__name__)
 
@@ -56,28 +55,12 @@ def _setup_log_collector() -> None:
     root.addHandler(_log_collector)
 
 
-def _check_auth(username: str, password: str) -> bool:
-    from src.config import settings
-    return username == "blest" and password == settings.web_password
-
-
 def _require_auth(f):
     @wraps(f)
     def decorated(*args, **kwargs):
-        auth = request.headers.get("Authorization", "")
-        if auth.startswith("Basic "):
-            try:
-                credentials = b64decode(auth[6:]).decode("utf-8")
-                username, password = credentials.split(":", 1)
-                if _check_auth(username, password):
-                    return f(*args, **kwargs)
-            except Exception:
-                pass
-        return Response(
-            "Acceso restringido.",
-            401,
-            {"WWW-Authenticate": 'Basic realm="Blest Lead Discovery"'},
-        )
+        if session.get("authenticated"):
+            return f(*args, **kwargs)
+        return redirect(url_for("login", next=request.path))
     return decorated
 
 
@@ -85,6 +68,22 @@ def create_app() -> Flask:
     app = Flask(__name__, template_folder="templates")
     app.secret_key = os.environ.get("SECRET_KEY", "blest-web-secret")
     _setup_log_collector()
+
+    @app.route("/login", methods=["GET", "POST"])
+    def login():
+        from src.config import settings
+        if request.method == "POST":
+            if request.form.get("password") == settings.web_password:
+                session.permanent = True
+                session["authenticated"] = True
+                return redirect(request.args.get("next") or url_for("index"))
+            return render_template("login.html", error="Contraseña incorrecta.")
+        return render_template("login.html", error=None)
+
+    @app.route("/logout")
+    def logout():
+        session.clear()
+        return redirect(url_for("login"))
 
     @app.route("/schedule/update", methods=["POST"])
     @_require_auth
@@ -155,6 +154,7 @@ def create_app() -> Flask:
                     "completed_at": str(r.completed_at) if r.completed_at else None,
                     "error_message": r.error_message,
                 })
+        from src.config import settings
         current_time = settings.schedule_time
         current_days = settings.schedule_days
         if _scheduler:
