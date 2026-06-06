@@ -12,6 +12,8 @@ logger = logging.getLogger(__name__)
 
 _trigger_lock = threading.Lock()
 _trigger_running = False
+_scheduler_paused = False
+_scheduler = None  # set by start_web_server
 
 
 class _LogCollector(logging.Handler):
@@ -84,6 +86,45 @@ def create_app() -> Flask:
     app.secret_key = os.environ.get("SECRET_KEY", "blest-web-secret")
     _setup_log_collector()
 
+    @app.route("/schedule/update", methods=["POST"])
+    @_require_auth
+    def update_schedule():
+        from apscheduler.triggers.cron import CronTrigger
+
+        time_val = request.form.get("time", "08:00").strip()
+        days = request.form.getlist("days")
+        if not days:
+            flash("Seleccioná al menos un día.", "error")
+            return redirect(url_for("index"))
+        try:
+            hour, minute = time_val.split(":")
+            int(hour); int(minute)
+        except ValueError:
+            flash("Hora inválida. Usá formato HH:MM.", "error")
+            return redirect(url_for("index"))
+
+        days_str = ",".join(days)
+        if _scheduler:
+            from src.config import settings
+            _scheduler.reschedule_job(
+                "daily_discovery",
+                trigger=CronTrigger(hour=int(hour), minute=int(minute), day_of_week=days_str, timezone=settings.scheduler_timezone),
+            )
+            logger.info(f"Schedule actualizado: {time_val} los días {days_str}")
+            flash(f"Schedule actualizado: {time_val} — {days_str}", "success")
+        else:
+            flash("Scheduler no disponible (modo local sin --web).", "warning")
+        return redirect(url_for("index"))
+
+    @app.route("/toggle-scheduler", methods=["POST"])
+    @_require_auth
+    def toggle_scheduler():
+        global _scheduler_paused
+        _scheduler_paused = not _scheduler_paused
+        state = "pausado" if _scheduler_paused else "activo"
+        logger.info(f"Scheduler {state} manualmente desde la web UI")
+        return redirect(url_for("index"))
+
     @app.route("/logs")
     @_require_auth
     def logs():
@@ -114,7 +155,25 @@ def create_app() -> Flask:
                     "completed_at": str(r.completed_at) if r.completed_at else None,
                     "error_message": r.error_message,
                 })
-        return render_template("runs.html", runs=runs)
+        current_time = settings.schedule_time
+        current_days = settings.schedule_days
+        if _scheduler:
+            job = _scheduler.get_job("daily_discovery")
+            if job and job.trigger:
+                try:
+                    fields = {f.name: str(f) for f in job.trigger.fields}
+                    current_time = f"{fields.get('hour', '8'):0>2}:{fields.get('minute', '0'):0>2}"
+                    current_days = fields.get("day_of_week", settings.schedule_days)
+                except Exception:
+                    pass
+
+        return render_template(
+            "runs.html",
+            runs=runs,
+            scheduler_paused=_scheduler_paused,
+            schedule_time=current_time,
+            schedule_days=current_days,
+        )
 
     @app.route("/trigger", methods=["POST"])
     @_require_auth
@@ -233,8 +292,14 @@ def start_web_server() -> None:
 
     hour, minute = settings.schedule_time.split(":")
     scheduler = BackgroundScheduler(timezone=settings.scheduler_timezone)
+    def _scheduled_run():
+        if _scheduler_paused:
+            logger.info("Scheduler pausado — saltando run de hoy")
+            return
+        run_workflow_once()
+
     scheduler.add_job(
-        run_workflow_once,
+        _scheduled_run,
         trigger=CronTrigger(hour=int(hour), minute=int(minute), day_of_week=settings.schedule_days),
         id="daily_discovery",
         name="Blest Daily Lead Discovery",
@@ -242,6 +307,8 @@ def start_web_server() -> None:
         misfire_grace_time=3600,
     )
     scheduler.start()
+    global _scheduler
+    _scheduler = scheduler
     logger.info(
         f"Background scheduler started — daily at {settings.schedule_time} ({settings.scheduler_timezone})"
     )
