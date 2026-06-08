@@ -1,64 +1,66 @@
 QUERY_GENERATION_PROMPT = """\
-You are a B2B lead researcher for Blest, a corporate English training company in Argentina.
+You are a lead generation specialist for Blest, a SaaS platform for managing English language institutes.
 
-Your goal is to discover Argentine companies that likely need corporate English training.
+Your goal is to find English language institutes in LATAM that are big enough to need management \
+software but likely still manage things manually (WhatsApp, Excel, paper) or with basic tools.
 
 Target profile:
-- Based in: {target_cities}
-- Employee range: {min_employees} to {max_employees} employees
-- Industries: {target_industries}
-- English training signals: international clients, remote work with foreign colleagues, \
-English job postings, recent international expansion, global clients, offshore teams
+- English language institutes, academies, and language schools
+- Located in: {target_cities}
+- At least 3–5 teachers or 50+ students (indicates real scale)
+- Established institutes — not individual tutors or one-person operations
 
-Generate {num_queries} diverse web search queries to find these companies.
-Mix Spanish and English. Cover different sources: LinkedIn, Bumeran, Computrabajo, Glassdoor,
-Infobae, La Nación Tecnología, Cronista, Clutch.co, Crunchbase, G2.
+Generate {num_queries} diverse search queries to find these institutes. Mix:
+- Location + type searches (Google Maps style)
+- Directory searches (Educaedu, Universia, local education directories)
+- Social media searches (Facebook pages, Instagram profiles of institutes)
+- Certification center searches (Cambridge, IELTS, TOEFL exam centers)
+- Job posting searches (institutes hiring teachers signals scale)
 
 Good query examples:
-- "empresa tech Argentina contratan desarrolladores clientes EEUU remoto"
-- "Argentina consulting firm English speaking roles Buenos Aires"
-- "software company Buenos Aires bilingual job posting 2024"
-- "empresa argentina expansión internacional inglés corporativo"
-- site:linkedin.com/company Argentina technology "international clients"
+- "instituto de inglés Buenos Aires múltiples sedes"
+- "academia de inglés Santiago Cambridge IELTS certificación"
+- "escuela de inglés CDMX site:educaedu.com.mx"
+- "instituto inglés Bogotá Colombia docentes vacantes"
+- "english academy Lima Peru Cambridge exam center"
+- "academia inglés Córdoba Argentina Facebook alumnos"
+- "instituto de inglés Rosario inscripción cursos 2024"
+- "escuela inglés Mendoza adultos niños WhatsApp"
 
-Return exactly {num_queries} queries.
+Return exactly {num_queries} queries. Mix Spanish and English. Cover multiple countries.
 """
 
 COMPANY_EXTRACTION_PROMPT = """\
-You are extracting structured company data from web search results.
+You are extracting English language institute data from search results for Blest, \
+a SaaS platform that helps institutes manage their operations more efficiently.
 
-Identify Argentine companies from the results below that may need corporate English training.
+Identify English language institutes from the results below that are large enough \
+to benefit from management software.
 
 Target profile:
-- Based in Argentina ({target_cities} or remote)
-- {min_employees}–{max_employees} employees (skip if clearly outside this range)
-- Has at least ONE signal of English training need
+- English language institutes, academies, language schools in LATAM
+- Located in: {target_cities} or nearby cities in those countries
+- At least 3+ teachers or evidence of 50+ students
+- Not universities, secondary schools, or individual tutors
 
-Signals of English training need:
-- International or foreign clients
-- Job postings requiring English or bilingual candidates
-- Remote teams working with overseas colleagues
-- Global or cross-border operations
-- US/EU market presence
-- Recently funded startup with international investors
-
-For each qualifying company extract:
-- name: Company name (string)
-- website_url: Full URL (or null)
-- domain: Domain only, e.g. "acme.com" (or null)
-- linkedin_url: LinkedIn company page URL (or null)
-- industry: One of: technology, consulting, accounting, fintech, legaltech, professional_services, other
-- size_estimate: e.g. "50-100" or "unknown"
-- location: City in Argentina (e.g. "Buenos Aires")
-- description: 1-2 sentence summary of what the company does
-- remote_friendly: true/false based on evidence
-- has_international_clients: true/false based on evidence
-- has_english_job_postings: true/false based on evidence
+For each qualifying institute extract:
+- name: Full name of the institute
+- website_url: Official website URL (or null)
+- domain: Domain only, e.g. "instituto-abc.com" (or null)
+- linkedin_url: LinkedIn page URL (or null)
+- industry: Always "language_institute"
+- size_estimate: Estimate based on signals (e.g. "small: 1-3 teachers", "medium: 4-15 teachers", "large: 15+ teachers or multiple branches")
+- location: City and country (e.g. "Buenos Aires, Argentina")
+- description: 2-3 sentences describing the institute and any notable characteristics
+- remote_friendly: true if they offer online or hybrid courses
+- has_international_clients: true if they mention international certifications or foreign students
+- has_english_job_postings: true if they are actively hiring teachers (signals growth)
 - source: "tavily"
-- source_url: The URL where this company was found
-- signals: List of 1-3 specific evidence strings (e.g. "Job posting requires advanced English for US client support")
+- source_url: URL where this institute was found
+- signals: List of 2-4 specific signals found (e.g. "Multiple branches mentioned", "Cambridge exam center", "WhatsApp listed as enrollment contact")
 
-EXCLUDE: government entities, schools/universities, non-profits, sole traders, companies outside Argentina.
+EXCLUDE: universities, secondary schools (colegios), individual tutors/freelancers, \
+companies that provide corporate English training internally (B2B), non-educational businesses.
 
 SEARCH RESULTS:
 {search_results}
