@@ -77,7 +77,14 @@ def main() -> None:
             except ValueError:
                 print(f"Invalid date format: {args.date}. Use YYYY-MM-DD.")
                 sys.exit(1)
-        render_last_run(target_date=target)
+        report_data = render_last_run(target_date=target)
+        if report_data:
+            from src.export import export_markdown, export_csv
+            run_date = report_data.get("run_date", "unknown")
+            pathlib.Path("reports").mkdir(exist_ok=True)
+            export_markdown(report_data, f"reports/{run_date}.md")
+            export_csv(report_data, f"reports/{run_date}.csv")
+            print(f"Guardado: reports/{run_date}.md + .csv")
         return
 
     if args.schedule:

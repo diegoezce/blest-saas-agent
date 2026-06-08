@@ -217,6 +217,49 @@ def create_app() -> Flask:
             run_id = run.id
         return redirect(url_for("run_detail", run_id=run_id))
 
+    @app.route("/run/<int:run_id>/export/<fmt>")
+    @_require_auth
+    def export_run(run_id, fmt):
+        import os
+        import tempfile
+        from src.database.session import get_session
+        from src.database.models import DiscoveryRun, DailyReport
+        from src.dashboard import _enrich_drafts_from_db
+        from src.export import export_csv, export_markdown
+
+        if fmt not in ("csv", "md"):
+            abort(404)
+
+        with get_session() as db:
+            run = db.get(DiscoveryRun, run_id)
+            if not run:
+                abort(404)
+            report = db.query(DailyReport).filter_by(run_id=run_id).first()
+            if not report or not report.report_json:
+                abort(404)
+            report_data = _enrich_drafts_from_db(db, dict(report.report_json))
+
+        run_date = report_data.get("run_date", str(run_id))
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=f".{fmt}")
+        tmp.close()
+        try:
+            if fmt == "csv":
+                export_csv(report_data, tmp.name)
+                mimetype, filename = "text/csv", f"blest-leads-{run_date}.csv"
+            else:
+                export_markdown(report_data, tmp.name)
+                mimetype, filename = "text/markdown", f"blest-report-{run_date}.md"
+            with open(tmp.name, "rb") as f:
+                content = f.read()
+        finally:
+            os.unlink(tmp.name)
+
+        return Response(
+            content,
+            mimetype=mimetype,
+            headers={"Content-Disposition": f"attachment; filename={filename}"},
+        )
+
     @app.route("/run/<int:run_id>")
     @_require_auth
     def run_detail(run_id):
@@ -238,7 +281,9 @@ def create_app() -> Flask:
                 "completed_at": str(run.completed_at) if run.completed_at else None,
                 "error_message": run.error_message,
             }
-            report_data = dict(report.report_json) if report and report.report_json else {}
+            from src.dashboard import _enrich_drafts_from_db
+            raw = dict(report.report_json) if report and report.report_json else {}
+            report_data = _enrich_drafts_from_db(session, raw)
 
             all_opps = report_data.get("quick_wins", []) + report_data.get("strategic_opportunities", [])
             company_names = [o.get("company_name") for o in all_opps if o.get("company_name")]
