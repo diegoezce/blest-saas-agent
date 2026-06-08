@@ -28,12 +28,12 @@ class CompanyList(BaseModel):
 
 
 class ScoringFactors(BaseModel):
-    company_size: int = Field(ge=0, le=20)
-    international_exposure: int = Field(ge=0, le=25)
-    remote_workforce: int = Field(ge=0, le=20)
-    hiring_activity: int = Field(ge=0, le=15)
-    tech_adoption: int = Field(ge=0, le=10)
-    english_training_signals: int = Field(ge=0, le=10)
+    tamaño_instituto: int = Field(ge=0, le=20)
+    señales_crecimiento: int = Field(ge=0, le=25)
+    dolor_admin_visible: int = Field(ge=0, le=20)
+    adopcion_tecnologica: int = Field(ge=0, le=15)
+    reputacion_establecida: int = Field(ge=0, le=10)
+    señales_inversion: int = Field(ge=0, le=10)
 
 
 class ScoredCompany(BaseModel):
@@ -51,7 +51,7 @@ class ScoredCompanyList(BaseModel):
 class ContactPerson(BaseModel):
     name: Optional[str] = None
     role: str
-    role_category: Literal["hr", "talent_ld", "operations", "founder", "other"]
+    role_category: Literal["founder", "director", "academic", "admin", "other"]
     linkedin_url: Optional[str] = None
     email: Optional[str] = None
     confidence: Literal["high", "medium", "low"] = "low"
