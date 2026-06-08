@@ -54,6 +54,26 @@
   </div>
 {% endif %}
 
+<!-- Run progress -->
+<div style="margin-bottom:2rem">
+  <div class="section-title">Run Progress</div>
+  <div class="card" style="padding:0;overflow:hidden">
+    <div id="run-events" style="font-family:'SF Mono','Fira Code','Consolas',monospace;font-size:0.8rem">
+      {% for event in events %}
+      <div class="run-event" data-event-id="{{ event.id }}"
+        style="display:flex;gap:0.8rem;padding:0.55rem 1rem;border-bottom:1px solid var(--border)">
+        <span style="color:var(--muted);white-space:nowrap">{{ event.created_at[11:19] }}</span>
+        <span style="min-width:70px;color:var(--accent)">{{ event.step or 'run' }}</span>
+        <span class="{% if event.level == 'error' %}text-red{% elif event.level == 'warning' %}text-amber{% endif %}">{{ event.message }}</span>
+      </div>
+      {% endfor %}
+      <div id="no-run-events" style="padding:1rem;color:var(--muted);{% if events %}display:none{% endif %}">
+        Waiting for run progress...
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Opportunities -->
 {% if all_opps %}
 <div style="margin-bottom:2rem">
@@ -242,6 +262,52 @@
 {% endif %}
 
 <script>
+let lastEventId = {{ events[-1].id if events else 0 }};
+const runStatus = '{{ run.status }}';
+
+function appendRunEvent(event) {
+  document.getElementById('no-run-events').style.display = 'none';
+  const row = document.createElement('div');
+  row.className = 'run-event';
+  row.dataset.eventId = event.id;
+  row.style.cssText = 'display:flex;gap:0.8rem;padding:0.55rem 1rem;border-bottom:1px solid var(--border)';
+
+  const time = document.createElement('span');
+  time.style.cssText = 'color:var(--muted);white-space:nowrap';
+  time.textContent = event.created_at.slice(11, 19);
+
+  const step = document.createElement('span');
+  step.style.cssText = 'min-width:70px;color:var(--accent)';
+  step.textContent = event.step || 'run';
+
+  const message = document.createElement('span');
+  if (event.level === 'error') message.className = 'text-red';
+  if (event.level === 'warning') message.className = 'text-amber';
+  message.textContent = event.message;
+
+  row.append(time, step, message);
+  document.getElementById('run-events').appendChild(row);
+}
+
+function fetchRunEvents() {
+  fetch('/run/{{ run.id }}/events?since=' + lastEventId)
+    .then(response => response.json())
+    .then(data => {
+      (data.events || []).forEach(event => {
+        appendRunEvent(event);
+        lastEventId = event.id;
+      });
+      if (data.status !== 'running' && runStatus === 'running') {
+        window.location.reload();
+      }
+    });
+}
+
+if (runStatus === 'running') {
+  setInterval(fetchRunEvents, 2000);
+  fetchRunEvents();
+}
+
 function copyText(btn) {
   const text = btn.getAttribute('data-body');
   const fallback = () => {

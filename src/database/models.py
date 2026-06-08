@@ -26,6 +26,20 @@ class DiscoveryRun(Base):
 
     opportunities = relationship("Opportunity", back_populates="run", cascade="all, delete-orphan")
     reports = relationship("DailyReport", back_populates="run", cascade="all, delete-orphan")
+    events = relationship("RunEvent", back_populates="run", cascade="all, delete-orphan")
+
+
+class RunEvent(Base):
+    __tablename__ = "run_events"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    run_id = Column(Integer, ForeignKey("discovery_runs.id"), nullable=False, index=True)
+    level = Column(String(20), nullable=False, default="info")
+    step = Column(String(50), nullable=True)
+    message = Column(Text, nullable=False)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+
+    run = relationship("DiscoveryRun", back_populates="events")
 
 
 class Company(Base):

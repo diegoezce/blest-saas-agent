@@ -7,15 +7,9 @@ from apscheduler.triggers.cron import CronTrigger
 logger = logging.getLogger(__name__)
 
 
-def run_workflow_once() -> None:
-    from src.config import settings
+def create_discovery_run() -> int:
     from src.database.models import DiscoveryRun
     from src.database.session import get_session
-    from src.graph.state import AgentState
-    from src.graph.workflow import build_workflow
-    from src.dashboard import render_report_from_data
-
-    graph = build_workflow()
 
     with get_session() as session:
         run = DiscoveryRun(
@@ -27,7 +21,21 @@ def run_workflow_once() -> None:
         session.flush()
         run_id = run.id
 
+    return run_id
+
+
+def run_workflow_once(run_id: int | None = None) -> None:
+    from src.graph.state import AgentState
+    from src.graph.workflow import build_workflow
+    from src.dashboard import render_report_from_data
+    from src.tools.run_events import record_run_event
+
+    if run_id is None:
+        run_id = create_discovery_run()
+
+    graph = build_workflow()
     logger.info(f"Starting discovery run {run_id} for {datetime.date.today()}")
+    record_run_event(run_id, "Run started.", step="run")
 
     initial_state: AgentState = {
         "run_id": run_id,
@@ -53,9 +61,11 @@ def run_workflow_once() -> None:
                 logger.warning(f"  • {err}")
         else:
             logger.info(f"Run {run_id} completed successfully")
+        record_run_event(run_id, "Run completed.", step="run")
         return final_state
     except Exception as e:
         logger.error(f"Run {run_id} failed with unhandled exception: {e}", exc_info=True)
+        record_run_event(run_id, f"Run failed: {e}", level="error", step="run")
         try:
             with get_session() as session:
                 run = session.get(DiscoveryRun, run_id)

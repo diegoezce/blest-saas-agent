@@ -180,7 +180,7 @@ def create_app() -> Flask:
     def trigger():
         global _trigger_running
         from src.config import settings
-        from src.scheduler import run_workflow_once
+        from src.scheduler import create_discovery_run, run_workflow_once
 
         password = request.form.get("password", "")
         if password != settings.trigger_password:
@@ -193,16 +193,23 @@ def create_app() -> Flask:
                 return redirect(url_for("index"))
             _trigger_running = True
 
+        try:
+            run_id = create_discovery_run()
+        except Exception:
+            _trigger_running = False
+            logger.exception("No se pudo crear el run")
+            flash("No se pudo iniciar el run.", "error")
+            return redirect(url_for("index"))
+
         def _run():
             global _trigger_running
             try:
-                run_workflow_once()
+                run_workflow_once(run_id)
             finally:
                 _trigger_running = False
 
         threading.Thread(target=_run, daemon=True).start()
-        flash("Run iniciado. Actualizá la página en unos minutos.", "success")
-        return redirect(url_for("index"))
+        return redirect(url_for("run_detail", run_id=run_id))
 
     @app.route("/run/latest")
     @_require_auth
@@ -221,7 +228,7 @@ def create_app() -> Flask:
     @_require_auth
     def run_detail(run_id):
         from src.database.session import get_session
-        from src.database.models import DiscoveryRun, DailyReport, Company, ContactStatus
+        from src.database.models import DiscoveryRun, DailyReport, Company, ContactStatus, RunEvent
 
         with get_session() as session:
             run = session.get(DiscoveryRun, run_id)
@@ -256,8 +263,56 @@ def create_app() -> Flask:
                 }
                 for name, cid in company_id_map.items()
             }
+            events = session.query(RunEvent).filter_by(run_id=run_id).order_by(RunEvent.id).all()
+            event_data = [
+                {
+                    "id": event.id,
+                    "level": event.level,
+                    "step": event.step,
+                    "message": event.message,
+                    "created_at": str(event.created_at)[:19],
+                }
+                for event in events
+            ]
 
-        return render_template("run.html", run=run_data, report=report_data, contact_info=contact_info)
+        return render_template(
+            "run.html",
+            run=run_data,
+            report=report_data,
+            contact_info=contact_info,
+            events=event_data,
+        )
+
+    @app.route("/run/<int:run_id>/events")
+    @_require_auth
+    def run_events(run_id):
+        from src.database.session import get_session
+        from src.database.models import DiscoveryRun, RunEvent
+
+        since = request.args.get("since", 0, type=int)
+        with get_session() as session:
+            run = session.get(DiscoveryRun, run_id)
+            if not run:
+                abort(404)
+            events = (
+                session.query(RunEvent)
+                .filter(RunEvent.run_id == run_id, RunEvent.id > since)
+                .order_by(RunEvent.id)
+                .all()
+            )
+            return jsonify(
+                status=run.status,
+                events=[
+                    {
+                        "id": event.id,
+                        "level": event.level,
+                        "step": event.step,
+                        "message": event.message,
+                        "created_at": str(event.created_at)[:19],
+                    }
+                    for event in events
+                ],
+            )
 
     @app.route("/company/<int:company_id>/toggle-contact", methods=["POST"])
     @_require_auth
