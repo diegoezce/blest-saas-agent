@@ -70,6 +70,9 @@ def run_outreach_node(state: AgentState) -> AgentState:
                 d["company_name"] = company_name
                 if primary_contact:
                     d["contact_name"] = primary_contact.get("name")
+                    d["contact_email"] = primary_contact.get("email")
+                    d["contact_linkedin_url"] = primary_contact.get("linkedin_url")
+                    d["contact_role"] = primary_contact.get("role")
                 all_drafts.append(d)
             logger.debug(f"Generated {len(result.drafts)} drafts for {company_name}")
         except Exception as e:

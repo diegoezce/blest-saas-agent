@@ -182,6 +182,7 @@ def generate_report_node(state: AgentState) -> AgentState:
         "top_contacts": top_contacts,
         "top_insights": state.get("insights", []),
         "outreach_drafts": state.get("outreach_drafts", []),
+        "all_contacts": state.get("contacts", []),
         "follow_up_suggestions": follow_ups,
     }
 

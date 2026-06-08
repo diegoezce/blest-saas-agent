@@ -90,23 +90,43 @@ def render_report_from_data(report_data: dict, run: DiscoveryRun | None = None) 
             )
         console.print()
 
-    # Outreach drafts (show top 2)
+    # Outreach drafts — grouped by company
     if drafts:
-        console.print("[bold green]✉️  Outreach Drafts (Top 2)[/bold green]")
-        shown: set[str] = set()
-        count = 0
-        for draft in drafts:
-            key = f"{draft.get('company_name')}_{draft.get('channel')}"
-            if key in shown or count >= 4:
-                continue
-            shown.add(key)
-            count += 1
-            channel = draft.get("channel", "").upper()
-            company = draft.get("company_name", "")
-            subject = draft.get("subject_line", "")
-            body = draft.get("body", "")
-            title = f"[{channel}] {company}" + (f" — {subject}" if subject else "")
-            console.print(Panel(body, title=title, border_style="green"))
+        console.print("[bold green]✉️  Outreach Drafts[/bold green]")
+        by_company: dict[str, list] = {}
+        for d in drafts:
+            by_company.setdefault(d.get("company_name", ""), []).append(d)
+
+        for company_name, company_drafts in list(by_company.items())[:5]:
+            first = company_drafts[0]
+            recipient_parts: list[str] = []
+            if first.get("contact_name"):
+                role_suffix = f" [dim]({first['contact_role']})[/dim]" if first.get("contact_role") else ""
+                recipient_parts.append(f"[bold]{first['contact_name']}[/bold]{role_suffix}")
+            if first.get("contact_email"):
+                recipient_parts.append(f"[cyan]{first['contact_email']}[/cyan]")
+            if first.get("contact_linkedin_url"):
+                url = first["contact_linkedin_url"]
+                recipient_parts.append(f"[blue][link={url}]{url}[/link][/blue]")
+            recipient_line = "  ·  ".join(recipient_parts) if recipient_parts else "[dim]Destinatario desconocido[/dim]"
+
+            draft_lines = [f"[bold]Para:[/bold] {recipient_line}", ""]
+            for d in company_drafts:
+                ch = d.get("channel", "")
+                lang = (d.get("language") or "").upper()
+                icon = "📧" if ch == "email" else "💼"
+                header = f"{icon} [bold]{ch.upper()} ({lang})[/bold]"
+                if d.get("subject_line"):
+                    header += f"  —  {d['subject_line']}"
+                draft_lines.append(header)
+                draft_lines.append(d.get("body", ""))
+                draft_lines.append("")
+
+            console.print(Panel(
+                "\n".join(draft_lines),
+                title=f"[bold green]{company_name}[/bold green]",
+                border_style="green",
+            ))
         console.print()
 
     # Follow-up suggestions
@@ -120,7 +140,7 @@ def render_report_from_data(report_data: dict, run: DiscoveryRun | None = None) 
         console.print(f"[dim]Run ID: {run.id}  |  Completed: {run.completed_at}[/dim]")
 
 
-def render_last_run(target_date: date | None = None) -> None:
+def render_last_run(target_date: date | None = None) -> dict | None:
     with get_session() as session:
         query = session.query(DailyReport).join(DiscoveryRun)
         if target_date:
@@ -133,10 +153,11 @@ def render_last_run(target_date: date | None = None) -> None:
         if not report_row:
             label = str(target_date) if target_date else "any date"
             console.print(f"[red]No report found for {label}. Run the agent first.[/red]")
-            return
+            return None
 
         run = session.get(DiscoveryRun, report_row.run_id)
         render_report_from_data(report_row.report_json, run)
+        return report_row.report_json
 
 
 def render_node(state: AgentState) -> AgentState:
