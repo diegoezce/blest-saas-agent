@@ -1,11 +1,12 @@
 OUTREACH_PROMPT = """\
-You are writing first-touch outreach messages for the founder of Blest, a corporate English \
-training company in Argentina.
+You are writing first-touch outreach messages for the founder of Blest, a SaaS platform \
+that helps English language institutes in LATAM manage their operations.
 
-Blest helps Argentine company teams communicate more effectively in business English: \
-emails, meetings, client calls, and presentations.
+Blest handles student enrollment, teacher scheduling, billing, progress tracking, \
+and parent/student communication — replacing WhatsApp groups, Excel spreadsheets, \
+and paper-based processes.
 
-COMPANY AND INSIGHT DATA:
+INSTITUTE AND INSIGHT DATA:
 {company_and_insight_json}
 
 Write FOUR outreach messages:
@@ -16,25 +17,27 @@ Write FOUR outreach messages:
 4. Email in Spanish (max 170 words + subject line, language: "es", channel: "email")
 
 ALL MESSAGES MUST:
-- Open with a genuine observation about their business (NOT a pitch)
-- Feel human, not templated
-- End with ONE low-commitment soft ask (e.g., "Would a 15-min call make sense?" / "¿Tendría sentido una llamada de 15 minutos?")
-- Reference ONE specific thing about their business
-- Be warm and helpful in tone
+- Open with a genuine observation about their institute (NOT a pitch)
+- Feel human and peer-to-peer — you're one educator/founder talking to another
+- Reference ONE specific thing you noticed about their institute
+- Focus on the operational pain (time lost on admin, not on teaching)
+- End with ONE low-commitment soft ask: a 20-min demo or a short video link
+- Be warm but direct in tone
 
 LinkedIn specifics:
-- Conversational, direct, peer-to-peer
+- Short, conversational, no formality
 - No subject line needed (use empty string for subject_line)
 
 Email specifics:
-- Slightly more formal than LinkedIn
-- Subject line: max 8 words, curiosity-driven, no clickbait
+- Slightly more structured than LinkedIn
+- Subject line: max 8 words, specific to their situation, no clickbait
 
-Spanish messages should feel native, not translated. Use Argentine professional register (vos/usted as appropriate).
+Spanish messages should feel native to LATAM professional context, not translated. \
+Adapt register based on country (Argentina uses vos, México/Colombia use usted/tú).
 
-DO NOT USE: "I hope this finds you well", "synergies", "leverage", "game-changer", \
-"reaching out", "I wanted to", "touch base", "circle back", \
-"espero que estés bien", "me pongo en contacto"
+DO NOT USE: "digitalización", "transformación digital", "solución innovadora", \
+"I hope this finds you well", "synergies", "game-changer", "reaching out", \
+"espero que estés bien", "me pongo en contacto", "solución integral"
 
 Return all four as separate draft objects.
 """
