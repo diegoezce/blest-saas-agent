@@ -1,7 +1,53 @@
-# Instrucciones: Report Recipient Info + Export (CSV + MD)
+# Instrucciones: Fixes y Mejoras al Agente de Leads
 
-Estas instrucciones describen cómo agregar datos de destinatario a los outreach drafts
-y exportar el reporte como CSV y Markdown en un agente LangGraph similar a este.
+Instrucciones para replicar los siguientes cambios en otro agente LangGraph similar:
+1. Fix de FK constraint en contacts (bug crítico)
+2. Datos de destinatario en outreach drafts + export CSV/MD
+
+---
+
+## 0. Fix: FK constraint al insertar contacts (`db_tools.py`) — VERIFICAR PRIMERO
+
+### Síntoma
+Si al correr el agente aparece este error, el bug está presente:
+
+```
+psycopg2.errors.ForeignKeyViolation: insert or update on table "contacts"
+violates foreign key constraint "contacts_company_id_fkey"
+DETAIL: Key (company_id)=(X) is not present in table "companies".
+```
+
+### Causa
+En `persist_run_node()`, el bloque que inserta `Opportunity` tiene un `session.rollback()`
+en el `except`. Ese rollback deshace **toda la sesión**, incluyendo los `flush()` de companies
+que se hicieron antes. Las companies desaparecen de la DB pero el `company_id_map` sigue
+teniendo sus IDs — y cuando se insertan los contacts con esos IDs inválidos, PostgreSQL
+rechaza la FK.
+
+### Cómo verificar si tu agente lo tiene
+Buscá este patrón en el nodo de persistencia (suele estar en `db_tools.py` o similar):
+
+```python
+try:
+    session.add(opp)
+    session.flush()
+except Exception:
+    session.rollback()   # ← este rollback es el problema
+```
+
+### Fix: reemplazar con savepoint
+Cambiar el bloque completo por:
+
+```python
+try:
+    with session.begin_nested():   # savepoint — solo revierte esta oportunidad
+        session.add(opp)
+except Exception as e:
+    logger.warning(f"Skipped opportunity for {name}: {e}")
+```
+
+`begin_nested()` crea un savepoint de PostgreSQL. Si falla esa inserción, solo se
+deshace ese savepoint — las companies y el resto de la sesión quedan intactos.
 
 ---
 
@@ -137,8 +183,8 @@ if report_data:
 
 | Archivo | Cambio |
 |---|---|
+| `src/tools/db_tools.py` | Fix FK: `begin_nested()` en insert de Opportunity; +1 línea `all_contacts` en report dict |
 | `src/graph/nodes/outreach.py` | +3 líneas: agregar email, linkedin, rol al draft |
-| `src/tools/db_tools.py` | +1 línea: `all_contacts` en report dict |
 | `src/dashboard.py` | Reescribir sección outreach para agrupar por empresa + mostrar destinatario; `render_last_run` devuelve dict |
 | `src/export.py` | Nuevo archivo: `export_markdown()` + `export_csv()` |
 | `run.py` | Bloque `--report` auto-guarda CSV + MD tras renderizar |
