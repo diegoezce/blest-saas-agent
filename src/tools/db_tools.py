@@ -96,10 +96,10 @@ def persist_run_node(state: AgentState) -> AgentState:
                     outreach_draft=drafts[0]["body"] if drafts else None,
                 )
                 try:
-                    session.add(opp)
-                    session.flush()
-                except Exception:
-                    session.rollback()
+                    with session.begin_nested():
+                        session.add(opp)
+                except Exception as e:
+                    logger.warning(f"Skipped opportunity for {name}: {e}")
 
             for contacts_data in state.get("contacts", []):
                 cid = company_id_map.get(contacts_data["company_name"])
