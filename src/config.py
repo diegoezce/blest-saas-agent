@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     # Scheduler
     schedule_time: str = "08:00"
     schedule_days: str = "mon-thu"
+    schedule_profile_name: str = ""
     scheduler_timezone: str = "America/Argentina/Buenos_Aires"
 
     # Workflow tuning

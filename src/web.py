@@ -1,4 +1,5 @@
 import os
+
 import logging
 import threading
 import collections
@@ -13,6 +14,7 @@ _trigger_lock = threading.Lock()
 _trigger_running = False
 _scheduler_paused = False
 _scheduler = None  # set by start_web_server
+_schedule_profile_name = ""  # runtime override for which profile the scheduler uses
 
 
 class _LogCollector(logging.Handler):
@@ -127,16 +129,21 @@ def create_app() -> Flask:
             return redirect(url_for("index"))
 
         days_str = ",".join(days)
+        profile_name = request.form.get("profile_name", "").strip()
         if _scheduler:
             from src.config import settings
             _scheduler.reschedule_job(
                 "daily_discovery",
                 trigger=CronTrigger(hour=int(hour), minute=int(minute), day_of_week=days_str, timezone=settings.scheduler_timezone),
             )
-            logger.info(f"Schedule actualizado: {time_val} los días {days_str}")
-            flash(f"Schedule actualizado: {time_val} — {days_str}", "success")
+            logger.info(f"Schedule actualizado: {time_val} los días {days_str} — profile: {profile_name or 'Default'}")
+            flash(f"Schedule actualizado: {time_val} — {days_str} — Profile: {profile_name or 'Default'}", "success")
         else:
             flash("Scheduler no disponible (modo local sin --web).", "warning")
+        # Persist the profile name
+        global _schedule_profile_name
+        _schedule_profile_name = profile_name
+
         return redirect(url_for("index"))
 
     @app.route("/toggle-scheduler", methods=["POST"])
@@ -196,6 +203,7 @@ def create_app() -> Flask:
         from src.config import settings
         current_time = settings.schedule_time
         current_days = settings.schedule_days
+        current_profile_name = _schedule_profile_name or settings.schedule_profile_name or "Default"
         if _scheduler:
             job = _scheduler.get_job("daily_discovery")
             if job and job.trigger:
@@ -212,6 +220,7 @@ def create_app() -> Flask:
             scheduler_paused=_scheduler_paused,
             schedule_time=current_time,
             schedule_days=current_days,
+            schedule_profile_name=current_profile_name,
             profiles=profile_options,
             default_profile_name=profile_options[0]["name"] if profile_options else "None",
             selected_profile_id=profile_filter,
@@ -262,6 +271,23 @@ def create_app() -> Flask:
                 return redirect(url_for("index"))
             run_id = run.id
         return redirect(url_for("run_detail", run_id=run_id))
+
+    @app.route("/run/<int:run_id>/delete", methods=["POST"])
+    @_require_auth
+    def delete_run(run_id):
+        from src.database.session import get_session
+        from src.database.models import DiscoveryRun, DailyReport
+
+        with get_session() as session:
+            run = session.get(DiscoveryRun, run_id)
+            if not run:
+                abort(404)
+            report = session.query(DailyReport).filter_by(run_id=run_id).first()
+            if report:
+                session.delete(report)
+            session.delete(run)
+        flash("Run eliminado.", "success")
+        return redirect(url_for("index"))
 
     @app.route("/run/<int:run_id>/export/<fmt>")
     @_require_auth
@@ -660,10 +686,21 @@ def start_web_server() -> None:
     hour, minute = settings.schedule_time.split(":")
     scheduler = BackgroundScheduler(timezone=settings.scheduler_timezone)
     def _scheduled_run():
+        global _schedule_profile_name
         if _scheduler_paused:
             logger.info("Scheduler pausado — saltando run de hoy")
             return
-        run_workflow_once()
+        from src.database.session import get_session
+        from src.database.models import Profile
+        profile_id = None
+        effective = _schedule_profile_name or settings.schedule_profile_name
+        if effective:
+            with get_session() as session:
+                p = session.query(Profile).filter_by(name=effective).first()
+                if p:
+                    profile_id = p.id
+        logger.info(f"Running scheduled discovery for profile: {effective or 'Default'}")
+        run_workflow_once(profile_id=profile_id)
 
     scheduler.add_job(
         _scheduled_run,
