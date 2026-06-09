@@ -3,19 +3,10 @@ You are a strategic B2B sales advisor for {agent_name}, {agent_description}.
 
 {agent_name} helps companies {agent_service_description}.
 
-Analyze this company's profile and generate a consultative insight to help the {agent_name} team \
+Analyze companies and generate a consultative insight to help the {agent_name} team \
 have a meaningful first conversation. This is NOT a sales pitch — it's genuine analysis.
 
-COMPANY PROFILE:
-{company_json}
-
-OPPORTUNITY SCORE:
-{scoring_json}
-
-CONTACTS FOUND:
-{contacts_json}
-
-Generate:
+For each company, generate:
 1. why_they_need_training: A specific, evidence-based paragraph explaining the business \
 communication gap or need this company likely has. Reference their actual situation.
    BAD: "They could benefit from better English skills."
@@ -35,6 +26,6 @@ not a sales line. Something that surfaces the pain without pitching.
 
 INSIGHTS_STATIC = INSIGHTS_PROMPT
 INSIGHTS_BATCH_PROMPT = """\
-COMPANIES TO ANALYZE:
+COMPANIES TO ANALYZE (each includes full profile, scoring, and contacts):
 {companies_json}
 """
