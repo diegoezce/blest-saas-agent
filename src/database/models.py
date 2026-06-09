@@ -56,6 +56,12 @@ class ContactStatus(Base):
 
     company_id = Column(Integer, ForeignKey("companies.id"), primary_key=True)
     contacted_at = Column(DateTime, nullable=False, default=func.now())
+    comment = Column(Text, nullable=True)
+    contact_method = Column(String(50), nullable=True)
+    response_received = Column(String(30), nullable=True)
+    follow_up_date = Column(Date, nullable=True)
+    icp_feedback = Column(JSONB, nullable=True)
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
     company = relationship("Company", back_populates="contact_status")
 
@@ -116,3 +122,4 @@ class DailyReport(Base):
     created_at = Column(DateTime, server_default=func.now())
 
     run = relationship("DiscoveryRun", back_populates="reports")
+

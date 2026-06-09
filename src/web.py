@@ -293,11 +293,14 @@ def create_app() -> Flask:
                 ContactStatus.company_id.in_(company_id_map.values())
             ).all()
             contacted_map = {s.company_id: str(s.contacted_at)[:16] for s in statuses}
+            feedback_map = {s.company_id: s for s in statuses}
             contact_info = {
                 name: {
                     "company_id": cid,
                     "contacted": cid in contacted_map,
                     "contacted_at": contacted_map.get(cid),
+                    "has_comment": bool(feedback_map.get(cid) and feedback_map[cid].comment),
+                    "has_feedback": bool(feedback_map.get(cid) and feedback_map[cid].icp_feedback),
                 }
                 for name, cid in company_id_map.items()
             }
@@ -460,6 +463,64 @@ def create_app() -> Flask:
                     contacted_at=datetime.datetime.utcnow(),
                 ))
 
+        return redirect(request.referrer or url_for("index"))
+
+    @app.route("/company/<int:company_id>/feedback", methods=["GET"])
+    @_require_auth
+    def get_feedback(company_id):
+        from src.database.session import get_session
+        from src.database.models import ContactStatus
+
+        with get_session() as session:
+            status = session.get(ContactStatus, company_id)
+            if not status:
+                return jsonify({"exists": False})
+
+            return jsonify({
+                "exists": True,
+                "company_id": status.company_id,
+                "contacted_at": str(status.contacted_at)[:16] if status.contacted_at else None,
+                "comment": status.comment or "",
+                "contact_method": status.contact_method or "",
+                "response_received": status.response_received or "",
+                "follow_up_date": str(status.follow_up_date) if status.follow_up_date else "",
+                "icp_feedback": status.icp_feedback or {},
+            })
+
+    @app.route("/company/<int:company_id>/feedback", methods=["POST"])
+    @_require_auth
+    def save_feedback(company_id):
+        import datetime
+        from src.database.session import get_session
+        from src.database.models import ContactStatus
+
+        with get_session() as session:
+            status = session.get(ContactStatus, company_id)
+            if not status:
+                status = ContactStatus(
+                    company_id=company_id,
+                    contacted_at=datetime.datetime.utcnow(),
+                )
+                session.add(status)
+                session.flush()
+
+            status.comment = request.form.get("comment", "").strip() or None
+            status.contact_method = request.form.get("contact_method", "").strip() or None
+            status.response_received = request.form.get("response_received", "").strip() or None
+
+            follow_up = request.form.get("follow_up_date", "").strip()
+            status.follow_up_date = datetime.date.fromisoformat(follow_up) if follow_up else None
+
+            icp_feedback = {}
+            for key in request.form:
+                if key.startswith("icp_"):
+                    icp_feedback[key] = request.form[key]
+            other_text = request.form.get("icp_other_text", "").strip()
+            if other_text:
+                icp_feedback["icp_other_text"] = other_text
+            status.icp_feedback = icp_feedback if icp_feedback else None
+
+        flash("Comentario guardado correctamente.", "success")
         return redirect(request.referrer or url_for("index"))
 
     return app

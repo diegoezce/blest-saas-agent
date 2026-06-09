@@ -140,7 +140,8 @@ details.lead[open] .lead-chevron { transform:rotate(90deg); }
           <th style="padding:0.75rem 1rem;text-align:center;font-size:0.8rem;color:var(--muted);font-weight:600">Score</th>
           <th style="padding:0.75rem 1rem;text-align:left;font-size:0.8rem;color:var(--muted);font-weight:600">Priority</th>
           <th style="padding:0.75rem 1rem;text-align:left;font-size:0.8rem;color:var(--muted);font-weight:600">Why</th>
-          <th style="padding:0.75rem 1rem;text-align:center;font-size:0.8rem;color:var(--muted);font-weight:600">Contactado</th>
+          <th style="padding:0.75rem 0.5rem;text-align:center;font-size:0.8rem;color:var(--muted);font-weight:600">Contact</th>
+          <th style="padding:0.75rem 0.5rem;text-align:center;font-size:0.8rem;color:var(--muted);font-weight:600">Feedback</th>
         </tr>
       </thead>
       <tbody>
@@ -175,23 +176,38 @@ details.lead[open] .lead-chevron { transform:rotate(90deg); }
               <span class="badge badge-muted">{{ priority or '—' }}</span>
             {% endif %}
           </td>
-          <td style="padding:0.85rem 1rem;font-size:0.85rem;color:var(--muted);max-width:300px">
-            {{ (opp.get('score_explanation') or '')[:140] }}{% if (opp.get('score_explanation') or '')|length > 140 %}…{% endif %}
+          <td style="padding:0.85rem 1rem;font-size:0.85rem;color:var(--muted);max-width:260px">
+            {{ (opp.get('score_explanation') or '')[:120] }}{% if (opp.get('score_explanation') or '')|length > 120 %}…{% endif %}
           </td>
-          <td style="padding:0.85rem 1rem;text-align:center">
+          <td style="padding:0.85rem 0.5rem;text-align:center;vertical-align:middle">
             {% if info.company_id %}
             <form method="POST" action="/company/{{ info.company_id }}/toggle-contact" style="display:inline">
               <label style="cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:0.25rem">
                 <input type="checkbox" onchange="this.form.submit()"
                   {% if info.contacted %}checked{% endif %}
-                  style="width:18px;height:18px;cursor:pointer;accent-color:var(--green)">
+                  style="width:16px;height:16px;cursor:pointer;accent-color:var(--green)">
                 {% if info.contacted_at %}
-                  <span style="font-size:0.7rem;color:var(--muted)">{{ info.contacted_at }}</span>
+                  <span style="font-size:0.65rem;color:var(--muted);white-space:nowrap">{{ info.contacted_at[:10] }}</span>
                 {% endif %}
               </label>
             </form>
             {% else %}
               <span style="color:var(--border)">—</span>
+            {% endif %}
+          </td>
+          <td style="padding:0.85rem 0.5rem;text-align:center;vertical-align:middle">
+            {% if info.company_id %}
+            <button onclick="openFeedbackModal({{ info.company_id }}, '{{ name|replace("'", "\\'")|e }}')"
+              class="feedback-btn {% if info.has_comment or info.has_feedback %}has-feedback{% endif %}"
+              title="Add feedback for {{ name|e }}">
+              {% if info.has_comment or info.has_feedback %}
+                <span style="font-size:0.9rem">✏️</span>
+              {% else %}
+                <span style="font-size:0.9rem">💬</span>
+              {% endif %}
+            </button>
+            {% else %}
+              <span style="color:var(--border);font-size:0.78rem">—</span>
             {% endif %}
           </td>
         </tr>
@@ -381,6 +397,105 @@ details.lead[open] .lead-chevron { transform:rotate(90deg); }
 </div>
 {% endif %}
 
+<!-- Feedback Modal -->
+<div id="feedback-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:300;align-items:center;justify-content:center">
+  <div id="feedback-modal-inner" class="card" style="width:100%;max-width:520px;padding:1.75rem;max-height:90vh;overflow-y:auto">
+    <div class="flex items-center justify-between" style="margin-bottom:1.25rem">
+      <h2 style="font-size:1.15rem;font-weight:700" id="feedback-company-name">Company</h2>
+      <button onclick="closeFeedbackModal()" style="background:none;border:none;color:var(--muted);font-size:1.3rem;cursor:pointer;padding:0.25rem">&times;</button>
+    </div>
+
+    <form id="feedback-form" method="POST" action="">
+      <!-- Comment -->
+      <label style="font-size:0.85rem;color:var(--muted);display:block;margin-bottom:0.35rem;font-weight:600">Comment / Notes</label>
+      <textarea name="comment" rows="3" placeholder="What happened when you contacted them? Any notes..." 
+        style="width:100%;padding:0.6rem 0.75rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.9rem;resize:vertical;margin-bottom:1rem;font-family:inherit"></textarea>
+
+      <!-- Contact Method + Response side by side -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;margin-bottom:1rem">
+        <div>
+          <label style="font-size:0.85rem;color:var(--muted);display:block;margin-bottom:0.35rem;font-weight:600">Contact Method</label>
+          <select name="contact_method"
+            style="width:100%;padding:0.5rem 0.6rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.85rem">
+            <option value="">— Select —</option>
+            <option value="email">Email</option>
+            <option value="linkedin">LinkedIn Message</option>
+            <option value="phone">Phone Call</option>
+            <option value="whatsapp">WhatsApp</option>
+            <option value="in_person">In Person</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:0.85rem;color:var(--muted);display:block;margin-bottom:0.35rem;font-weight:600">Response</label>
+          <select name="response_received"
+            style="width:100%;padding:0.5rem 0.6rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.85rem">
+            <option value="">— Select —</option>
+            <option value="interested">Interested</option>
+            <option value="not_interested">Not Interested</option>
+            <option value="no_reply">No Reply</option>
+            <option value="call_back">Call Back Later</option>
+            <option value="meeting_scheduled">Meeting Scheduled</option>
+            <option value="already_training">Already Has Training</option>
+            <option value="wrong_contact">Wrong Person</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Follow-up date -->
+      <div style="margin-bottom:1.25rem">
+        <label style="font-size:0.85rem;color:var(--muted);display:block;margin-bottom:0.35rem;font-weight:600">Follow-Up Date</label>
+        <input type="date" name="follow_up_date"
+          style="width:100%;padding:0.5rem 0.6rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.85rem">
+      </div>
+
+      <!-- ICP Feedback for Prompt Improvement -->
+      <div style="margin-bottom:1.25rem">
+        <div style="font-size:0.85rem;color:var(--muted);margin-bottom:0.5rem;font-weight:600">🔍 What can we improve in lead discovery?</div>
+        <div style="display:flex;flex-direction:column;gap:0.4rem;font-size:0.88rem">
+          <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer">
+            <input type="checkbox" name="icp_wrong_industry" value="yes" style="accent-color:var(--accent)"> Wrong industry for us
+          </label>
+          <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer">
+            <input type="checkbox" name="icp_wrong_size" value="yes" style="accent-color:var(--accent)"> Company too small/large
+          </label>
+          <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer">
+            <input type="checkbox" name="icp_wrong_contact" value="yes" style="accent-color:var(--accent)"> Wrong contact person found
+          </label>
+          <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer">
+            <input type="checkbox" name="icp_no_english_need" value="yes" style="accent-color:var(--accent)"> English not a priority
+          </label>
+          <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer">
+            <input type="checkbox" name="icp_already_training" value="yes" style="accent-color:var(--accent)"> Already has training provider
+          </label>
+          <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer">
+            <input type="checkbox" name="icp_wrong_location" value="yes" style="accent-color:var(--accent)"> Wrong location
+          </label>
+          <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer">
+            <input type="checkbox" name="icp_no_budget" value="yes" style="accent-color:var(--accent)"> No budget / too expensive
+          </label>
+        </div>
+        <div style="margin-top:0.5rem">
+          <label style="font-size:0.85rem;color:var(--muted);display:block;margin-bottom:0.25rem">Other feedback:</label>
+          <input type="text" name="icp_other_text" placeholder="e.g., Not the decision maker, wrong signals..."
+            style="width:100%;padding:0.5rem 0.6rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.85rem">
+        </div>
+      </div>
+
+      <div style="display:flex;gap:0.75rem;border-top:1px solid var(--border);padding-top:1rem">
+        <button type="submit"
+          style="flex:1;background:#38bdf8;color:#0f172a;font-weight:700;border:none;padding:0.6rem;border-radius:6px;cursor:pointer;font-size:0.9rem">
+          Save Feedback
+        </button>
+        <button type="button" onclick="closeFeedbackModal()"
+          style="flex:1;background:var(--surface-hover);color:var(--text);border:1px solid var(--border);padding:0.6rem;border-radius:6px;cursor:pointer;font-size:0.9rem">
+          Cancel
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <script>
 function copyText(btn) {
   const text = btn.getAttribute('data-body');
@@ -409,5 +524,46 @@ function copyText(btn) {
 function setAllLeads(open) {
   document.querySelectorAll('details.lead').forEach(d => d.open = open);
 }
+
+// ── Feedback Modal ────────────────────────────────────────────────────────
+
+function openFeedbackModal(companyId, companyName) {
+  const modal = document.getElementById('feedback-modal');
+  const form = document.getElementById('feedback-form');
+  const title = document.getElementById('feedback-company-name');
+  title.textContent = '💬 ' + companyName;
+  form.action = '/company/' + companyId + '/feedback';
+  form.reset();
+
+  // Load existing feedback
+  fetch('/company/' + companyId + '/feedback')
+    .then(r => r.json())
+    .then(data => {
+      if (data.exists) {
+        if (data.comment) form.comment.value = data.comment;
+        if (data.contact_method) form.contact_method.value = data.contact_method;
+        if (data.response_received) form.response_received.value = data.response_received;
+        if (data.follow_up_date) form.follow_up_date.value = data.follow_up_date;
+        // Set ICP checkboxes
+        const icp = data.icp_feedback || {};
+        document.querySelectorAll('[name^="icp_"]').forEach(el => {
+          if (el.type === 'checkbox' && icp[el.name] === 'yes') el.checked = true;
+          if (el.type === 'text' && icp[el.name]) el.value = icp[el.name];
+        });
+      }
+    })
+    .catch(() => {});
+
+  modal.style.display = 'flex';
+}
+
+function closeFeedbackModal() {
+  document.getElementById('feedback-modal').style.display = 'none';
+}
+
+// Close modal on backdrop click
+document.getElementById('feedback-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeFeedbackModal();
+});
 </script>
 {% endblock %}
