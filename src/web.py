@@ -302,7 +302,146 @@ def create_app() -> Flask:
                 for name, cid in company_id_map.items()
             }
 
-        return render_template("run.html", run=run_data, report=report_data, contact_info=contact_info)
+            report_has_professional = False
+            if report and report.report_markdown:
+                md = report.report_markdown
+                report_has_professional = bool(
+                    md and md not in ("__generating__",) and not md.startswith("__error__:")
+                )
+
+        return render_template(
+            "run.html", run=run_data, report=report_data,
+            contact_info=contact_info, report_has_professional=report_has_professional,
+        )
+
+    # ── Professional Report ──────────────────────────────────────────────────
+
+    @app.route("/run/<int:run_id>/professional-report")
+    @_require_auth
+    def professional_report(run_id):
+        import json
+        from src.database.session import get_session
+        from src.database.models import DiscoveryRun, DailyReport
+
+        with get_session() as session:
+            run = session.get(DiscoveryRun, run_id)
+            if not run:
+                abort(404)
+            report = session.query(DailyReport).filter_by(run_id=run_id).first()
+            run_data = {"id": run.id, "run_date": str(run.run_date)}
+            markdown_content = report.report_markdown if report else None
+
+        if not markdown_content:
+            return render_template(
+                "professional_report.html", run=run_data,
+                markdown_content=None, generating=False, error=None,
+            )
+        if markdown_content == "__generating__":
+            return render_template(
+                "professional_report.html", run=run_data,
+                markdown_content=None, generating=True, error=None,
+            )
+        if markdown_content.startswith("__error__:"):
+            return render_template(
+                "professional_report.html", run=run_data,
+                markdown_content=None, generating=False,
+                error=markdown_content[len("__error__:"):],
+            )
+
+        return render_template(
+            "professional_report.html", run=run_data,
+            markdown_content=markdown_content, generating=False, error=None,
+        )
+
+    @app.route("/run/<int:run_id>/professional-report/generate", methods=["POST"])
+    @_require_auth
+    def generate_professional_report(run_id):
+        import json
+        import threading
+        import anthropic as anthropic_lib
+        from src.database.session import get_session
+        from src.database.models import DiscoveryRun, DailyReport
+        from src.dashboard import _enrich_drafts_from_db
+        from src.prompts.professional_report import PROFESSIONAL_REPORT_PROMPT
+        from src.config import get_settings
+
+        cfg = get_settings()
+
+        with get_session() as session:
+            run = session.get(DiscoveryRun, run_id)
+            if not run:
+                abort(404)
+            report = session.query(DailyReport).filter_by(run_id=run_id).first()
+            if not report:
+                flash("No hay datos de reporte para este run.", "error")
+                return redirect(url_for("run_detail", run_id=run_id))
+
+            report_data = _enrich_drafts_from_db(session, dict(report.report_json or {}))
+            all_opps = sorted(
+                report_data.get("quick_wins", []) + report_data.get("strategic_opportunities", []),
+                key=lambda x: x.get("score", 0), reverse=True,
+            )
+            drafts_by_company: dict[str, dict] = {}
+            for d in report_data.get("outreach_drafts", []):
+                nm = d.get("company_name", "")
+                if nm not in drafts_by_company:
+                    drafts_by_company[nm] = d
+
+            prompt = PROFESSIONAL_REPORT_PROMPT.format(
+                run_date=str(run.run_date),
+                total_companies=run.companies_found or 0,
+                search_queries=", ".join(run.search_queries_used or []),
+                scored_json=json.dumps(all_opps, ensure_ascii=False, indent=2),
+                contacts_json=json.dumps(report_data.get("all_contacts", []), ensure_ascii=False, indent=2),
+                insights_json=json.dumps(report_data.get("top_insights", []), ensure_ascii=False, indent=2),
+                drafts_summary=json.dumps(list(drafts_by_company.values()), ensure_ascii=False, indent=2),
+            )
+            report.report_markdown = "__generating__"
+
+        def _generate(rid: int, p: str) -> None:
+            try:
+                client = anthropic_lib.Anthropic(api_key=cfg.anthropic_api_key)
+                msg = client.messages.create(
+                    model=cfg.reasoning_model,
+                    max_tokens=8000,
+                    messages=[{"role": "user", "content": p}],
+                )
+                result = msg.content[0].text
+            except Exception as exc:
+                logger.error(f"Professional report generation failed for run {rid}: {exc}", exc_info=True)
+                result = f"__error__:{exc}"
+            with get_session() as s:
+                r = s.query(DailyReport).filter_by(run_id=rid).first()
+                if r:
+                    r.report_markdown = result
+
+        threading.Thread(target=_generate, args=(run_id, prompt), daemon=True).start()
+        return redirect(url_for("professional_report", run_id=run_id))
+
+    @app.route("/run/<int:run_id>/professional-report/download")
+    @_require_auth
+    def professional_report_download(run_id):
+        from src.database.session import get_session
+        from src.database.models import DiscoveryRun, DailyReport
+
+        with get_session() as session:
+            run = session.get(DiscoveryRun, run_id)
+            if not run:
+                abort(404)
+            report = session.query(DailyReport).filter_by(run_id=run_id).first()
+            if not report:
+                abort(404)
+            md = report.report_markdown or ""
+            if not md or md == "__generating__" or md.startswith("__error__:"):
+                abort(404)
+            content = md
+            run_date = str(run.run_date)
+
+        return Response(
+            content.encode("utf-8"),
+            mimetype="text/markdown",
+            headers={"Content-Disposition": f"attachment; filename=blest-professional-report-{run_date}.md"},
+        )
 
     @app.route("/company/<int:company_id>/toggle-contact", methods=["POST"])
     @_require_auth

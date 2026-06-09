@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}Reporte Profesional — {{ run.run_date }} — Blest{% endblock %}
+
+{% block content %}
+<style>
+  .report-prose { max-width: 820px; }
+  .report-prose h1 { font-size: 1.5rem; font-weight: 700; margin: 2rem 0 0.6rem; color: var(--text); border-bottom: 1px solid var(--border); padding-bottom: 0.4rem; }
+  .report-prose h2 { font-size: 1.2rem; font-weight: 600; margin: 1.5rem 0 0.5rem; color: var(--accent); }
+  .report-prose h3 { font-size: 1rem; font-weight: 600; margin: 1.2rem 0 0.4rem; color: var(--text); }
+  .report-prose p { margin: 0.6rem 0; color: var(--text); }
+  .report-prose ul, .report-prose ol { padding-left: 1.4rem; margin: 0.5rem 0; }
+  .report-prose li { margin: 0.3rem 0; }
+  .report-prose table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.85rem; }
+  .report-prose th { background: var(--surface-hover); color: var(--muted); text-align: left; padding: 0.5rem 0.75rem; border: 1px solid var(--border); }
+  .report-prose td { padding: 0.45rem 0.75rem; border: 1px solid var(--border); color: var(--text); }
+  .report-prose tr:nth-child(even) td { background: rgba(255,255,255,0.02); }
+  .report-prose code { background: var(--surface-hover); padding: 0.1rem 0.3rem; border-radius: 4px; font-size: 0.85em; }
+  .report-prose blockquote { border-left: 3px solid var(--accent); padding: 0.4rem 1rem; margin: 0.5rem 0; color: var(--muted); }
+  .report-prose input[type="checkbox"] { margin-right: 0.4rem; }
+
+  .spinner-wrap { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 5rem 2rem; gap: 1.2rem; }
+  .spinner { width: 40px; height: 40px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .error-box { background: #450a0a; border: 1px solid var(--red); border-radius: 10px; padding: 1.25rem 1.5rem; color: var(--red); }
+</style>
+
+<!-- Back link + header -->
+<div style="margin-bottom:1.5rem">
+  <a href="/run/{{ run.id }}" class="text-muted" style="font-size:0.85rem">← Volver al Reporte</a>
+  <div class="flex items-center justify-between wrap mt-1" style="gap:1rem;margin-top:0.5rem">
+    <div>
+      <h1 style="font-size:1.6rem;font-weight:700">Reporte Profesional — {{ run.run_date }}</h1>
+      <div style="font-size:0.85rem;color:var(--muted);margin-top:0.2rem">Run #{{ run.id }} · Análisis ejecutivo generado por IA</div>
+    </div>
+    {% if not generating and markdown_content and not error %}
+    <div style="display:flex;gap:0.5rem">
+      <a href="/run/{{ run.id }}/professional-report/download"
+         style="background:var(--surface-hover);border:1px solid var(--border);color:var(--text);padding:0.4rem 0.85rem;border-radius:6px;font-size:0.85rem;text-decoration:none">
+        ↓ Descargar .md
+      </a>
+      <form method="POST" action="/run/{{ run.id }}/professional-report/generate" style="display:inline">
+        <button type="submit"
+                style="background:var(--surface-hover);border:1px solid var(--border);color:var(--muted);padding:0.4rem 0.85rem;border-radius:6px;font-size:0.85rem;cursor:pointer">
+          ↻ Regenerar
+        </button>
+      </form>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{% if generating %}
+<!-- Spinner — auto-reload every 4s -->
+<div class="spinner-wrap">
+  <div class="spinner"></div>
+  <div style="color:var(--muted);font-size:0.9rem">Generando reporte con IA… esto toma 20-40 segundos.</div>
+  <div style="color:var(--muted);font-size:0.78rem">La página se actualizará automáticamente.</div>
+</div>
+<script>
+  setTimeout(function() { location.reload(); }, 4000);
+</script>
+
+{% elif error %}
+<div class="error-box">
+  <div style="font-weight:600;margin-bottom:0.4rem">Error al generar el reporte</div>
+  <div style="font-size:0.85rem;font-family:monospace">{{ error }}</div>
+  <div style="margin-top:1rem">
+    <form method="POST" action="/run/{{ run.id }}/professional-report/generate">
+      <button type="submit"
+              style="background:#7f1d1d;border:1px solid var(--red);color:var(--red);padding:0.4rem 0.85rem;border-radius:6px;font-size:0.85rem;cursor:pointer">
+        Reintentar
+      </button>
+    </form>
+  </div>
+</div>
+
+{% elif markdown_content %}
+<!-- Render markdown with marked.js -->
+<div class="card report-prose" id="report-content" style="padding:1.75rem 2rem">
+  Cargando...
+</div>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script>
+  var raw = {{ markdown_content | tojson }};
+  document.getElementById('report-content').innerHTML = marked.parse(raw);
+</script>
+
+{% else %}
+<!-- No report yet — offer to generate -->
+<div class="card" style="text-align:center;padding:3rem 2rem">
+  <div style="font-size:2.5rem;margin-bottom:0.75rem">📄</div>
+  <div style="font-size:1.1rem;font-weight:600;margin-bottom:0.4rem">Reporte profesional no generado</div>
+  <div style="color:var(--muted);font-size:0.9rem;margin-bottom:1.5rem">
+    El análisis ejecutivo de 8 secciones se genera con IA y tarda ~30 segundos.
+  </div>
+  <form method="POST" action="/run/{{ run.id }}/professional-report/generate">
+    <button type="submit"
+            style="background:var(--accent);color:#0f172a;font-weight:700;padding:0.55rem 1.4rem;border-radius:8px;border:none;font-size:0.95rem;cursor:pointer">
+      📄 Generar Reporte Profesional
+    </button>
+  </form>
+</div>
+{% endif %}
+
+{% endblock %}
