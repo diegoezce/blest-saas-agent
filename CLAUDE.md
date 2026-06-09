@@ -52,14 +52,30 @@ This merges profile values on top of global `Settings` defaults:
 ## Web UI
 
 - `/` - All Runs list (shows profile badge per run)
+  - Profile filter dropdown to filter runs by profile
+  - "Ocultar fallidos" checkbox hides failed runs
+  - Failed runs have ✕ delete button (removes run + report)
 - `/profiles` - Profile management (list, create, edit)
 - `/profiles/new` - Create new profile
 - `/profiles/<id>/edit` - Edit existing profile
 - `/run/<id>` - Run detail with quick wins, strategic, contacts, insights, outreach drafts
+  - Responsive: table → stacked cards on mobile (uses `data-label` attributes)
+  - Feedback modal fills full width on mobile
+  - Lead summaries stack vertically on mobile
 - `/run/latest` - Redirect to latest run
+- `/run/<id>/delete` - POST: delete a failed run and its report
 - Trigger modal - Profile dropdown to select which profile to run for
-- Schedule modal - Configure time and days of week
+- Schedule modal - Configure time, days of week, and **profile**
+- Schedule button shows current profile name
 - Log panel - Real-time log viewer at bottom of page
+
+### Schedule
+
+- Daily discovery at configured time (default 08:00 ART)
+- Uses `_schedule_profile_name` runtime variable (settable from UI)
+- Falls back to `settings.schedule_profile_name` env var (default: empty = Default)
+- Scheduler pauses/resumes via toggle button
+- Time and days are ephemeral (not persisted across restart unless set in Railway env vars)
 
 ## Run Discovery
 
