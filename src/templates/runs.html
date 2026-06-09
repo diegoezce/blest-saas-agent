@@ -19,7 +19,7 @@
     <div style="display:flex;align-items:center;gap:0.75rem">
       <h1 style="font-size:1.5rem;font-weight:700">Discovery Runs</h1>
       <!-- Profile filter -->
-      <select onchange="window.location.href='/profiles' in this.value ? window.location='/profiles' : window.location.href=this.value ? '/?profile_id='+this.value : '/'"
+      <select onchange="var v=this.value;window.location.href = v === 'profiles' ? '/profiles' : v ? '/?profile_id='+v : '/'"
         style="padding:0.35rem 0.6rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.82rem">
         <option value="">All profiles</option>
         {% for p in profiles %}

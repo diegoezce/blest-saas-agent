@@ -25,6 +25,26 @@ details.lead > summary:hover { background:rgba(255,255,255,0.03); }
 .lead-chevron { color:var(--muted); font-size:0.65rem; margin-left:auto; transition:transform 0.15s; flex-shrink:0; }
 details.lead[open] .lead-chevron { transform:rotate(90deg); }
 .lead-body { border-top:1px solid var(--border); padding:1.1rem 1.25rem; }
+
+/* Responsive: table → stacked cards on mobile */
+@media (max-width:768px) {
+  .opp-table thead { display:none; }
+  .opp-table, .opp-table tbody, .opp-table tr { display:block; width:100%; }
+  .opp-table tr { padding:1rem 1.25rem; border-bottom:1px solid var(--border); }
+  .opp-table tr:hover { background:rgba(255,255,255,0.02); }
+  .opp-table td { display:flex; align-items:center; gap:0.5rem; padding:0.2rem 0; border:none; }
+  .opp-table td:before { content:attr(data-label); font-size:0.75rem; color:var(--muted); font-weight:600; min-width:75px; flex-shrink:0; }
+  .opp-table td.contact-actions { display:flex; flex-direction:row; gap:1.5rem; padding-top:0.5rem; margin-top:0.4rem; border-top:1px solid var(--border); }
+  /* Responsive lead summaries */
+  details.lead { position:relative; }
+  details.lead > summary { flex-direction:column; align-items:flex-start; gap:0.3rem; }
+  details.lead > summary .lead-chevron { position:absolute; right:1rem; top:1rem; }
+  .lead-body pre { font-size:0.82rem; padding:0.65rem; }
+  /* Feedback modal full width on mobile */
+  #feedback-modal-inner { max-width:100% !important; margin:0.75rem; border-radius:12px; }
+  /* Summary cards smaller on mobile */
+  .summary-grid { grid-template-columns:repeat(2,1fr) !important; }
+}
 </style>
 
 <!-- Page header -->
@@ -76,7 +96,7 @@ details.lead[open] .lead-chevron { transform:rotate(90deg); }
 </div>
 
 <!-- Summary stats -->
-<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:1rem;margin-bottom:1.5rem">
+<div class="summary-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:1rem;margin-bottom:1.5rem">
   <div class="card" style="text-align:center">
     <div style="font-size:2rem;font-weight:800">{{ run.companies_found }}</div>
     <div class="text-muted" style="font-size:0.8rem;margin-top:0.2rem">Companies Found</div>
@@ -136,7 +156,7 @@ details.lead[open] .lead-chevron { transform:rotate(90deg); }
     <span class="section-chevron">▶</span>
   </summary>
   <div class="card" style="padding:0;overflow:hidden">
-    <table style="width:100%;border-collapse:collapse">
+    <table class="opp-table" style="width:100%;border-collapse:collapse">
       <thead>
         <tr style="background:rgba(255,255,255,0.03);border-bottom:1px solid var(--border)">
           <th style="padding:0.75rem 1.25rem;text-align:left;font-size:0.8rem;color:var(--muted);font-weight:600">#</th>
@@ -155,14 +175,14 @@ details.lead[open] .lead-chevron { transform:rotate(90deg); }
         {% set name = opp.get('company_name', '') %}
         {% set info = contact_info.get(name, {}) %}
         <tr style="border-bottom:1px solid var(--border)" onmouseover="this.style.background='rgba(255,255,255,0.02)'" onmouseout="this.style.background=''">
-          <td style="padding:0.85rem 1.25rem;color:var(--muted);font-size:0.85rem">{{ loop.index }}</td>
-          <td style="padding:0.85rem 1rem">
+          <td data-label="#" style="padding:0.85rem 1.25rem;color:var(--muted);font-size:0.85rem">{{ loop.index }}</td>
+          <td data-label="Company" style="padding:0.85rem 1rem">
             <div style="font-weight:600;font-size:0.95rem">{{ name or '—' }}</div>
             {% if opp.get('industry') %}
               <div class="text-muted" style="font-size:0.78rem">{{ opp.get('industry') }}</div>
             {% endif %}
           </td>
-          <td style="padding:0.85rem 1rem;text-align:center">
+          <td data-label="Score" style="padding:0.85rem 1rem;text-align:center">
             {% if score >= 70 %}
               <span class="score score-high">{{ score }}</span>
             {% elif score >= 50 %}
@@ -171,7 +191,7 @@ details.lead[open] .lead-chevron { transform:rotate(90deg); }
               <span class="score score-low">{{ score }}</span>
             {% endif %}
           </td>
-          <td style="padding:0.85rem 1rem">
+          <td data-label="Priority" style="padding:0.85rem 1rem">
             {% if priority == 'quick_win' %}
               <span class="badge badge-green">⚡ Quick Win</span>
             {% elif priority == 'strategic' %}
@@ -180,10 +200,10 @@ details.lead[open] .lead-chevron { transform:rotate(90deg); }
               <span class="badge badge-muted">{{ priority or '—' }}</span>
             {% endif %}
           </td>
-          <td style="padding:0.85rem 1rem;font-size:0.85rem;color:var(--muted);max-width:260px">
+          <td data-label="Why" style="padding:0.85rem 1rem;font-size:0.85rem;color:var(--muted);max-width:260px">
             {{ (opp.get('score_explanation') or '')[:120] }}{% if (opp.get('score_explanation') or '')|length > 120 %}…{% endif %}
           </td>
-          <td style="padding:0.85rem 0.5rem;text-align:center;vertical-align:middle">
+          <td data-label="Contact" style="padding:0.85rem 0.5rem;text-align:center;vertical-align:middle" class="contact-actions">
             {% if info.company_id %}
             <form method="POST" action="/company/{{ info.company_id }}/toggle-contact" style="display:inline">
               <label style="cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:0.25rem">
@@ -199,7 +219,7 @@ details.lead[open] .lead-chevron { transform:rotate(90deg); }
               <span style="color:var(--border)">—</span>
             {% endif %}
           </td>
-          <td style="padding:0.85rem 0.5rem;text-align:center;vertical-align:middle">
+          <td data-label="Feedback" style="padding:0.85rem 0.5rem;text-align:center;vertical-align:middle" class="contact-actions">
             {% if info.company_id %}
             <button onclick="openFeedbackModal({{ info.company_id }}, '{{ name|replace("'", "\\'")|e }}')"
               class="feedback-btn {% if info.has_comment or info.has_feedback %}has-feedback{% endif %}"
