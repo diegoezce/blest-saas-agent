@@ -1,67 +1,68 @@
 QUERY_GENERATION_PROMPT = """\
-You are a lead generation specialist for Blest, a corporate English training company in Argentina.
-Blest sells B2B training programs that improve business English for teams at medium-sized companies.
+You are a B2B lead researcher for Blest, a corporate English training company in Argentina.
 
-Your goal is to find companies in Argentina that likely need business English training for their employees.
+Your goal is to discover Argentine companies that likely need corporate English training.
 
-IDEAL CLIENT PROFILE:
-- Industries: technology, consulting, fintech, legaltech, accounting/auditing, professional services, e-commerce
-- Size: 20–500 employees
-- Located in: {target_cities}
-- Signals of English need: international clients, remote-first culture, English job postings, global expansion, exports
+Target profile:
+- Based in: {target_cities}
+- Employee range: {min_employees} to {max_employees} employees
+- Industries: {target_industries}
+- English training signals: international clients, remote work with foreign colleagues, \
+English job postings, recent international expansion, global clients, offshore teams, \
+multinational operations, oil & gas with foreign partners/operators
 
-Generate {num_queries} diverse search queries to find these companies. Mix:
-- Companies hiring for English-speaking roles ("bilingual", "inglés fluente", "english required")
-- Tech companies with international clients in Argentina
-- Consulting or professional services firms with global exposure
-- Fintech/legaltech startups expanding internationally
-- Companies with remote-first or distributed teams
-- Companies recently certified ISO / SOC2 / listed on international directories
+Generate {num_queries} diverse web search queries to find these companies.
+Mix Spanish and English. Cover different sources: LinkedIn, Bumeran, Computrabajo, Glassdoor,
+Infobae, La Nación Tecnología, Cronista, Clutch.co, Crunchbase, G2.
 
 Good query examples:
-- "empresa tecnología Buenos Aires clientes internacionales inglés equipo"
-- "consultora argentina servicios profesionales clientes EEUU inglés"
-- "fintech argentina remote-first equipo bilingüe"
-- "startup tecnología Córdoba expanding international clients 2024"
-- "empresa argentina certificación SOC2 ISO inglés"
-- "outsourcing software Buenos Aires inglés requerido"
-- "empresa exportación servicios Argentina inglés fluente"
-- "consulting firm Buenos Aires Argentina English speaking team"
+- "empresa tech Argentina contratan desarrolladores clientes EEUU remoto"
+- "Argentina consulting firm English speaking roles Buenos Aires"
+- "software company Buenos Aires bilingual job posting 2024"
+- "empresa argentina expansión internacional inglés corporativo"
+- site:linkedin.com/company Argentina technology "international clients"
+- "empresa oil gas Argentina inglés operadores internacionales Neuquén Vaca Muerta"
+- "oil and gas company Argentina English speaking engineers Patagonia"
+- "empresa energía Argentina servicios petroleros inglés Shell Schlumberger"
 
-Return exactly {num_queries} queries. Mix Spanish and English. Prioritize Argentine cities.
+Return exactly {num_queries} queries.
 """
 
 COMPANY_EXTRACTION_PROMPT = """\
-You are extracting potential B2B client data for Blest, a corporate English training company in Argentina.
-Blest sells business English training programs to companies whose teams need to communicate \
-internationally or with English-speaking clients.
+You are extracting structured company data from web search results.
 
-From the search results below, identify companies that might need corporate English training for their teams.
+Identify Argentine companies from the results below that may need corporate English training.
 
-TARGET PROFILE:
-- Technology companies, consulting firms, fintech, legaltech, accounting/professional services, e-commerce
-- Located in: {target_cities} or nearby Argentine cities
-- 20–500 employees
-- Signals of international exposure: foreign clients, English job postings, remote teams, global expansion, exports
+Target profile:
+- Based in Argentina ({target_cities} or remote)
+- {min_employees}–{max_employees} employees (skip if clearly outside this range)
+- Has at least ONE signal of English training need
+
+Signals of English training need:
+- International or foreign clients
+- Job postings requiring English or bilingual candidates
+- Remote teams working with overseas colleagues
+- Global or cross-border operations
+- US/EU market presence
+- Recently funded startup with international investors
 
 For each qualifying company extract:
-- name: Full company name
-- website_url: Official website URL (or null)
-- domain: Domain only, e.g. "acme.com.ar" (or null)
+- name: Company name (string)
+- website_url: Full URL (or null)
+- domain: Domain only, e.g. "acme.com" (or null)
 - linkedin_url: LinkedIn company page URL (or null)
-- industry: e.g. "technology", "consulting", "fintech", "legal", "accounting", "professional_services"
-- size_estimate: Estimate based on signals, e.g. "50-100", "100-300", "20-50"
-- location: City and province, e.g. "Buenos Aires, Argentina"
-- description: 2-3 sentences describing the company and any notable international/English signals
-- remote_friendly: true if they have remote or hybrid work culture
-- has_international_clients: true if they serve international or English-speaking clients
-- has_english_job_postings: true if they post jobs requiring English proficiency
+- industry: One of: technology, consulting, accounting, fintech, legaltech, professional_services, oil_gas, energy, other
+- size_estimate: e.g. "50-100" or "unknown"
+- location: City in Argentina (e.g. "Buenos Aires")
+- description: 1-2 sentence summary of what the company does
+- remote_friendly: true/false based on evidence
+- has_international_clients: true/false based on evidence
+- has_english_job_postings: true/false based on evidence
 - source: "tavily"
-- source_url: URL where this company was found
-- signals: List of 2-4 specific signals found (e.g. "Job posting requires fluent English", "US-based client mentions", "Team page shows international employees")
+- source_url: The URL where this company was found
+- signals: List of 1-3 specific evidence strings (e.g. "Job posting requires advanced English for US client support")
 
-EXCLUDE: English academies, language schools, universities, individual freelancers, \
-government agencies, companies with zero international exposure.
+EXCLUDE: government entities, schools/universities, non-profits, sole traders, companies outside Argentina, English academies or language institutes.
 
 SEARCH RESULTS:
 {search_results}

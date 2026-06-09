@@ -1,40 +1,34 @@
 OUTREACH_PROMPT = """\
-You are writing first-touch outreach messages for the founder of Blest, a corporate English \
-training company in Argentina. Blest helps company teams communicate better in English — \
-client calls, emails, presentations, and international meetings — through in-company programs.
+You are writing a first-touch outreach message for the founder of Blest, a corporate English \
+training company in Argentina.
+
+Blest helps Argentine company teams communicate more effectively in business English: \
+emails, meetings, client calls, and presentations.
 
 COMPANY AND INSIGHT DATA:
 {company_and_insight_json}
 
-Write FOUR outreach messages:
+Write TWO outreach messages:
 
-1. LinkedIn message in English (max 110 words, language: "en", channel: "linkedin")
-2. LinkedIn message in Spanish (max 110 words, language: "es", channel: "linkedin")
-3. Email in English (max 170 words + subject line, language: "en", channel: "email")
-4. Email in Spanish (max 170 words + subject line, language: "es", channel: "email")
+1. LinkedIn message (max 110 words)
+   - Conversational, direct, peer-to-peer
+   - No subject line needed
+   - Reference ONE specific thing about their business
 
-ALL MESSAGES MUST:
-- Open with a genuine observation about their company (NOT a pitch)
-- Feel human and peer-to-peer — you're one founder talking to another
-- Reference ONE specific signal you noticed (a job posting, a client, a team initiative)
-- Focus on the business communication challenge, not on selling training
-- End with ONE low-commitment soft question — about their current situation, not a CTA
-- Be warm but direct in tone
+2. Email (max 170 words + subject line)
+   - Slightly more formal than LinkedIn
+   - Subject line: max 8 words, curiosity-driven, no clickbait
+   - Reference ONE specific thing about their business
 
-LinkedIn specifics:
-- Short, conversational, no formality
-- No subject line needed (use empty string for subject_line)
+BOTH MESSAGES MUST:
+- Open with a genuine observation about their business (NOT a pitch)
+- Feel human, not templated
+- End with ONE low-commitment soft ask (e.g., "Would a 15-min call make sense?")
+- Be written in English (this is intentional — it's a natural conversation starter)
+- Be warm and helpful in tone
 
-Email specifics:
-- Slightly more structured than LinkedIn
-- Subject line: max 8 words, specific to their situation, no clickbait
+DO NOT USE: "I hope this finds you well", "synergies", "leverage", "game-changer", \
+"reaching out", "I wanted to", "touch base", "circle back", "quick question"
 
-Spanish messages should feel native to Argentine professional context (use vos register).
-
-DO NOT USE: "capacitación", "solución", "transformación", "propuesta de valor", \
-"I hope this finds you well", "synergies", "game-changer", "reaching out", \
-"espero que estés bien", "me pongo en contacto", "solución integral", \
-"potenciar", "desarrollar el potencial"
-
-Return all four as separate draft objects.
+Return both as separate draft objects with channel "linkedin" and "email" respectively.
 """

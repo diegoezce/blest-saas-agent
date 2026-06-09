@@ -33,10 +33,10 @@ class Settings(BaseSettings):
     max_companies_for_outreach: int = 5
 
     # Business targeting
-    target_cities: str = "Buenos Aires,Córdoba,Rosario,Santiago,Ciudad de México,Bogotá,Lima,Montevideo"
-    target_industries: str = "language_institute,english_academy,education,idiomas,language_school"
-    min_employees: int = 3
-    max_employees: int = 100
+    target_cities: str = "Buenos Aires,Córdoba,Rosario,Mendoza,Neuquén"
+    target_industries: str = "technology,consulting,fintech,legaltech,accounting,professional_services,oil_gas,energy"
+    min_employees: int = 20
+    max_employees: int = 500
 
     # Logging
     log_level: str = "INFO"

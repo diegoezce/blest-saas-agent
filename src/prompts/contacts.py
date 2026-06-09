@@ -1,35 +1,29 @@
-_CONTACTS_STATIC = """\
-You are a B2B sales researcher identifying decision makers for Blest, a corporate English \
-training company in Argentina that sells in-company English training programs to business teams.
+CONTACTS_PROMPT = """\
+You are a B2B sales researcher identifying decision makers at Argentine companies for a \
+corporate English training proposal.
 
-The goal is to find the person most likely to evaluate and approve a corporate training proposal.
+COMPANY: {company_name}
 
 PRIORITY ORDER OF TARGET ROLES:
-1. Gerente / Responsable de Learning & Development (L&D)
-2. Gerente / Jefe de Recursos Humanos (HR Manager)
-3. Gerente de Capacitación / Talent Development Manager
-4. Gerente de Operaciones / Chief of Staff
-5. Fundador / CEO / Director General (at companies under 100 employees)
-6. Managing Director / Country Manager
+1. Learning & Development (L&D) Manager / Talent Development / Capacitación
+2. HR Manager / Gerente de Recursos Humanos / People Manager
+3. Chief People Officer / VP People / Head of Talent
+4. Operations Manager (for companies < 50 employees)
+5. Founder / CEO / Managing Director (for companies with < 50 employees)
+
+COMPANY CONTEXT AND SEARCH RESULTS:
+{company_context}
 
 For each decision maker found, provide:
 - name: Full name if found (null if not identifiable)
 - role: Exact role title as found
-- role_category: One of: talent_ld, hr, operations, founder, other
+- role_category: One of: hr, talent_ld, operations, founder, other
 - linkedin_url: LinkedIn profile URL if found (null otherwise)
 - email: Email address if found (null otherwise)
-- confidence: "high" (directly confirmed), "medium" (inferred), "low" (likely but not confirmed)
-- notes: Brief explanation of where/how this person was found
+- confidence: "high" (directly confirmed by a reliable source), "medium" (inferred from context), "low" (likely role but not confirmed)
+- notes: Brief explanation of where/how this person was found, or what was searched if not found
 
-Return 1–2 contacts maximum. If no individual is found, include one entry with name=null \
-and the most likely role for this type of company, with notes explaining what was searched.
+Return 1–2 contacts maximum. If no specific individual is found, include one entry with \
+name=null and the most likely role at this type/size of company, with notes explaining \
+what was searched.
 """
-
-_CONTACTS_DYNAMIC = """\
-COMPANY: {company_name}
-
-COMPANY CONTEXT AND SEARCH RESULTS:
-{company_context}
-"""
-
-CONTACTS_PROMPT = _CONTACTS_STATIC + "\n" + _CONTACTS_DYNAMIC
