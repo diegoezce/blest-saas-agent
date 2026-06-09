@@ -6,6 +6,7 @@ import instructor
 from src.graph.state import AgentState
 from src.prompts.insights import INSIGHTS_STATIC, INSIGHTS_BATCH_PROMPT
 from src.schemas.outputs import CompanyInsightList
+from src.config import get_settings, get_profile_overrides
 
 logger = logging.getLogger(__name__)
 
@@ -16,9 +17,18 @@ _BATCH_SIZE = 3
 def _llm():
     global _client
     if _client is None:
-        from src.config import get_settings
         _client = instructor.from_anthropic(anthropic.Anthropic(api_key=get_settings().anthropic_api_key))
     return _client
+
+
+def _build_insight_prompt(state: AgentState) -> str:
+    """Build profile-aware insight static prompt."""
+    po = get_profile_overrides(state.get("profile"))
+    return INSIGHTS_STATIC.format(
+        agent_name=po["agent_company_name"],
+        agent_description=po["agent_description"],
+        agent_service_description=po.get("search_focus_terms", "improve their business communication skills"),
+    )
 
 
 def run_insights_node(state: AgentState) -> AgentState:
@@ -27,7 +37,6 @@ def run_insights_node(state: AgentState) -> AgentState:
         logger.warning("No scored companies — skipping insights")
         return {**state, "insights": []}
 
-    from src.config import get_settings
     cfg = get_settings()
     top = scored[: cfg.max_companies_for_insights]
     companies_map = {c["name"]: c for c in state.get("companies", [])}
@@ -35,6 +44,8 @@ def run_insights_node(state: AgentState) -> AgentState:
 
     logger.info(f"Step 4: Generating insights for top {len(top)} companies in batches of {_BATCH_SIZE}...")
     insights: list[dict] = []
+
+    insight_static = _build_insight_prompt(state)
 
     for i in range(0, len(top), _BATCH_SIZE):
         batch = top[i : i + _BATCH_SIZE]
@@ -56,7 +67,7 @@ def run_insights_node(state: AgentState) -> AgentState:
                     "content": [
                         {
                             "type": "text",
-                            "text": INSIGHTS_STATIC,
+                            "text": insight_static,
                             "cache_control": {"type": "ephemeral"},
                         },
                         {

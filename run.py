@@ -56,6 +56,7 @@ def main() -> None:
     parser.add_argument("--web", action="store_true", help="Start web UI + embedded daily scheduler")
     parser.add_argument("--report", action="store_true", help="Show last (or dated) report")
     parser.add_argument("--date", type=str, help="Date for --report (YYYY-MM-DD)", default=None)
+    parser.add_argument("--profile", type=int, default=None, help="Profile ID to use for the run")
     args = parser.parse_args()
 
     setup_logging()
@@ -97,9 +98,9 @@ def main() -> None:
         start_web_server()
         return
 
-    # Default: run once
+    # Default: run once (optionally with a specific profile)
     from src.scheduler import run_workflow_once
-    run_workflow_once()
+    run_workflow_once(profile_id=args.profile)
 
 
 if __name__ == "__main__":

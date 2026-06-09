@@ -16,8 +16,14 @@
 
 <div class="flex items-center justify-between mt-2" style="margin-bottom:1.5rem">
   <div>
-    <h1 style="font-size:1.5rem;font-weight:700">Discovery Runs</h1>
-    <p class="text-muted mt-1" style="font-size:0.9rem">History of all lead discovery executions</p>
+    <div>
+      <h1 style="font-size:1.5rem;font-weight:700">Discovery Runs</h1>
+      <p class="text-muted mt-1" style="font-size:0.9rem">
+        Default profile:
+        <span style="color:var(--accent);font-weight:600">{{ default_profile_name }}</span>
+        — click <a href="/profiles" style="color:var(--accent)">Profiles</a> to manage
+      </p>
+    </div>
   </div>
   <div style="display:flex;gap:0.75rem;align-items:center">
     <form method="POST" action="/toggle-scheduler">
@@ -85,9 +91,17 @@
 
 <!-- Trigger modal -->
 <div id="trigger-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:200;align-items:center;justify-content:center">
-  <div class="card" style="width:100%;max-width:380px;padding:2rem">
+  <div class="card" style="width:100%;max-width:400px;padding:2rem">
     <h2 style="font-size:1.1rem;font-weight:700;margin-bottom:1.25rem">Run Discovery Now</h2>
     <form method="POST" action="/trigger">
+      <label style="font-size:0.85rem;color:var(--muted);display:block;margin-bottom:0.4rem">Profile</label>
+      <select name="profile_id"
+        style="width:100%;padding:0.6rem 0.75rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.95rem;margin-bottom:1rem">
+        <option value="">— Default: {{ default_profile_name }} —</option>
+        {% for p in profiles %}
+          <option value="{{ p.id }}">{{ p.name }}</option>
+        {% endfor %}
+      </select>
       <label style="font-size:0.85rem;color:var(--muted);display:block;margin-bottom:0.4rem">Password</label>
       <input type="password" name="password" autofocus required
         style="width:100%;padding:0.6rem 0.75rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.95rem;margin-bottom:1rem">
@@ -121,7 +135,11 @@
           <!-- Date & status -->
           <div class="flex items-center gap-2" style="gap:0.75rem;min-width:200px">
             <div>
-              <div style="font-weight:700;font-size:1rem">{{ run.run_date }}</div>
+              <div style="font-weight:700;font-size:1rem">{{ run.run_date }}
+                {% if run.profile_name and run.profile_name != 'Default' %}
+                  <span style="font-size:0.75rem;color:var(--accent);font-weight:600">· {{ run.profile_name }}</span>
+                {% endif %}
+              </div>
               {% if run.completed_at %}
                 <div class="text-muted" style="font-size:0.8rem">Completed {{ run.completed_at[:16] }}</div>
               {% elif run.started_at %}

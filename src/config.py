@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     max_companies_for_insights: int = 10
     max_companies_for_outreach: int = 5
 
-    # Business targeting
+    # Business targeting (defaults — overridable by Profile)
     target_cities: str = "Buenos Aires,Córdoba,Rosario,Mendoza,Neuquén"
     target_industries: str = "technology,consulting,fintech,legaltech,accounting,professional_services,oil_gas,energy"
     min_employees: int = 20
@@ -76,3 +76,51 @@ def _lazy_settings():
 
 
 settings = _lazy_settings()
+
+
+def get_profile_overrides(profile: dict | None) -> dict:
+    """Merge a Profile's overrides on top of global Settings defaults.
+
+    Returns a dict with keys: target_cities_list, target_industries_list,
+    min_employees, max_employees, search_focus_terms, scoring_rubric,
+    outreach_tone, target_roles, agent_company_name, agent_description.
+    """
+    cfg = get_settings()
+    overrides: dict = {
+        "target_cities_list": cfg.target_cities_list,
+        "target_industries_list": cfg.target_industries_list,
+        "min_employees": cfg.min_employees,
+        "max_employees": cfg.max_employees,
+        "search_focus_terms": "",
+        "scoring_rubric": None,
+        "outreach_tone": "warm",
+        "target_roles": "",
+        "agent_company_name": "Blest",
+        "agent_description": "a corporate English training company in Argentina",
+    }
+
+    if not profile:
+        return overrides
+
+    if profile.get("target_cities"):
+        overrides["target_cities_list"] = [c.strip() for c in profile["target_cities"].split(",")]
+    if profile.get("target_industries"):
+        overrides["target_industries_list"] = [i.strip() for i in profile["target_industries"].split(",")]
+    if profile.get("min_employees"):
+        overrides["min_employees"] = profile["min_employees"]
+    if profile.get("max_employees"):
+        overrides["max_employees"] = profile["max_employees"]
+    if profile.get("search_focus_terms"):
+        overrides["search_focus_terms"] = profile["search_focus_terms"]
+    if profile.get("scoring_rubric"):
+        overrides["scoring_rubric"] = profile["scoring_rubric"]
+    if profile.get("outreach_tone"):
+        overrides["outreach_tone"] = profile["outreach_tone"]
+    if profile.get("target_roles"):
+        overrides["target_roles"] = profile["target_roles"]
+    if profile.get("agent_company_name"):
+        overrides["agent_company_name"] = profile["agent_company_name"]
+    if profile.get("agent_description"):
+        overrides["agent_description"] = profile["agent_description"]
+
+    return overrides

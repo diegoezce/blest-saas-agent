@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Profiles — Blest{% endblock %}
+
+{% block content %}
+<div class="flex items-center justify-between mt-2" style="margin-bottom:1.5rem">
+  <div>
+    <h1 style="font-size:1.5rem;font-weight:700">Profiles</h1>
+    <p class="text-muted mt-1" style="font-size:0.9rem">
+      Each profile represents a different product/service you're selling. 
+      When you run discovery, you choose which profile to use.
+    </p>
+  </div>
+  <a href="/profiles/new"
+     style="background:#38bdf8;color:#0f172a;font-weight:700;border:none;padding:0.5rem 1.25rem;border-radius:8px;font-size:0.9rem;text-decoration:none">
+    + New Profile
+  </a>
+</div>
+
+{% if not profiles %}
+<div class="card" style="text-align:center;padding:3rem;color:var(--muted)">
+  <div style="font-size:2.5rem;margin-bottom:1rem">📋</div>
+  <p style="font-weight:600">No profiles yet</p>
+  <p style="font-size:0.9rem;margin-top:0.25rem">Create your first profile to configure what kind of leads to discover.</p>
+</div>
+{% else %}
+<div style="display:flex;flex-direction:column;gap:0.75rem">
+  {% for p in profiles %}
+  <div class="card" style="transition:background 0.15s" onmouseover="this.style.background='var(--surface-hover)'" onmouseout="this.style.background='var(--surface)'">
+    <div class="flex items-center justify-between wrap gap-2">
+      <a href="/profiles/{{ p.id }}/edit" style="text-decoration:none;color:inherit;flex:1">
+        <div class="flex items-center gap-2" style="gap:0.75rem">
+          <div>
+            <div style="font-weight:700;font-size:1.05rem">
+              {{ p.name }}
+              {% if loop.first %}
+                <span class="badge badge-blue">default</span>
+              {% endif %}
+              {% if p.active %}
+                <span class="badge badge-green">active</span>
+              {% else %}
+                <span class="badge badge-muted">inactive</span>
+              {% endif %}
+            </div>
+            <div class="text-muted" style="font-size:0.82rem;margin-top:0.15rem">
+              {{ p.description or 'No description' }}
+            </div>
+          </div>
+        </div>
+      </a>
+      <div class="flex items-center" style="gap:1rem;font-size:0.82rem">
+        <div style="text-align:center">
+          <div style="font-weight:600">{{ p.target_industries_count }}</div>
+          <div class="text-muted" style="font-size:0.72rem">industries</div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-weight:600">{{ p.target_cities_count }}</div>
+          <div class="text-muted" style="font-size:0.72rem">cities</div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-weight:600">{{ p.employee_range }}</div>
+          <div class="text-muted" style="font-size:0.72rem">employees</div>
+        </div>
+        <form method="POST" action="/trigger" style="display:inline">
+          <input type="hidden" name="profile_id" value="{{ p.id }}">
+          <input type="hidden" name="password" value="blest2024">
+          <button type="submit"
+            style="background:#38bdf8;color:#0f172a;font-weight:700;border:none;padding:0.4rem 0.85rem;border-radius:6px;cursor:pointer;font-size:0.82rem;white-space:nowrap">
+            ▶ Run Now
+          </button>
+        </form>
+        <a href="/profiles/{{ p.id }}/edit" style="color:var(--muted);font-size:1.2rem;text-decoration:none">✎</a>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

@@ -1,5 +1,5 @@
 from sqlalchemy import (
-    Column, Integer, String, Text, DateTime, Date, Float,
+    Column, Integer, String, Text, DateTime, Date, Float, Boolean,
     ForeignKey, UniqueConstraint, func,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -10,10 +10,42 @@ class Base(DeclarativeBase):
     pass
 
 
+class Profile(Base):
+    __tablename__ = "profiles"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(Text, nullable=False, unique=True)
+    description = Column(Text, nullable=True)
+    active = Column(Boolean, default=True)
+
+    # Who is selling
+    agent_company_name = Column(Text, nullable=False, comment="e.g. Blest")
+    agent_description = Column(Text, nullable=False, comment="What the agent does/sells, for prompts")
+
+    # Who to find (target market)
+    target_industries = Column(Text, nullable=True, comment="Comma-separated; overrides global config")
+    target_cities = Column(Text, nullable=True, comment="Comma-separated; overrides global config")
+    min_employees = Column(Integer, nullable=True)
+    max_employees = Column(Integer, nullable=True)
+    search_focus_terms = Column(Text, nullable=True, comment="Extra context for query generation")
+
+    # How to score
+    scoring_rubric = Column(JSONB, nullable=True, comment="Custom scoring rubric JSON")
+    outreach_tone = Column(Text, nullable=True, comment="e.g. warm, direct, referral")
+
+    # Contact targeting
+    target_roles = Column(Text, nullable=True, comment="Comma-separated priority role list")
+
+    created_at = Column(DateTime, server_default=func.now())
+
+    runs = relationship("DiscoveryRun", back_populates="profile")
+
+
 class DiscoveryRun(Base):
     __tablename__ = "discovery_runs"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
+    profile_id = Column(Integer, ForeignKey("profiles.id"), nullable=True)
     run_date = Column(Date, nullable=False)
     started_at = Column(DateTime, nullable=False)
     completed_at = Column(DateTime, nullable=True)
@@ -24,6 +56,7 @@ class DiscoveryRun(Base):
     config_snapshot = Column(JSONB, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
 
+    profile = relationship("Profile", back_populates="runs")
     opportunities = relationship("Opportunity", back_populates="run", cascade="all, delete-orphan")
     reports = relationship("DailyReport", back_populates="run", cascade="all, delete-orphan")
 

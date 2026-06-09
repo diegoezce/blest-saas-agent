@@ -127,6 +127,8 @@ def persist_run_node(state: AgentState) -> AgentState:
                 run.completed_at = datetime.datetime.utcnow()
                 run.companies_found = len(state.get("companies", []))
                 run.search_queries_used = state.get("search_queries", [])
+                if state.get("profile_id"):
+                    run.profile_id = state["profile_id"]
 
             scored_list = state.get("scored_opportunities", [])
             report_data = state.get("report", {})
@@ -173,9 +175,12 @@ def generate_report_node(state: AgentState) -> AgentState:
         name = scored_company["company_name"]
         follow_ups.append(f"Research {name} further — check their LinkedIn for current L&D activity")
 
+    profile = state.get("profile", {})
     report = {
         "run_date": state["run_date"],
         "run_id": state["run_id"],
+        "profile_id": state.get("profile_id"),
+        "profile_name": profile.get("name", "Default") if profile else "Default",
         "total_companies_found": len(state.get("companies", [])),
         "quick_wins": quick_wins,
         "strategic_opportunities": strategic,

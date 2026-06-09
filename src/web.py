@@ -47,6 +47,30 @@ class _LogCollector(logging.Handler):
 _log_collector = _LogCollector()
 
 
+def _profile_form_data() -> dict:
+    """Extract profile fields from a POST form."""
+    return {
+        "name": request.form.get("name", "").strip(),
+        "description": request.form.get("description", "").strip() or None,
+        "active": request.form.get("active") == "1",
+        "agent_company_name": request.form.get("agent_company_name", "").strip(),
+        "agent_description": request.form.get("agent_description", "").strip(),
+        "target_industries": request.form.get("target_industries", "").strip() or None,
+        "target_cities": request.form.get("target_cities", "").strip() or None,
+        "min_employees": _int_or_none(request.form.get("min_employees")),
+        "max_employees": _int_or_none(request.form.get("max_employees")),
+        "search_focus_terms": request.form.get("search_focus_terms", "").strip() or None,
+        "outreach_tone": request.form.get("outreach_tone", "warm"),
+        "target_roles": request.form.get("target_roles", "").strip() or None,
+    }
+
+
+def _int_or_none(val: str | None) -> int | None:
+    if val and val.strip().isdigit():
+        return int(val.strip())
+    return None
+
+
 def _setup_log_collector() -> None:
     root = logging.getLogger()
     for h in root.handlers:
@@ -134,15 +158,25 @@ def create_app() -> Flask:
     @_require_auth
     def index():
         from src.database.session import get_session
-        from src.database.models import DiscoveryRun, DailyReport
+        from src.database.models import DiscoveryRun, DailyReport, Profile
 
         with get_session() as session:
             rows = session.query(DiscoveryRun).order_by(DiscoveryRun.run_date.desc()).all()
+            # Load profiles for the profile selector
+            profiles = session.query(Profile).filter_by(active=True).all()
+            profile_options = [{"id": p.id, "name": p.name} for p in profiles]
+
             runs = []
             for r in rows:
                 report = session.query(DailyReport).filter_by(run_id=r.id).first()
                 quick_wins = len(report.quick_wins or []) if report else 0
                 strategic = len(report.strategic_opportunities or []) if report else 0
+                # Get profile name
+                profile_name = "Default"
+                if r.profile_id:
+                    p = session.get(Profile, r.profile_id)
+                    if p:
+                        profile_name = p.name
                 runs.append({
                     "id": r.id,
                     "run_date": str(r.run_date),
@@ -153,6 +187,7 @@ def create_app() -> Flask:
                     "started_at": str(r.started_at) if r.started_at else None,
                     "completed_at": str(r.completed_at) if r.completed_at else None,
                     "error_message": r.error_message,
+                    "profile_name": profile_name,
                 })
         from src.config import settings
         current_time = settings.schedule_time
@@ -173,6 +208,8 @@ def create_app() -> Flask:
             scheduler_paused=_scheduler_paused,
             schedule_time=current_time,
             schedule_days=current_days,
+            profiles=profile_options,
+            default_profile_name=profile_options[0]["name"] if profile_options else "None",
         )
 
     @app.route("/trigger", methods=["POST"])
@@ -187,6 +224,10 @@ def create_app() -> Flask:
             flash("Contraseña incorrecta.", "error")
             return redirect(url_for("index"))
 
+        # Get optional profile_id from form
+        profile_id_str = request.form.get("profile_id", "")
+        profile_id = int(profile_id_str) if profile_id_str and profile_id_str.isdigit() else None
+
         with _trigger_lock:
             if _trigger_running:
                 flash("Ya hay un run en progreso.", "warning")
@@ -196,7 +237,7 @@ def create_app() -> Flask:
         def _run():
             global _trigger_running
             try:
-                run_workflow_once()
+                run_workflow_once(profile_id=profile_id)
             finally:
                 _trigger_running = False
 
@@ -486,6 +527,82 @@ def create_app() -> Flask:
                 "follow_up_date": str(status.follow_up_date) if status.follow_up_date else "",
                 "icp_feedback": status.icp_feedback or {},
             })
+
+    # ── Profile Management ───────────────────────────────────────────────────
+
+    @app.route("/profiles")
+    @_require_auth
+    def profile_list():
+        from src.database.session import get_session
+        from src.database.models import Profile
+
+        with get_session() as session:
+            profiles = session.query(Profile).order_by(Profile.name).all()
+            enriched = []
+            for p in profiles:
+                ind_count = len(p.target_industries.split(",")) if p.target_industries else 0
+                city_count = len(p.target_cities.split(",")) if p.target_cities else 0
+                emp_range = f"{p.min_employees or '?'}–{p.max_employees or '?'}"
+                enriched.append({
+                    "id": p.id,
+                    "name": p.name,
+                    "description": p.description,
+                    "active": p.active,
+                    "target_industries_count": ind_count,
+                    "target_cities_count": city_count,
+                    "employee_range": emp_range,
+                })
+
+        return render_template("profiles.html", profiles=enriched)
+
+    @app.route("/profiles/new", methods=["GET", "POST"])
+    @_require_auth
+    def profile_new():
+        from src.database.session import get_session
+        from src.database.models import Profile
+
+        if request.method == "POST":
+            data = _profile_form_data()
+            with get_session() as session:
+                existing = session.query(Profile).filter_by(name=data["name"]).first()
+                if existing:
+                    flash(f"A profile named '{data['name']}' already exists.", "error")
+                    return render_template("profile_form.html", profile=None, action="/profiles/new")
+                profile = Profile(**data)
+                session.add(profile)
+                session.flush()
+            flash(f"Profile '{data['name']}' created.", "success")
+            return redirect(url_for("profile_list"))
+
+        return render_template("profile_form.html", profile=None, action="/profiles/new")
+
+    @app.route("/profiles/<int:profile_id>/edit", methods=["GET", "POST"])
+    @_require_auth
+    def profile_edit(profile_id):
+        from src.database.session import get_session
+        from src.database.models import Profile
+
+        with get_session() as session:
+            profile = session.get(Profile, profile_id)
+            if not profile:
+                abort(404)
+
+            if request.method == "POST":
+                data = _profile_form_data()
+                # Check name uniqueness
+                dup = session.query(Profile).filter(
+                    Profile.name == data["name"], Profile.id != profile_id
+                ).first()
+                if dup:
+                    flash(f"A profile named '{data['name']}' already exists.", "error")
+                    return render_template("profile_form.html", profile=profile, action=f"/profiles/{profile_id}/edit")
+
+                for key, val in data.items():
+                    setattr(profile, key, val)
+                flash(f"Profile '{data['name']}' updated.", "success")
+                return redirect(url_for("profile_list"))
+
+            return render_template("profile_form.html", profile=profile, action=f"/profiles/{profile_id}/edit")
 
     @app.route("/company/<int:company_id>/feedback", methods=["POST"])
     @_require_auth

@@ -34,6 +34,10 @@ details.lead[open] .lead-chevron { transform:rotate(90deg); }
     <div>
       <h1 style="font-size:1.6rem;font-weight:700">Report — {{ run.run_date }}</h1>
       <div style="font-size:0.85rem;color:var(--muted);margin-top:0.2rem">Run #{{ run.id }}
+        {% set pn = report.get('profile_name') %}
+        {% if pn and pn != 'Default' %}
+          &nbsp;·&nbsp; <span style="font-weight:600">{{ pn }}</span>
+        {% endif %}
         {% if run.status == 'completed' %}
           &nbsp;<span class="badge badge-green">✓ completed</span>
         {% elif run.status == 'running' %}

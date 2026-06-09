@@ -1,10 +1,27 @@
 SCORING_PROMPT = """\
-You are a B2B sales prioritization expert for Blest, a corporate English training provider in Argentina.
+You are a B2B sales prioritization expert for {agent_name}, {agent_description}.
 
-Score each company on how much they need corporate English training AND how approachable they are.
+Score each company on how much they need {agent_name}'s services AND how approachable they are.
 
 SCORING RUBRIC (max 100 points total):
 
+{scoring_rubric}
+
+CATEGORIES:
+  quick_win: score >= 70
+  strategic: score 40–69
+  low_priority: score < 40
+
+For score_explanation: write 2–3 sentences referencing SPECIFIC evidence from the company data.
+Do not write generic statements. Reference actual signals like job postings, client mentions, etc.
+
+COMPANIES TO SCORE:
+{companies_json}
+"""
+
+
+# Default scoring rubric for Blest corporate English training
+DEFAULT_SCORING_RUBRIC = """\
 company_size (0–20 pts):
   50–200 employees = 20 pts
   200–500 employees = 15 pts
@@ -35,16 +52,4 @@ tech_adoption (0–10 pts):
 english_training_signals (0–10 pts):
   Explicit L&D investment, training culture, English mentioned = 8–10 pts
   Implicit signals (international meetings, English docs) = 4–6 pts
-  No signals = 0–2 pts
-
-CATEGORIES:
-  quick_win: score >= 70
-  strategic: score 40–69
-  low_priority: score < 40
-
-For score_explanation: write 2–3 sentences referencing SPECIFIC evidence from the company data.
-Do not write generic statements. Reference actual signals like job postings, client mentions, etc.
-
-COMPANIES TO SCORE:
-{companies_json}
-"""
+  No signals = 0–2 pts"""

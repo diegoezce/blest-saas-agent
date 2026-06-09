@@ -7,7 +7,38 @@ from apscheduler.triggers.cron import CronTrigger
 logger = logging.getLogger(__name__)
 
 
-def run_workflow_once() -> None:
+def load_profile(profile_id: int | None = None) -> tuple[int | None, dict | None]:
+    """Load a profile from the database by ID, or the first active profile."""
+    from src.database.session import get_session
+    from src.database.models import Profile as ProfileModel
+
+    with get_session() as session:
+        if profile_id:
+            profile = session.get(ProfileModel, profile_id)
+        else:
+            profile = session.query(ProfileModel).filter_by(active=True).first()
+
+        if not profile:
+            return None, None
+
+        return profile.id, {
+            "id": profile.id,
+            "name": profile.name,
+            "description": profile.description,
+            "agent_company_name": profile.agent_company_name,
+            "agent_description": profile.agent_description,
+            "target_industries": profile.target_industries,
+            "target_cities": profile.target_cities,
+            "min_employees": profile.min_employees,
+            "max_employees": profile.max_employees,
+            "search_focus_terms": profile.search_focus_terms,
+            "scoring_rubric": profile.scoring_rubric,
+            "outreach_tone": profile.outreach_tone,
+            "target_roles": profile.target_roles,
+        }
+
+
+def run_workflow_once(profile_id: int | None = None) -> dict | None:
     from src.config import settings
     from src.database.models import DiscoveryRun
     from src.database.session import get_session
@@ -17,21 +48,28 @@ def run_workflow_once() -> None:
 
     graph = build_workflow()
 
+    # Load profile
+    pid, profile = load_profile(profile_id)
+    profile_name = profile.get("name", "Default") if profile else "Default"
+
     with get_session() as session:
         run = DiscoveryRun(
             run_date=datetime.date.today(),
             started_at=datetime.datetime.utcnow(),
             status="running",
+            profile_id=pid,
         )
         session.add(run)
         session.flush()
         run_id = run.id
 
-    logger.info(f"Starting discovery run {run_id} for {datetime.date.today()}")
+    logger.info(f"Starting discovery run {run_id} for profile '{profile_name}' on {datetime.date.today()}")
 
     initial_state: AgentState = {
         "run_id": run_id,
         "run_date": datetime.date.today().isoformat(),
+        "profile_id": pid,
+        "profile": profile,
         "search_queries": [],
         "raw_search_results": [],
         "companies": [],

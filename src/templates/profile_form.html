@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit' if profile else 'New' }} Profile — Blest{% endblock %}
+
+{% block content %}
+<div style="margin-bottom:1.5rem">
+  <a href="/profiles" class="text-muted" style="font-size:0.85rem">← All Profiles</a>
+  <h1 style="font-size:1.5rem;font-weight:700;margin-top:0.3rem">
+    {{ 'Edit' if profile else 'New' }} Profile
+  </h1>
+  {% if profile %}
+    <p style="font-size:0.9rem;color:var(--muted);margin-top:0.15rem">{{ profile.name }}</p>
+  {% endif %}
+</div>
+
+<form method="POST" action="{{ action }}" style="display:flex;flex-direction:column;gap:1.25rem">
+  <!-- Basic info -->
+  <div class="card">
+    <div class="section-title">Basic Info</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+      <div>
+        <label style="font-size:0.85rem;color:var(--muted);display:block;margin-bottom:0.35rem;font-weight:600">Profile Name *</label>
+        <input type="text" name="name" required value="{{ profile.name if profile else '' }}"
+          placeholder="e.g. Blest App, Blest Learning"
+          style="width:100%;padding:0.6rem 0.75rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.95rem">
+      </div>
+      <div>
+        <label style="font-size:0.85rem;color:var(--muted);display:block;margin-bottom:0.35rem;font-weight:600">Active</label>
+        <select name="active"
+          style="width:100%;padding:0.6rem 0.75rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.95rem">
+          <option value="1" {{ 'selected' if profile and profile.active else '' }}>Yes</option>
+          <option value="0" {{ 'selected' if profile and not profile.active else '' }}>No</option>
+        </select>
+      </div>
+    </div>
+    <div style="margin-top:1rem">
+      <label style="font-size:0.85rem;color:var(--muted);display:block;margin-bottom:0.35rem;font-weight:600">Description</label>
+      <textarea name="description" rows="2"
+        placeholder="What is this profile used for?"
+        style="width:100%;padding:0.6rem 0.75rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.9rem;resize:vertical;font-family:inherit">{{ profile.description if profile else '' }}</textarea>
+    </div>
+  </div>
+
+  <!-- Who is selling -->
+  <div class="card">
+    <div class="section-title">Who's Selling</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+      <div>
+        <label style="font-size:0.85rem;color:var(--muted);display:block;margin-bottom:0.35rem;font-weight:600">Agent Company Name *</label>
+        <input type="text" name="agent_company_name" required value="{{ profile.agent_company_name if profile else '' }}"
+          placeholder="e.g. Blest"
+          style="width:100%;padding:0.6rem 0.75rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.95rem">
+      </div>
+      <div>
+        <label style="font-size:0.85rem;color:var(--muted);display:block;margin-bottom:0.35rem;font-weight:600">Agent Description *</label>
+        <input type="text" name="agent_description" required value="{{ profile.agent_description if profile else '' }}"
+          placeholder="e.g. a corporate English training provider in Argentina"
+          style="width:100%;padding:0.6rem 0.75rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.95rem">
+      </div>
+    </div>
+    <div style="font-size:0.8rem;color:var(--muted);margin-top:0.4rem">
+      This is how the AI will describe the agent in prompts. E.g. "a platform for managing English academies"
+    </div>
+  </div>
+
+  <!-- Target market -->
+  <div class="card">
+    <div class="section-title">Target Market</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+      <div>
+        <label style="font-size:0.85rem;color:var(--muted);display:block;margin-bottom:0.35rem;font-weight:600">Target Industries</label>
+        <input type="text" name="target_industries" value="{{ profile.target_industries if profile else '' }}"
+          placeholder="e.g. technology,consulting,fintech"
+          style="width:100%;padding:0.6rem 0.75rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.95rem">
+        <div style="font-size:0.75rem;color:var(--muted);margin-top:0.25rem">Comma-separated. Leave empty to use global config.</div>
+      </div>
+      <div>
+        <label style="font-size:0.85rem;color:var(--muted);display:block;margin-bottom:0.35rem;font-weight:600">Target Cities</label>
+        <input type="text" name="target_cities" value="{{ profile.target_cities if profile else '' }}"
+          placeholder="e.g. Buenos Aires,Córdoba,Rosario"
+          style="width:100%;padding:0.6rem 0.75rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.95rem">
+        <div style="font-size:0.75rem;color:var(--muted);margin-top:0.25rem">Comma-separated. Leave empty to use global config.</div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-top:1rem">
+      <div>
+        <label style="font-size:0.85rem;color:var(--muted);display:block;margin-bottom:0.35rem;font-weight:600">Min Employees</label>
+        <input type="number" name="min_employees" value="{{ profile.min_employees if profile else '' }}"
+          placeholder="e.g. 20"
+          style="width:100%;padding:0.6rem 0.75rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.95rem">
+      </div>
+      <div>
+        <label style="font-size:0.85rem;color:var(--muted);display:block;margin-bottom:0.35rem;font-weight:600">Max Employees</label>
+        <input type="number" name="max_employees" value="{{ profile.max_employees if profile else '' }}"
+          placeholder="e.g. 500"
+          style="width:100%;padding:0.6rem 0.75rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.95rem">
+      </div>
+    </div>
+    <div style="margin-top:1rem">
+      <label style="font-size:0.85rem;color:var(--muted);display:block;margin-bottom:0.35rem;font-weight:600">Search Focus Terms</label>
+      <input type="text" name="search_focus_terms" value="{{ profile.search_focus_terms if profile else '' }}"
+        placeholder="e.g. improve their team's business English: client calls, presentations, async collaboration"
+        style="width:100%;padding:0.6rem 0.75rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.95rem">
+      <div style="font-size:0.75rem;color:var(--muted);margin-top:0.25rem">
+        Extra context for the AI about what signals to look for and what your product does.
+      </div>
+    </div>
+  </div>
+
+  <!-- Scoring & Outreach -->
+  <div class="card">
+    <div class="section-title">Scoring & Outreach</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+      <div>
+        <label style="font-size:0.85rem;color:var(--muted);display:block;margin-bottom:0.35rem;font-weight:600">Outreach Tone</label>
+        <select name="outreach_tone"
+          style="width:100%;padding:0.6rem 0.75rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.95rem">
+          <option value="warm" {{ 'selected' if (profile and profile.outreach_tone == 'warm') or not profile else '' }}>Warm</option>
+          <option value="direct" {{ 'selected' if profile and profile.outreach_tone == 'direct' else '' }}>Direct</option>
+          <option value="professional" {{ 'selected' if profile and profile.outreach_tone == 'professional' else '' }}>Professional</option>
+          <option value="referral" {{ 'selected' if profile and profile.outreach_tone == 'referral' else '' }}>Referral-style</option>
+        </select>
+      </div>
+      <div>
+        <label style="font-size:0.85rem;color:var(--muted);display:block;margin-bottom:0.35rem;font-weight:600">Target Roles</label>
+        <input type="text" name="target_roles" value="{{ profile.target_roles if profile else '' }}"
+          placeholder="e.g. L&D Manager, HR Manager, CEO"
+          style="width:100%;padding:0.6rem 0.75rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.95rem">
+        <div style="font-size:0.75rem;color:var(--muted);margin-top:0.25rem">Comma-separated, ordered by priority.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Actions -->
+  <div style="display:flex;gap:0.75rem">
+    <button type="submit"
+      style="flex:1;background:#38bdf8;color:#0f172a;font-weight:700;border:none;padding:0.7rem;border-radius:8px;cursor:pointer;font-size:1rem">
+      {{ 'Save Changes' if profile else 'Create Profile' }}
+    </button>
+    <a href="/profiles"
+      style="flex:1;display:flex;align-items:center;justify-content:center;background:var(--surface-hover);color:var(--text);border:1px solid var(--border);padding:0.7rem;border-radius:8px;text-decoration:none;font-size:1rem">
+      Cancel
+    </a>
+  </div>
+</form>
+{% endblock %}

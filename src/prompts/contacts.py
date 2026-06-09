@@ -1,15 +1,11 @@
 CONTACTS_PROMPT = """\
 You are a B2B sales researcher identifying decision makers at Argentine companies for a \
-corporate English training proposal.
+{agent_description} proposal on behalf of {agent_name}.
 
 COMPANY: {company_name}
 
 PRIORITY ORDER OF TARGET ROLES:
-1. Learning & Development (L&D) Manager / Talent Development / Capacitación
-2. HR Manager / Gerente de Recursos Humanos / People Manager
-3. Chief People Officer / VP People / Head of Talent
-4. Operations Manager (for companies < 50 employees)
-5. Founder / CEO / Managing Director (for companies with < 50 employees)
+{target_roles}
 
 COMPANY CONTEXT AND SEARCH RESULTS:
 {company_context}
@@ -27,3 +23,12 @@ Return 1–2 contacts maximum. If no specific individual is found, include one e
 name=null and the most likely role at this type/size of company, with notes explaining \
 what was searched.
 """
+
+
+# Default target roles for Blest corporate English training
+DEFAULT_TARGET_ROLES = """\
+1. Learning & Development (L&D) Manager / Talent Development / Capacitación
+2. HR Manager / Gerente de Recursos Humanos / People Manager
+3. Chief People Officer / VP People / Head of Talent
+4. Operations Manager (for companies < 50 employees)
+5. Founder / CEO / Managing Director (for companies with < 50 employees)"""

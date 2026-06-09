@@ -1,9 +1,7 @@
 OUTREACH_PROMPT = """\
-You are writing a first-touch outreach message for the founder of Blest, a corporate English \
-training company in Argentina.
+You are writing a first-touch outreach message for the founder of {agent_name}, {agent_description}.
 
-Blest helps Argentine company teams communicate more effectively in business English: \
-emails, meetings, client calls, and presentations.
+{agent_name} helps companies {outreach_service_description}.
 
 COMPANY AND INSIGHT DATA:
 {company_and_insight_json}
@@ -25,7 +23,7 @@ BOTH MESSAGES MUST:
 - Feel human, not templated
 - End with ONE low-commitment soft ask (e.g., "Would a 15-min call make sense?")
 - Be written in English (this is intentional — it's a natural conversation starter)
-- Be warm and helpful in tone
+- Be {outreach_tone} and helpful in tone
 
 DO NOT USE: "I hope this finds you well", "synergies", "leverage", "game-changer", \
 "reaching out", "I wanted to", "touch base", "circle back", "quick question"

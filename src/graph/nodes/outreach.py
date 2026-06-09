@@ -6,6 +6,7 @@ import instructor
 from src.graph.state import AgentState
 from src.prompts.outreach import OUTREACH_PROMPT
 from src.schemas.outputs import CompanyOutreach
+from src.config import get_settings, get_profile_overrides
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +16,6 @@ _client = None
 def _llm():
     global _client
     if _client is None:
-        from src.config import get_settings
         _client = instructor.from_anthropic(anthropic.Anthropic(api_key=get_settings().anthropic_api_key))
     return _client
 
@@ -26,8 +26,9 @@ def run_outreach_node(state: AgentState) -> AgentState:
         logger.warning("No scored companies — skipping outreach")
         return {**state, "outreach_drafts": []}
 
-    from src.config import get_settings
     cfg = get_settings()
+    po = get_profile_overrides(state.get("profile"))
+
     top = scored[: cfg.max_companies_for_outreach]
     companies_map = {c["name"]: c for c in state.get("companies", [])}
     insights_map = {i["company_name"]: i for i in state.get("insights", [])}
@@ -35,6 +36,10 @@ def run_outreach_node(state: AgentState) -> AgentState:
 
     logger.info(f"Step 5: Generating outreach drafts for top {len(top)} companies...")
     all_drafts: list[dict] = []
+
+    outreach_service_desc = "improve their business communication skills"
+    if po.get("search_focus_terms"):
+        outreach_service_desc = po["search_focus_terms"]
 
     for scored_company in top:
         company_name = scored_company["company_name"]
@@ -60,6 +65,10 @@ def run_outreach_node(state: AgentState) -> AgentState:
                 messages=[{
                     "role": "user",
                     "content": OUTREACH_PROMPT.format(
+                        agent_name=po["agent_company_name"],
+                        agent_description=po["agent_description"],
+                        outreach_service_description=outreach_service_desc,
+                        outreach_tone=po.get("outreach_tone", "warm"),
                         company_and_insight_json=json.dumps(payload, ensure_ascii=False, indent=2),
                     ),
                 }],
