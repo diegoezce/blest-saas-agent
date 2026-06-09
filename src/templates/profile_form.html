@@ -68,17 +68,17 @@
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
       <div>
         <label style="font-size:0.85rem;color:var(--muted);display:block;margin-bottom:0.35rem;font-weight:600">Target Industries</label>
-        <input type="text" name="target_industries" value="{{ profile.target_industries if profile else '' }}"
-          placeholder="e.g. technology,consulting,fintech"
-          style="width:100%;padding:0.6rem 0.75rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.95rem">
-        <div style="font-size:0.75rem;color:var(--muted);margin-top:0.25rem">Comma-separated. Leave empty to use global config.</div>
+        <textarea name="target_industries" rows="4"
+          placeholder="technology, consulting, fintech, legaltech, accounting, professional_services, oil_gas, energy"
+          style="width:100%;padding:0.6rem 0.75rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.9rem;resize:vertical;font-family:inherit">{{ profile.target_industries if profile else '' }}</textarea>
+        <div style="font-size:0.75rem;color:var(--muted);margin-top:0.25rem">One per line or comma-separated. Leave empty to use global config.</div>
       </div>
       <div>
         <label style="font-size:0.85rem;color:var(--muted);display:block;margin-bottom:0.35rem;font-weight:600">Target Cities</label>
-        <input type="text" name="target_cities" value="{{ profile.target_cities if profile else '' }}"
-          placeholder="e.g. Buenos Aires,Córdoba,Rosario"
-          style="width:100%;padding:0.6rem 0.75rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.95rem">
-        <div style="font-size:0.75rem;color:var(--muted);margin-top:0.25rem">Comma-separated. Leave empty to use global config.</div>
+        <textarea name="target_cities" rows="4"
+          placeholder="Buenos Aires, Córdoba, Rosario, Mendoza, Neuquén, La Plata, Mar del Plata, Salta"
+          style="width:100%;padding:0.6rem 0.75rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.9rem;resize:vertical;font-family:inherit">{{ profile.target_cities if profile else '' }}</textarea>
+        <div style="font-size:0.75rem;color:var(--muted);margin-top:0.25rem">One per line or comma-separated. Leave empty to use global config.</div>
       </div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-top:1rem">
@@ -97,9 +97,9 @@
     </div>
     <div style="margin-top:1rem">
       <label style="font-size:0.85rem;color:var(--muted);display:block;margin-bottom:0.35rem;font-weight:600">Search Focus Terms</label>
-      <input type="text" name="search_focus_terms" value="{{ profile.search_focus_terms if profile else '' }}"
-        placeholder="e.g. improve their team's business English: client calls, presentations, async collaboration"
-        style="width:100%;padding:0.6rem 0.75rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.95rem">
+      <textarea name="search_focus_terms" rows="4"
+        placeholder="help English academies and language institutes streamline their operations: manage student enrollment, scheduling, billing, teacher coordination, progress tracking, and multilevel group classes"
+        style="width:100%;padding:0.6rem 0.75rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.9rem;resize:vertical;font-family:inherit">{{ profile.search_focus_terms if profile else '' }}</textarea>
       <div style="font-size:0.75rem;color:var(--muted);margin-top:0.25rem">
         Extra context for the AI about what signals to look for and what your product does.
       </div>
@@ -109,7 +109,7 @@
   <!-- Scoring & Outreach -->
   <div class="card">
     <div class="section-title">Scoring & Outreach</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+    <div style="display:grid;grid-template-columns:1fr;gap:1rem">
       <div>
         <label style="font-size:0.85rem;color:var(--muted);display:block;margin-bottom:0.35rem;font-weight:600">Outreach Tone</label>
         <select name="outreach_tone"
@@ -122,10 +122,14 @@
       </div>
       <div>
         <label style="font-size:0.85rem;color:var(--muted);display:block;margin-bottom:0.35rem;font-weight:600">Target Roles</label>
-        <input type="text" name="target_roles" value="{{ profile.target_roles if profile else '' }}"
-          placeholder="e.g. L&D Manager, HR Manager, CEO"
-          style="width:100%;padding:0.6rem 0.75rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.95rem">
-        <div style="font-size:0.75rem;color:var(--muted);margin-top:0.25rem">Comma-separated, ordered by priority.</div>
+        <textarea name="target_roles" rows="5"
+          placeholder="Director / Owner / Founder of English Academy or Language Institute
+Academic Director / Coordinador Académico de Instituto de Inglés
+Administrative Manager / Administrador de Instituto de Idiomas
+Head of Studies / Jefe de Estudios de Academia de Inglés
+Operations Manager / Gerente Operativo de Instituto de Idiomas"
+          style="width:100%;padding:0.6rem 0.75rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.9rem;resize:vertical;font-family:inherit">{{ profile.target_roles if profile else '' }}</textarea>
+        <div style="font-size:0.75rem;color:var(--muted);margin-top:0.25rem">One per line, ordered by priority. Leave empty to use global fallback.</div>
       </div>
     </div>
   </div>
