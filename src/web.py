@@ -161,8 +161,12 @@ def create_app() -> Flask:
         from src.database.models import DiscoveryRun, DailyReport, Profile
 
         with get_session() as session:
-            rows = session.query(DiscoveryRun).order_by(DiscoveryRun.run_date.desc()).all()
-            # Load profiles for the profile selector
+            profile_filter = request.args.get("profile_id", "")
+            query = session.query(DiscoveryRun)
+            if profile_filter and profile_filter.isdigit():
+                query = query.filter_by(profile_id=int(profile_filter))
+            rows = query.order_by(DiscoveryRun.run_date.desc()).all()
+
             profiles = session.query(Profile).filter_by(active=True).all()
             profile_options = [{"id": p.id, "name": p.name} for p in profiles]
 
@@ -171,7 +175,6 @@ def create_app() -> Flask:
                 report = session.query(DailyReport).filter_by(run_id=r.id).first()
                 quick_wins = len(report.quick_wins or []) if report else 0
                 strategic = len(report.strategic_opportunities or []) if report else 0
-                # Get profile name
                 profile_name = "Default"
                 if r.profile_id:
                     p = session.get(Profile, r.profile_id)
@@ -188,6 +191,7 @@ def create_app() -> Flask:
                     "completed_at": str(r.completed_at) if r.completed_at else None,
                     "error_message": r.error_message,
                     "profile_name": profile_name,
+                    "profile_id": r.profile_id,
                 })
         from src.config import settings
         current_time = settings.schedule_time
@@ -210,6 +214,7 @@ def create_app() -> Flask:
             schedule_days=current_days,
             profiles=profile_options,
             default_profile_name=profile_options[0]["name"] if profile_options else "None",
+            selected_profile_id=profile_filter,
         )
 
     @app.route("/trigger", methods=["POST"])
