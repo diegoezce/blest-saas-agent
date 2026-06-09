@@ -103,4 +103,26 @@ def init_db() -> None:
     logger.info("Initializing database tables...")
     Base.metadata.create_all(bind=get_engine())
     logger.info("Database tables ready.")
+
+    # Run migrations for columns added after initial creation
+    _run_migrations()
+
     _seed_default_profiles()
+
+
+def _run_migrations() -> None:
+    """Apply any ALTER TABLE migrations needed for existing databases."""
+    from sqlalchemy import inspect, text
+    try:
+        engine = get_engine()
+        inspector = inspect(engine)
+        discovery_cols = [c["name"] for c in inspector.get_columns("discovery_runs")]
+        with engine.connect() as conn:
+            if "profile_id" not in discovery_cols:
+                conn.execute(text(
+                    "ALTER TABLE discovery_runs ADD COLUMN profile_id INTEGER REFERENCES profiles(id)"
+                ))
+                conn.commit()
+                logger.info("Migration: added profile_id column to discovery_runs")
+    except Exception as e:
+        logger.info(f"Migration note (non-fatal): {e}")
