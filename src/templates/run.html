@@ -372,6 +372,7 @@ details.lead[open] .lead-chevron { transform:rotate(90deg); }
           {% if elog %}
           <button onclick="openEnrichDetail(this);event.stopPropagation()"
             data-email="{{ first.get('contact_email','') }}"
+            data-contact-id="{{ first.get('contact_id','') }}"
             data-elog="{{ elog|tojson|e }}"
             style="font-size:0.7rem;padding:0.05rem 0.35rem;background:rgba(251,191,36,0.15);border:1px solid rgba(251,191,36,0.4);border-radius:4px;color:#fbbf24;cursor:pointer">ver</button>
           {% endif %}
@@ -380,6 +381,7 @@ details.lead[open] .lead-chevron { transform:rotate(90deg); }
           {% if elog %}
           <button onclick="openEnrichDetail(this);event.stopPropagation()"
             data-email=""
+            data-contact-id="{{ first.get('contact_id','') }}"
             data-elog="{{ elog|tojson|e }}"
             style="font-size:0.7rem;padding:0.05rem 0.35rem;background:var(--surface-hover);border:1px solid var(--border);border-radius:4px;color:var(--muted);cursor:pointer">ver</button>
           {% endif %}
@@ -576,10 +578,19 @@ details.lead[open] .lead-chevron { transform:rotate(90deg); }
       <button onclick="closeEnrichDetail()" style="background:none;border:none;color:var(--muted);font-size:1.3rem;cursor:pointer;padding:0.25rem">&times;</button>
     </div>
     <div id="enrich-detail-body" style="font-size:0.88rem;line-height:1.6;display:flex;flex-direction:column;gap:1rem"></div>
+    <div id="enrich-detail-footer" style="margin-top:1.25rem;border-top:1px solid var(--border);padding-top:1rem;display:none">
+      <button id="enrich-zoho-btn" onclick="createDraftFromModal(this)"
+        style="width:100%;background:#0ea5e9;color:#fff;border:none;padding:0.6rem;border-radius:6px;cursor:pointer;font-size:0.9rem;font-weight:600">
+        📧 Crear draft en Zoho
+      </button>
+      <div id="enrich-zoho-result" style="font-size:0.82rem;color:var(--muted);margin-top:0.5rem;text-align:center"></div>
+    </div>
   </div>
 </div>
 
 <script>
+const RUN_ID = {{ run.id }};
+const ZOHO_CONFIGURED = {{ 'true' if zoho_configured else 'false' }};
 function copyText(btn) {
   const text = btn.getAttribute('data-body');
   const fallback = () => {
@@ -818,13 +829,63 @@ function openEnrichDetail(btn) {
   }
 
   document.getElementById('enrich-detail-body').innerHTML = rows.join('<hr style="border-color:var(--border);border-style:solid;border-width:1px 0 0 0">');
+
+  // Zoho footer — show only when configured, email present, and not already verified
+  const contactId = btn.dataset.contactId || '';
+  const footer = document.getElementById('enrich-detail-footer');
+  const zohoBtn = document.getElementById('enrich-zoho-btn');
+  const zohoResult = document.getElementById('enrich-zoho-result');
+  if (ZOHO_CONFIGURED && email && contactId) {
+    footer.style.display = 'block';
+    zohoBtn.textContent = '📧 Crear draft en Zoho';
+    zohoBtn.disabled = false;
+    zohoBtn.style.background = '#0ea5e9';
+    zohoResult.textContent = '';
+  } else {
+    footer.style.display = 'none';
+  }
+
   const modal = document.getElementById('enrich-detail-modal');
+  modal.dataset.contactId = contactId;
   modal.style.display = 'flex';
   modal.onclick = e => { if (e.target === modal) closeEnrichDetail(); };
 }
 
 function closeEnrichDetail() {
   document.getElementById('enrich-detail-modal').style.display = 'none';
+}
+
+function createDraftFromModal(btn) {
+  const contactId = document.getElementById('enrich-detail-modal').dataset.contactId;
+  const resultEl = document.getElementById('enrich-zoho-result');
+  btn.disabled = true;
+  btn.textContent = '⟳ Creando…';
+  resultEl.textContent = '';
+  fetch('/contact/' + contactId + '/zoho-draft', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({run_id: RUN_ID}),
+  })
+    .then(r => r.json())
+    .then(data => {
+      if (data.error) {
+        resultEl.textContent = '❌ ' + data.error;
+        resultEl.style.color = '#f87171';
+        btn.textContent = '📧 Crear draft en Zoho';
+        btn.disabled = false;
+      } else {
+        btn.textContent = '✓ Draft creado';
+        btn.style.background = '#16a34a';
+        resultEl.textContent = 'Revisá tu bandeja de borradores en Zoho Mail';
+        resultEl.style.color = 'var(--muted)';
+      }
+    })
+    .catch(() => {
+      resultEl.textContent = '❌ Error de red';
+      resultEl.style.color = '#f87171';
+      btn.textContent = '📧 Crear draft en Zoho';
+      btn.disabled = false;
+    });
 }
 
 function enrichAll(btn) {

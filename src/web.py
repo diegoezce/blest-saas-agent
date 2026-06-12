@@ -727,6 +727,55 @@ def create_app() -> Flask:
 
         return jsonify({"created": created, "skipped": skipped, "errors": errors})
 
+    @app.route("/contact/<int:contact_id>/zoho-draft", methods=["POST"])
+    @_require_auth
+    def contact_zoho_draft(contact_id):
+        from src.database.session import get_session
+        from src.database.models import Contact, Company, DailyReport
+        from src.dashboard import _enrich_drafts_from_db
+        from src.integrations.zoho_mail import create_draft, is_configured
+
+        if not is_configured():
+            return jsonify({"error": "Zoho Mail no configurado"}), 503
+
+        data = request.get_json(silent=True) or {}
+        run_id = data.get("run_id")
+        if not run_id:
+            return jsonify({"error": "run_id requerido"}), 400
+
+        with get_session() as session:
+            contact = session.get(Contact, contact_id)
+            if not contact or not contact.email:
+                return jsonify({"error": "Contacto sin email"}), 404
+
+            company = session.get(Company, contact.company_id)
+            if not company:
+                return jsonify({"error": "Empresa no encontrada"}), 404
+
+            report = session.query(DailyReport).filter_by(run_id=run_id).first()
+            if not report or not report.report_json:
+                return jsonify({"error": "Sin datos de reporte para este run"}), 404
+
+            report_data = _enrich_drafts_from_db(session, dict(report.report_json))
+
+        # Find the email-channel draft for this company
+        all_drafts = report_data.get("outreach_drafts", [])
+        company_drafts = [d for d in all_drafts if d.get("company_name") == company.name]
+        draft = next((d for d in company_drafts if d.get("channel") == "email"), None)
+        if not draft and company_drafts:
+            draft = company_drafts[0]
+        if not draft:
+            return jsonify({"error": f"Sin draft para {company.name}"}), 404
+
+        subject = draft.get("subject_line") or f"Outreach — {company.name}"
+        body = draft.get("body", "")
+        try:
+            create_draft(to_address=contact.email, subject=subject, content=body)
+            return jsonify({"ok": True})
+        except Exception as e:
+            logger.warning(f"Zoho single draft failed for contact {contact_id}: {e}")
+            return jsonify({"error": str(e)}), 500
+
     # ── Contact Enrichment ───────────────────────────────────────────────────
 
     # Per-run: track in-progress bulk enrichment {run_id: {"done": int, "total": int}}
