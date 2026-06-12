@@ -165,7 +165,9 @@ def _enrich_drafts_from_db(session, report_json: dict) -> dict:
                 **d,
                 "contact_id": contact.id,
                 "email_status": contact.email_status,
+                "email_source": contact.email_source,
                 "phone_whatsapp": contact.phone_whatsapp,
+                "enrichment_log": contact.enrichment_log,
             }
         enriched_drafts.append(d)
     return {**report_json, "outreach_drafts": enriched_drafts}

@@ -359,14 +359,16 @@ details.lead[open] .lead-chevron { transform:rotate(90deg); }
           </a>
         {% endif %}
         {% set estatus = first.get('email_status') %}
+        {% set esource = first.get('email_source') %}
+        {% set elog = first.get('enrichment_log') %}
         {% if estatus == 'verified' %}
-          <span title="Email verificado" style="font-size:0.82rem">✅</span>
+          <span title="✅ Email verificado{% if esource %} vía {{ esource }}{% endif %}{% if elog and elog.get('layer2') and elog['layer2'].get('inferred_pattern') %} (patrón: {{ elog['layer2']['inferred_pattern'] }}){% endif %}" style="font-size:0.82rem;cursor:help">✅</span>
         {% elif estatus == 'probable' %}
-          <span title="Email probable (no verificado)" style="font-size:0.82rem">🟡</span>
+          <span title="🟡 Email probable{% if esource %} vía {{ esource }}{% endif %} — no verificado por SMTP{% if elog and elog.get('layer2') and elog['layer2'].get('candidates') %} | candidatos: {{ elog['layer2']['candidates']|join(', ') }}{% endif %}" style="font-size:0.82rem;cursor:help">🟡</span>
         {% elif estatus == 'not_found' %}
-          <span title="No se encontró email" style="font-size:0.82rem;color:var(--muted)">🔴</span>
+          <span title="🔴 No encontrado{% if elog and elog.get('layer1') %} | Capa 1: {{ elog['layer1'].get('pages_checked', 0) }} págs, {{ elog['layer1'].get('emails_found', [])|length }} emails{% endif %}{% if elog and elog.get('layer2') and elog['layer2'].get('candidates') %} | Capa 2: {{ elog['layer2']['candidates']|length }} candidatos{% endif %}{% if elog and elog.get('layer3') %} | Hunter: {{ elog['layer3'].get('hunter_email', 'sin resultado') }}{% endif %}" style="font-size:0.82rem;color:var(--muted);cursor:help">🔴</span>
         {% elif first.get('contact_linkedin_url') %}
-          <span title="Solo LinkedIn" style="font-size:0.82rem">🔵</span>
+          <span title="🔵 Solo LinkedIn — click Enrich para buscar email" style="font-size:0.82rem;cursor:help">🔵</span>
         {% endif %}
         {% if first.get('contact_id') and estatus not in ('verified',) %}
           <button
@@ -665,10 +667,20 @@ function enrichContact(btn) {
         'catch_all': '🟡',
         'not_found': '🔴',
       }[status] || '🔵';
+      // Build tooltip from enrichment_log
+      const elog = data.enrichment_log || {};
+      const l1 = elog.layer1 || {};
+      const l2 = elog.layer2 || {};
+      const l3 = elog.layer3 || {};
+      let tooltip = badge + ' ' + (status || '?');
+      if (data.email_source) tooltip += ' vía ' + data.email_source;
+      if (l1.pages_checked != null) tooltip += ' | L1: ' + l1.pages_checked + ' págs, ' + (l1.emails_found||[]).length + ' emails';
+      if (l2.candidates && l2.candidates.length) tooltip += ' | L2: ' + l2.candidates.join(', ');
+      if (l3.hunter_email) tooltip += ' | Hunter: ' + l3.hunter_email + ' (score ' + l3.hunter_score + ')';
       // Insert badge before the button and remove button
       const span = document.createElement('span');
-      span.title = status;
-      span.style.fontSize = '0.82rem';
+      span.title = tooltip;
+      span.style.cssText = 'font-size:0.82rem;cursor:help';
       span.textContent = badge;
       btn.parentNode.insertBefore(span, btn);
       if (status === 'verified' || status === 'not_found') {

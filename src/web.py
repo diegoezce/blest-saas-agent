@@ -744,6 +744,7 @@ def create_app() -> Flask:
             "email_status": result.email_status,
             "email_source": result.email_source,
             "phone_whatsapp": result.phone_whatsapp,
+            "enrichment_log": result.log,
         })
 
     @app.route("/run/<int:run_id>/enrich-all", methods=["POST"])

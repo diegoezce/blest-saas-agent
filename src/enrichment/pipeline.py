@@ -59,8 +59,11 @@ def enrich_contact(contact_id: int) -> EnrichmentResult:
         result.log["name"] = contact_name
         result.log["domain"] = domain
 
+        label = f"[Enrich #{contact_id}] {contact_name or '?'} @ {domain}"
+
         # ── Layer 1: site scrape ───────────────────────────────────────────
         layer1: dict = {}
+        logger.info(f"{label} — Layer 1: scraping site")
         try:
             scrape = scrape_domain(domain)
             layer1["pages_checked"] = scrape.pages_checked
@@ -70,9 +73,16 @@ def enrich_contact(contact_id: int) -> EnrichmentResult:
             if scrape.error:
                 layer1["error"] = scrape.error
 
+            robots_note = " (robots.txt blocked)" if scrape.blocked_by_robots else ""
+            logger.info(
+                f"{label} — Layer 1 done: {scrape.pages_checked} pages, "
+                f"{len(scrape.emails)} emails found{robots_note}"
+            )
+
             # Phone: store first found
             if scrape.phones:
                 result.phone_whatsapp = scrape.phones[0]
+                logger.info(f"{label} — phone found: {scrape.phones[0]}")
 
             # If a person's email at this domain is found (not generic),
             # record as site_scrape hit
@@ -97,6 +107,7 @@ def enrich_contact(contact_id: int) -> EnrichmentResult:
                     result.email_status = "verified"
                     result.email_source = "site_scrape"
                     layer1["matched"] = matched
+                    logger.info(f"{label} — ✅ site scrape match: {matched}")
         except Exception as e:
             layer1["exception"] = str(e)
             logger.warning(f"Layer 1 failed for contact {contact_id}: {e}")
@@ -110,15 +121,19 @@ def enrich_contact(contact_id: int) -> EnrichmentResult:
         # ── Layer 2: pattern generation + SMTP verification ────────────────
         layer2: dict = {}
         if first and last:
+            logger.info(f"{label} — Layer 2: SMTP pattern verification")
             try:
                 scrape_emails = layer1.get("emails_found", [])
                 domain_emails = [e for e in scrape_emails if e.endswith(f"@{domain}")]
                 inferred = infer_pattern_from_emails(domain_emails, domain)
                 layer2["inferred_pattern"] = inferred
+                if inferred:
+                    logger.info(f"{label} — inferred pattern: {inferred}")
 
                 candidates = generate_candidates(first, last, domain)
                 candidates = prioritize_candidates(candidates, inferred, first, last, domain)
                 layer2["candidates"] = candidates
+                logger.info(f"{label} — checking {len(candidates)} candidates: {', '.join(candidates)}")
 
                 verifier = MillionVerifierProvider()
                 for candidate in candidates:
@@ -129,10 +144,12 @@ def enrich_contact(contact_id: int) -> EnrichmentResult:
                         "status": vr.status,
                         "confidence": vr.confidence,
                     })
+                    logger.info(f"{label} — {candidate} → {vr.status}")
                     if vr.status == "valid":
                         result.email = candidate
                         result.email_status = "verified"
                         result.email_source = "pattern_verified"
+                        logger.info(f"{label} — ✅ SMTP verified: {candidate}")
                         break
                     if vr.status == "catch_all":
                         # Store as probable but keep searching for valid
@@ -144,6 +161,8 @@ def enrich_contact(contact_id: int) -> EnrichmentResult:
             except Exception as e:
                 layer2["exception"] = str(e)
                 logger.warning(f"Layer 2 failed for contact {contact_id}: {e}")
+        else:
+            logger.info(f"{label} — Layer 2 skipped (no first+last name)")
 
         result.log["layer2"] = layer2
 
@@ -154,6 +173,7 @@ def enrich_contact(contact_id: int) -> EnrichmentResult:
         # ── Layer 3: Hunter.io fallback ────────────────────────────────────
         layer3: dict = {}
         if first and last:
+            logger.info(f"{label} — Layer 3: Hunter.io lookup")
             try:
                 hunter = HunterProvider()
                 found = hunter.find_email(domain, first, last)
@@ -161,10 +181,12 @@ def enrich_contact(contact_id: int) -> EnrichmentResult:
                     layer3["hunter_email"] = found["email"]
                     layer3["hunter_score"] = found["score"]
                     score = found["score"]
+                    logger.info(f"{label} — Hunter: {found['email']} (score {score})")
                     if score >= 90:
                         result.email = found["email"]
                         result.email_status = "verified"
                         result.email_source = "hunter"
+                        logger.info(f"{label} — ✅ Hunter verified: {found['email']}")
                     elif score >= 50:
                         if result.email_status != "verified":
                             result.email = found["email"]
@@ -172,15 +194,19 @@ def enrich_contact(contact_id: int) -> EnrichmentResult:
                             result.email_source = "hunter"
                 else:
                     layer3["hunter_email"] = None
+                    logger.info(f"{label} — Hunter: no result")
             except Exception as e:
                 layer3["exception"] = str(e)
                 logger.warning(f"Layer 3 failed for contact {contact_id}: {e}")
+        else:
+            logger.info(f"{label} — Layer 3 skipped (no first+last name)")
 
         result.log["layer3"] = layer3
 
         # If nothing found at all
         if not result.email_status:
             result.email_status = "not_found"
+            logger.info(f"{label} — 🔴 not found after all 3 layers")
 
         _persist(session, contact, result)
         return result
