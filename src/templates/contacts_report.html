@@ -1,0 +1,322 @@
+{% extends "base.html" %}
+{% block title %}Contactados — Blest Lead Discovery{% endblock %}
+{% block content %}
+
+<style>
+  .cr-stats { display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 2rem; }
+  .cr-stat {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.75rem 1.25rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 120px;
+  }
+  .cr-stat-num { font-size: 1.75rem; font-weight: 800; line-height: 1; }
+  .cr-stat-label { font-size: 0.75rem; color: var(--muted); margin-top: 0.25rem; text-align: center; }
+
+  .profile-section { margin-bottom: 2.5rem; }
+  .profile-heading {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .profile-heading h2 { font-size: 1.1rem; font-weight: 700; }
+
+  .follow-up-group { margin-bottom: 1.5rem; }
+  .follow-up-group-label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--amber);
+    margin-bottom: 0.6rem;
+  }
+
+  .lead-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(460px, 1fr)); gap: 0.85rem; }
+
+  .lead-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1rem 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+  .lead-card.overdue  { border-left: 3px solid var(--red); }
+  .lead-card.due-today { border-left: 3px solid var(--amber); }
+  .lead-card.upcoming  { border-left: 3px solid var(--accent); }
+
+  .lead-header { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+  .lead-name { font-weight: 700; font-size: 1rem; color: var(--text); }
+  .lead-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; font-size: 0.82rem; color: var(--muted); }
+
+  .lead-desc { font-size: 0.83rem; color: var(--muted); line-height: 1.5; }
+  .lead-notable { font-size: 0.8rem; color: var(--muted); font-style: italic; }
+  .lead-notable strong { color: var(--accent); font-style: normal; }
+
+  .lead-contacts { display: flex; flex-direction: column; gap: 0.3rem; }
+  .lead-contact-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; font-size: 0.83rem; }
+  .contact-name { font-weight: 600; color: var(--text); }
+  .contact-role { color: var(--muted); }
+  .contact-email { color: var(--accent); }
+
+  .lead-status-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+    font-size: 0.78rem;
+    color: var(--muted);
+    border-top: 1px solid var(--border);
+    padding-top: 0.5rem;
+    margin-top: 0.1rem;
+  }
+  .lead-status-strip span { display: flex; align-items: center; gap: 0.25rem; }
+
+  .followup-overdue { color: var(--red); font-weight: 600; }
+  .followup-today   { color: var(--amber); font-weight: 600; }
+  .followup-upcoming { color: var(--muted); }
+
+  .empty-state {
+    text-align: center;
+    padding: 4rem 2rem;
+    color: var(--muted);
+  }
+  .empty-state p { font-size: 1.05rem; margin-top: 0.5rem; }
+
+  @media (max-width: 600px) {
+    .lead-grid { grid-template-columns: 1fr; }
+    .cr-stats { gap: 0.5rem; }
+  }
+</style>
+
+<div class="flex items-center justify-between" style="margin-bottom:1.5rem">
+  <h1 style="font-size:1.35rem;font-weight:800">📋 Empresas Contactadas</h1>
+</div>
+
+<!-- Stats bar -->
+<div class="cr-stats">
+  <div class="cr-stat">
+    <span class="cr-stat-num text-accent">{{ total }}</span>
+    <span class="cr-stat-label">Total contactadas</span>
+  </div>
+  {% if needs_follow_up %}
+  <div class="cr-stat">
+    <span class="cr-stat-num text-amber">{{ needs_follow_up }}</span>
+    <span class="cr-stat-label">Con seguimiento</span>
+  </div>
+  {% endif %}
+  {% if overdue %}
+  <div class="cr-stat">
+    <span class="cr-stat-num text-red">{{ overdue }}</span>
+    <span class="cr-stat-label">Seguimiento vencido</span>
+  </div>
+  {% endif %}
+</div>
+
+{% if not profiles_order %}
+<div class="empty-state">
+  <div style="font-size:2.5rem">📭</div>
+  <p>Todavía no marcaste ninguna empresa como contactada.</p>
+  <p style="font-size:0.85rem;margin-top:0.5rem">Usá el botón ✓ en cualquier reporte de descubrimiento para registrar un contacto.</p>
+</div>
+{% endif %}
+
+{% for profile_name in profiles_order %}
+{% set group = by_profile[profile_name] %}
+<div class="profile-section">
+  <div class="profile-heading">
+    <h2>{{ profile_name }}</h2>
+    <span class="badge badge-muted">{{ group | length }} empresa{{ 's' if group | length != 1 }}</span>
+  </div>
+
+  <!-- Follow-up needed -->
+  {% set followup_group = group | selectattr("needs_followup") | list %}
+  {% if followup_group %}
+  <div class="follow-up-group">
+    <div class="follow-up-group-label">⏰ Seguimiento pendiente</div>
+    <div class="lead-grid">
+      {% for d in followup_group | sort(attribute="follow_up_overdue", reverse=True) %}
+      {% set company = d.company %}
+      {% set status = d.status %}
+      <div class="lead-card {% if d.follow_up_overdue %}overdue{% elif d.follow_up_today %}due-today{% else %}upcoming{% endif %}">
+
+        <!-- Header -->
+        <div class="lead-header">
+          <span class="lead-name">{{ company.name }}</span>
+          {% if d.score is not none %}
+          <span class="score {% if d.score >= 70 %}score-high{% elif d.score >= 45 %}score-mid{% else %}score-low{% endif %}">{{ d.score }}</span>
+          {% endif %}
+        </div>
+        <div class="lead-meta">
+          {% if company.location %}<span>📍 {{ company.location }}</span>{% endif %}
+          {% if company.website_url %}
+          <a href="{{ company.website_url }}" target="_blank" rel="noopener"
+             style="color:var(--accent);font-size:0.82rem" onclick="event.stopPropagation()">
+            🌐 {{ company.domain or company.website_url | replace('https://','') | replace('http://','') | truncate(30, true, '…') }}
+          </a>
+          {% endif %}
+        </div>
+
+        <!-- Description + notable fact -->
+        {% if d.description %}
+        <div class="lead-desc">{{ d.description }}</div>
+        {% endif %}
+        {% if d.notable %}
+        <div class="lead-notable"><strong>⭐</strong> {{ d.notable }}</div>
+        {% endif %}
+
+        <!-- Contacts -->
+        {% if d.contacts %}
+        <div class="lead-contacts">
+          {% for ct in d.contacts %}
+          <div class="lead-contact-row">
+            {% if ct.name %}<span class="contact-name">{{ ct.name }}</span>{% endif %}
+            {% if ct.role %}<span class="contact-role text-muted">· {{ ct.role }}</span>{% endif %}
+            {% if ct.email %}
+            <a href="mailto:{{ ct.email }}" class="contact-email">{{ ct.email }}</a>
+            {% if ct.email_status == 'verified' %}
+            <span title="Email verificado{% if ct.email_source %} vía {{ ct.email_source }}{% endif %}">✅</span>
+            {% elif ct.email_status == 'probable' %}
+            <span title="Email probable — no verificado por SMTP">🟡</span>
+            {% else %}
+            <span title="Email no verificado">🔴</span>
+            {% endif %}
+            {% elif ct.linkedin_url %}
+            <a href="{{ ct.linkedin_url }}" target="_blank" rel="noopener" style="color:var(--accent)">🔵 LinkedIn</a>
+            {% else %}
+            <span class="text-muted" style="font-size:0.78rem">sin contacto</span>
+            {% endif %}
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <div class="lead-contacts"><span class="text-muted" style="font-size:0.82rem">Sin contactos registrados</span></div>
+        {% endif %}
+
+        <!-- Status strip -->
+        <div class="lead-status-strip">
+          {% if status.contacted_at %}
+          <span>📅 {{ status.contacted_at.strftime('%d/%m/%Y') }}</span>
+          {% endif %}
+          {% if status.contact_method %}
+          <span class="badge badge-muted">{{ status.contact_method }}</span>
+          {% endif %}
+          {% if status.response_received %}
+          <span class="badge {% if status.response_received in ('interested','meeting_scheduled') %}badge-green{% elif status.response_received in ('not_interested','wrong_contact') %}badge-red{% elif status.response_received == 'call_back' %}badge-amber{% else %}badge-muted{% endif %}">
+            {{ status.response_received | replace('_', ' ') }}
+          </span>
+          {% endif %}
+          {% if status.follow_up_date %}
+            {% if d.follow_up_overdue %}
+            <span class="followup-overdue">⚠ Vencido: {{ status.follow_up_date.strftime('%d/%m/%Y') }}</span>
+            {% elif d.follow_up_today %}
+            <span class="followup-today">📅 Hoy</span>
+            {% else %}
+            <span class="followup-upcoming">📅 {{ status.follow_up_date.strftime('%d/%m/%Y') }}</span>
+            {% endif %}
+          {% endif %}
+          {% if status.comment %}
+          <span style="color:var(--muted);font-style:italic">{{ status.comment | truncate(60, true, '…') }}</span>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- All contacted companies in this profile -->
+  {% set all_group = group | rejectattr("needs_followup") | list %}
+  {% if all_group %}
+  {% if followup_group %}
+  <div style="font-size:0.78rem;font-weight:600;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted);margin-bottom:0.6rem">Resto</div>
+  {% endif %}
+  <div class="lead-grid">
+    {% for d in all_group %}
+    {% set company = d.company %}
+    {% set status = d.status %}
+    <div class="lead-card">
+      <!-- Header -->
+      <div class="lead-header">
+        <span class="lead-name">{{ company.name }}</span>
+        {% if d.score is not none %}
+        <span class="score {% if d.score >= 70 %}score-high{% elif d.score >= 45 %}score-mid{% else %}score-low{% endif %}">{{ d.score }}</span>
+        {% endif %}
+      </div>
+      <div class="lead-meta">
+        {% if company.location %}<span>📍 {{ company.location }}</span>{% endif %}
+        {% if company.website_url %}
+        <a href="{{ company.website_url }}" target="_blank" rel="noopener"
+           style="color:var(--accent);font-size:0.82rem">
+          🌐 {{ company.domain or company.website_url | replace('https://','') | replace('http://','') | truncate(30, true, '…') }}
+        </a>
+        {% endif %}
+      </div>
+
+      {% if d.description %}
+      <div class="lead-desc">{{ d.description }}</div>
+      {% endif %}
+      {% if d.notable %}
+      <div class="lead-notable"><strong>⭐</strong> {{ d.notable }}</div>
+      {% endif %}
+
+      {% if d.contacts %}
+      <div class="lead-contacts">
+        {% for ct in d.contacts %}
+        <div class="lead-contact-row">
+          {% if ct.name %}<span class="contact-name">{{ ct.name }}</span>{% endif %}
+          {% if ct.role %}<span class="contact-role text-muted">· {{ ct.role }}</span>{% endif %}
+          {% if ct.email %}
+          <a href="mailto:{{ ct.email }}" class="contact-email">{{ ct.email }}</a>
+          {% if ct.email_status == 'verified' %}
+          <span title="Email verificado{% if ct.email_source %} vía {{ ct.email_source }}{% endif %}">✅</span>
+          {% elif ct.email_status == 'probable' %}
+          <span title="Email probable — no verificado por SMTP">🟡</span>
+          {% else %}
+          <span title="Email no verificado">🔴</span>
+          {% endif %}
+          {% elif ct.linkedin_url %}
+          <a href="{{ ct.linkedin_url }}" target="_blank" rel="noopener" style="color:var(--accent)">🔵 LinkedIn</a>
+          {% else %}
+          <span class="text-muted" style="font-size:0.78rem">sin contacto</span>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="lead-contacts"><span class="text-muted" style="font-size:0.82rem">Sin contactos registrados</span></div>
+      {% endif %}
+
+      <div class="lead-status-strip">
+        {% if status.contacted_at %}
+        <span>📅 {{ status.contacted_at.strftime('%d/%m/%Y') }}</span>
+        {% endif %}
+        {% if status.contact_method %}
+        <span class="badge badge-muted">{{ status.contact_method }}</span>
+        {% endif %}
+        {% if status.response_received %}
+        <span class="badge {% if status.response_received in ('interested','meeting_scheduled') %}badge-green{% elif status.response_received in ('not_interested','wrong_contact') %}badge-red{% elif status.response_received == 'call_back' %}badge-amber{% else %}badge-muted{% endif %}">
+          {{ status.response_received | replace('_', ' ') }}
+        </span>
+        {% endif %}
+        {% if status.comment %}
+        <span style="color:var(--muted);font-style:italic">{{ status.comment | truncate(60, true, '…') }}</span>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+</div>
+{% endfor %}
+
+{% endblock %}

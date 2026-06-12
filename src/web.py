@@ -837,6 +837,119 @@ def create_app() -> Flask:
         progress = _enrich_progress.get(run_id, {})
         return jsonify(progress)
 
+    # ── Contacted Companies Report ───────────────────────────────────────────
+
+    @app.route("/contacts-report")
+    @_require_auth
+    def contacts_report():
+        from src.database.session import get_session
+        from src.database.models import Company, ContactStatus, Contact, Opportunity, DiscoveryRun, Profile
+        from datetime import date
+
+        with get_session() as db:
+            pairs = (
+                db.query(Company, ContactStatus)
+                .join(ContactStatus, Company.id == ContactStatus.company_id)
+                .order_by(ContactStatus.contacted_at.desc())
+                .all()
+            )
+
+            company_ids = [c.id for c, _ in pairs]
+            if not company_ids:
+                return render_template(
+                    "contacts_report.html",
+                    by_profile={}, profiles_order=[], total=0, needs_follow_up=0, overdue=0,
+                )
+
+            contacts_rows = (
+                db.query(Contact)
+                .filter(Contact.company_id.in_(company_ids))
+                .order_by(Contact.confidence_score.desc())
+                .all()
+            )
+            contacts_by_company: dict = {}
+            for c in contacts_rows:
+                contacts_by_company.setdefault(c.company_id, []).append(c)
+
+            opp_rows = (
+                db.query(Opportunity, DiscoveryRun, Profile)
+                .join(DiscoveryRun, Opportunity.run_id == DiscoveryRun.id)
+                .outerjoin(Profile, DiscoveryRun.profile_id == Profile.id)
+                .filter(Opportunity.company_id.in_(company_ids))
+                .order_by(DiscoveryRun.run_date.desc(), Opportunity.score.desc())
+                .all()
+            )
+            best_opp: dict = {}
+            opp_profile: dict = {}
+            for opp, run, profile in opp_rows:
+                if opp.company_id not in best_opp:
+                    best_opp[opp.company_id] = opp
+                    opp_profile[opp.company_id] = profile
+
+            today = date.today()
+            companies_data = []
+            for company, status in pairs:
+                opp = best_opp.get(company.id)
+                profile = opp_profile.get(company.id)
+                profile_name = profile.name if profile else "Default"
+                profile_id = profile.id if profile else None
+
+                desc = company.description or ""
+                words = desc.split()
+                if len(words) > 40:
+                    desc = " ".join(words[:40]) + "…"
+
+                notable = None
+                if opp and opp.insights:
+                    for line in opp.insights.splitlines():
+                        cleaned = line.strip().lstrip("•-* ").strip()
+                        if cleaned:
+                            notable = cleaned[:150]
+                            break
+                if not notable and opp and opp.score_explanation:
+                    notable = opp.score_explanation.split(".")[0].strip()[:150]
+
+                follow_up_overdue = bool(status.follow_up_date and status.follow_up_date < today)
+                follow_up_today = bool(status.follow_up_date and status.follow_up_date == today)
+                needs_followup = bool(status.follow_up_date)
+
+                companies_data.append({
+                    "company": company,
+                    "status": status,
+                    "contacts": contacts_by_company.get(company.id, []),
+                    "profile_name": profile_name,
+                    "profile_id": profile_id,
+                    "score": opp.score if opp else None,
+                    "description": desc,
+                    "notable": notable,
+                    "follow_up_overdue": follow_up_overdue,
+                    "follow_up_today": follow_up_today,
+                    "needs_followup": needs_followup,
+                })
+
+            profiles_order: list = []
+            by_profile: dict = {}
+            for d in companies_data:
+                pname = d["profile_name"]
+                if pname not in by_profile:
+                    by_profile[pname] = []
+                    profiles_order.append(pname)
+                by_profile[pname].append(d)
+
+            total = len(companies_data)
+            needs_follow_up = sum(1 for d in companies_data if d["needs_followup"])
+            overdue = sum(1 for d in companies_data if d["follow_up_overdue"])
+
+        return render_template(
+            "contacts_report.html",
+            by_profile=by_profile,
+            profiles_order=profiles_order,
+            total=total,
+            needs_follow_up=needs_follow_up,
+            overdue=overdue,
+            today=today,
+        )
+
     return app
 
 
