@@ -26,6 +26,10 @@ details.lead > summary:hover { background:rgba(255,255,255,0.03); }
 details.lead[open] .lead-chevron { transform:rotate(90deg); }
 .lead-body { border-top:1px solid var(--border); padding:1.1rem 1.25rem; }
 
+/* Enrich spinner */
+@keyframes spin { to { transform:rotate(360deg); } }
+.enrich-spinner { display:inline-block; animation:spin 0.7s linear infinite; }
+
 /* Responsive: table → stacked cards on mobile */
 @media (max-width:768px) {
   .opp-table thead { display:none; }
@@ -364,9 +368,21 @@ details.lead[open] .lead-chevron { transform:rotate(90deg); }
         {% if estatus == 'verified' %}
           <span title="✅ Email verificado{% if esource %} vía {{ esource }}{% endif %}{% if elog and elog.get('layer2') and elog['layer2'].get('inferred_pattern') %} (patrón: {{ elog['layer2']['inferred_pattern'] }}){% endif %}" style="font-size:0.82rem;cursor:help">✅</span>
         {% elif estatus == 'probable' %}
-          <span title="🟡 Email probable{% if esource %} vía {{ esource }}{% endif %} — no verificado por SMTP{% if elog and elog.get('layer2') and elog['layer2'].get('candidates') %} | candidatos: {{ elog['layer2']['candidates']|join(', ') }}{% endif %}" style="font-size:0.82rem;cursor:help">🟡</span>
+          <span title="🟡 Email probable — no verificado por SMTP" style="font-size:0.82rem;cursor:help">🟡</span>
+          {% if elog %}
+          <button onclick="openEnrichDetail(this);event.stopPropagation()"
+            data-email="{{ first.get('contact_email','') }}"
+            data-elog="{{ elog|tojson|e }}"
+            style="font-size:0.7rem;padding:0.05rem 0.35rem;background:rgba(251,191,36,0.15);border:1px solid rgba(251,191,36,0.4);border-radius:4px;color:#fbbf24;cursor:pointer">ver</button>
+          {% endif %}
         {% elif estatus == 'not_found' %}
-          <span title="🔴 No encontrado{% if elog and elog.get('layer1') %} | Capa 1: {{ elog['layer1'].get('pages_checked', 0) }} págs, {{ elog['layer1'].get('emails_found', [])|length }} emails{% endif %}{% if elog and elog.get('layer2') and elog['layer2'].get('candidates') %} | Capa 2: {{ elog['layer2']['candidates']|length }} candidatos{% endif %}{% if elog and elog.get('layer3') %} | Hunter: {{ elog['layer3'].get('hunter_email', 'sin resultado') }}{% endif %}" style="font-size:0.82rem;color:var(--muted);cursor:help">🔴</span>
+          <span title="🔴 No se encontró email" style="font-size:0.82rem;color:var(--muted);cursor:help">🔴</span>
+          {% if elog %}
+          <button onclick="openEnrichDetail(this);event.stopPropagation()"
+            data-email=""
+            data-elog="{{ elog|tojson|e }}"
+            style="font-size:0.7rem;padding:0.05rem 0.35rem;background:var(--surface-hover);border:1px solid var(--border);border-radius:4px;color:var(--muted);cursor:pointer">ver</button>
+          {% endif %}
         {% elif first.get('contact_linkedin_url') %}
           <span title="🔵 Solo LinkedIn — click Enrich para buscar email" style="font-size:0.82rem;cursor:help">🔵</span>
         {% endif %}
@@ -552,6 +568,17 @@ details.lead[open] .lead-chevron { transform:rotate(90deg); }
   </div>
 </div>
 
+<!-- Enrichment Detail Modal -->
+<div id="enrich-detail-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:400;align-items:center;justify-content:center">
+  <div class="card" style="width:100%;max-width:520px;padding:1.75rem;max-height:85vh;overflow-y:auto;position:relative">
+    <div class="flex items-center justify-between" style="margin-bottom:1.25rem">
+      <h2 style="font-size:1.1rem;font-weight:700">🔍 Enrichment Report</h2>
+      <button onclick="closeEnrichDetail()" style="background:none;border:none;color:var(--muted);font-size:1.3rem;cursor:pointer;padding:0.25rem">&times;</button>
+    </div>
+    <div id="enrich-detail-body" style="font-size:0.88rem;line-height:1.6;display:flex;flex-direction:column;gap:1rem"></div>
+  </div>
+</div>
+
 <script>
 function copyText(btn) {
   const text = btn.getAttribute('data-body');
@@ -656,40 +683,22 @@ function createZohoDrafts(btn) {
 function enrichContact(btn) {
   const contactId = btn.dataset.contactId;
   btn.disabled = true;
-  btn.textContent = '…';
+  btn.innerHTML = '<span class="enrich-spinner">⟳</span>';
   fetch('/contact/' + contactId + '/enrich', { method: 'POST' })
     .then(r => r.json())
     .then(data => {
       const status = data.email_status;
-      const badge = {
-        'verified': '✅',
-        'probable': '🟡',
-        'catch_all': '🟡',
-        'not_found': '🔴',
-      }[status] || '🔵';
-      // Build tooltip from enrichment_log
+      const badge = { 'verified':'✅', 'probable':'🟡', 'catch_all':'🟡', 'not_found':'🔴' }[status] || '🔵';
       const elog = data.enrichment_log || {};
-      const l1 = elog.layer1 || {};
-      const l2 = elog.layer2 || {};
-      const l3 = elog.layer3 || {};
-      let tooltip = badge + ' ' + (status || '?');
-      if (data.email_source) tooltip += ' vía ' + data.email_source;
-      if (l1.pages_checked != null) tooltip += ' | L1: ' + l1.pages_checked + ' págs, ' + (l1.emails_found||[]).length + ' emails';
-      if (l2.candidates && l2.candidates.length) tooltip += ' | L2: ' + l2.candidates.join(', ');
-      if (l3.hunter_email) tooltip += ' | Hunter: ' + l3.hunter_email + ' (score ' + l3.hunter_score + ')';
-      // Insert badge before the button and remove button
+
+      // Badge span
       const span = document.createElement('span');
-      span.title = tooltip;
+      span.title = badge + ' ' + (status || '?') + (data.email_source ? ' vía ' + data.email_source : '');
       span.style.cssText = 'font-size:0.82rem;cursor:help';
       span.textContent = badge;
       btn.parentNode.insertBefore(span, btn);
-      if (status === 'verified' || status === 'not_found') {
-        btn.remove();
-      } else {
-        btn.textContent = 'Retry';
-        btn.disabled = false;
-      }
-      // Show found email if any
+
+      // Email link
       if (data.email) {
         const a = document.createElement('a');
         a.href = 'mailto:' + data.email;
@@ -698,8 +707,124 @@ function enrichContact(btn) {
         a.textContent = data.email;
         btn.parentNode.insertBefore(a, span);
       }
+
+      // "ver" detail button for probable / not_found
+      if ((status === 'probable' || status === 'not_found') && Object.keys(elog).length) {
+        const verBtn = document.createElement('button');
+        verBtn.textContent = 'ver';
+        const isProb = status === 'probable';
+        verBtn.style.cssText = 'font-size:0.7rem;padding:0.05rem 0.35rem;border-radius:4px;cursor:pointer;'
+          + (isProb
+            ? 'background:rgba(251,191,36,0.15);border:1px solid rgba(251,191,36,0.4);color:#fbbf24'
+            : 'background:var(--surface-hover);border:1px solid var(--border);color:var(--muted)');
+        verBtn.dataset.email = data.email || '';
+        verBtn.dataset.elog = JSON.stringify(elog);
+        verBtn.onclick = e => { openEnrichDetail(verBtn); e.stopPropagation(); };
+        btn.parentNode.insertBefore(verBtn, btn);
+      }
+
+      if (status === 'verified' || status === 'not_found') {
+        btn.remove();
+      } else {
+        btn.innerHTML = 'Retry';
+        btn.disabled = false;
+      }
     })
-    .catch(() => { btn.textContent = 'Error'; btn.disabled = false; });
+    .catch(() => { btn.innerHTML = 'Error'; btn.disabled = false; });
+}
+
+// ── Enrichment Detail Modal ───────────────────────────────────────────────────
+function openEnrichDetail(btn) {
+  const email = btn.dataset.email || '';
+  const elog = JSON.parse(btn.dataset.elog || '{}');
+  const l1 = elog.layer1 || {};
+  const l2 = elog.layer2 || {};
+  const l3 = elog.layer3 || {};
+
+  const rows = [];
+
+  // Email result
+  if (email) {
+    rows.push(`<div style="background:rgba(251,191,36,0.08);border:1px solid rgba(251,191,36,0.3);border-radius:8px;padding:0.75rem 1rem">
+      <div style="font-size:0.75rem;color:var(--muted);margin-bottom:0.3rem;font-weight:600">EMAIL ENCONTRADO (no verificado)</div>
+      <div style="display:flex;align-items:center;gap:0.6rem;flex-wrap:wrap">
+        <code style="font-size:0.95rem;color:#fbbf24">${email}</code>
+        <button onclick="navigator.clipboard.writeText('${email}').then(()=>{this.textContent='✓ Copiado';setTimeout(()=>this.textContent='Copiar',1500)})"
+          style="font-size:0.75rem;padding:0.15rem 0.5rem;background:var(--surface-hover);border:1px solid var(--border);border-radius:4px;color:var(--muted);cursor:pointer">Copiar</button>
+      </div>
+    </div>`);
+  } else {
+    rows.push(`<div style="background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.25);border-radius:8px;padding:0.65rem 1rem;color:var(--muted);font-size:0.85rem">
+      🔴 No se encontró ningún email
+    </div>`);
+  }
+
+  // Layer 1
+  const emails1 = l1.emails_found || [];
+  let l1html = `<div style="font-weight:600;color:var(--text);margin-bottom:0.4rem">🌐 Capa 1 — Scraping del sitio</div>`;
+  if (l1.blocked_by_robots) {
+    l1html += `<span style="color:#f87171;font-size:0.82rem">Bloqueado por robots.txt</span>`;
+  } else if (l1.error) {
+    l1html += `<span style="color:#f87171;font-size:0.82rem">Error: ${l1.error}</span>`;
+  } else {
+    l1html += `<div style="color:var(--muted);font-size:0.82rem">${l1.pages_checked||0} páginas revisadas</div>`;
+    if (emails1.length) {
+      l1html += `<div style="margin-top:0.3rem;font-size:0.82rem">Emails encontrados: ${emails1.map(e=>`<code style="background:var(--surface-hover);padding:0.05rem 0.3rem;border-radius:3px">${e}</code>`).join(' ')}</div>`;
+    } else {
+      l1html += `<div style="color:var(--muted);font-size:0.82rem;margin-top:0.2rem">Sin emails en el sitio</div>`;
+    }
+    if (l1.phones_found && l1.phones_found.length) {
+      l1html += `<div style="font-size:0.82rem;margin-top:0.2rem">📞 Teléfonos: ${l1.phones_found.join(', ')}</div>`;
+    }
+  }
+  rows.push(`<div>${l1html}</div>`);
+
+  // Layer 2
+  if (l2.candidates && l2.candidates.length) {
+    const verifs = l2.verifications || [];
+    const statusColor = { valid:'#4ade80', catch_all:'#fbbf24', invalid:'#6b7280', unknown:'#6b7280' };
+    const statusLabel = { valid:'✓ válido', catch_all:'≈ catch-all', invalid:'✗ inválido', unknown:'? desconocido' };
+    let l2html = `<div style="font-weight:600;color:var(--text);margin-bottom:0.4rem">🧪 Capa 2 — Verificación SMTP</div>`;
+    if (l2.inferred_pattern) {
+      l2html += `<div style="font-size:0.8rem;color:var(--muted);margin-bottom:0.4rem">Patrón inferido: <code style="color:var(--text)">${l2.inferred_pattern}</code></div>`;
+    }
+    const rows2 = l2.candidates.map(c => {
+      const v = verifs.find(x => x.email === c) || {};
+      const s = v.status || 'unknown';
+      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:0.2rem 0;border-bottom:1px solid rgba(255,255,255,0.05)">
+        <code style="font-size:0.82rem">${c}</code>
+        <span style="font-size:0.75rem;color:${statusColor[s]||'#6b7280'}">${statusLabel[s]||s}</span>
+      </div>`;
+    });
+    l2html += `<div style="background:var(--surface-hover);border-radius:6px;padding:0.5rem 0.75rem;margin-top:0.25rem">${rows2.join('')}</div>`;
+    rows.push(`<div>${l2html}</div>`);
+  } else if (Object.keys(l2).length) {
+    rows.push(`<div style="color:var(--muted);font-size:0.82rem">🧪 Capa 2 — sin candidatos (falta nombre completo)</div>`);
+  }
+
+  // Layer 3
+  if (Object.keys(l3).length) {
+    let l3html = `<div style="font-weight:600;color:var(--text);margin-bottom:0.4rem">🌍 Capa 3 — Hunter.io</div>`;
+    if (l3.hunter_email) {
+      const score = l3.hunter_score || 0;
+      const col = score >= 90 ? '#4ade80' : score >= 50 ? '#fbbf24' : '#6b7280';
+      l3html += `<div style="font-size:0.82rem"><code>${l3.hunter_email}</code> — score <span style="color:${col};font-weight:700">${score}</span></div>`;
+    } else if (l3.exception) {
+      l3html += `<span style="color:#f87171;font-size:0.82rem">Error: ${l3.exception}</span>`;
+    } else {
+      l3html += `<span style="color:var(--muted);font-size:0.82rem">Sin resultado</span>`;
+    }
+    rows.push(`<div>${l3html}</div>`);
+  }
+
+  document.getElementById('enrich-detail-body').innerHTML = rows.join('<hr style="border-color:var(--border);border-style:solid;border-width:1px 0 0 0">');
+  const modal = document.getElementById('enrich-detail-modal');
+  modal.style.display = 'flex';
+  modal.onclick = e => { if (e.target === modal) closeEnrichDetail(); };
+}
+
+function closeEnrichDetail() {
+  document.getElementById('enrich-detail-modal').style.display = 'none';
 }
 
 function enrichAll(btn) {
