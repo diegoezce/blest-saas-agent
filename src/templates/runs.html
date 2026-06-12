@@ -150,7 +150,7 @@
     <div style="display:flex;gap:0.5rem;align-items:center">
       <span class="text-muted" style="font-size:0.85rem">{{ runs|length }} runs</span>
       <label style="display:flex;align-items:center;gap:0.35rem;font-size:0.82rem;color:var(--muted);cursor:pointer;background:var(--surface);padding:0.3rem 0.65rem;border-radius:6px;border:1px solid var(--border)">
-        <input type="checkbox" id="hide-failed-chk" onchange="toggleFailed()"
+        <input type="checkbox" id="hide-failed-chk" onchange="toggleFailed()" checked
           style="accent-color:var(--accent);width:14px;height:14px;cursor:pointer">
         Ocultar fallidos
       </label>
@@ -232,6 +232,7 @@
       el.style.display = checked ? 'none' : '';
     });
   }
+  toggleFailed();
   </script>
 {% endif %}
 {% endblock %}
