@@ -112,6 +112,70 @@
   }
 </style>
 
+<!-- ── Card body macro (must be defined before use in Jinja2) ──────── -->
+{% macro _card_body(d) %}
+  <div class="lead-name">{{ d.name }}</div>
+
+  <div class="lead-meta">
+    {% if d.location %}<span>📍 {{ d.location }}</span>{% endif %}
+    {% if d.website_url %}
+    <a href="{{ d.website_url }}" target="_blank" rel="noopener" style="color:var(--accent)">🌐 {{ d.display_url }}</a>
+    {% endif %}
+    {% if d.score is not none %}
+    <span class="score {% if d.score >= 70 %}score-high{% elif d.score >= 45 %}score-mid{% else %}score-low{% endif %}">{{ d.score }}</span>
+    {% endif %}
+  </div>
+
+  {% if d.description %}<div class="lead-desc">{{ d.description }}</div>{% endif %}
+  {% if d.notable %}<div class="lead-notable">⭐ {{ d.notable }}</div>{% endif %}
+
+  {% if d.contacts %}
+  <div class="contact-rows">
+    {% for ct in d.contacts %}
+    <div class="contact-row">
+      {% if ct.name %}<span class="contact-name">{{ ct.name }}</span>{% endif %}
+      {% if ct.role %}<span class="contact-role">· {{ ct.role }}</span>{% endif %}
+      {% if ct.email %}
+      <a href="mailto:{{ ct.email }}" style="color:var(--accent);font-size:0.77rem">{{ ct.email }}</a>
+      {% if ct.email_status == 'verified' %}<span title="verificado{% if ct.email_source %} vía {{ ct.email_source }}{% endif %}">✅</span>
+      {% elif ct.email_status == 'probable' %}<span title="probable">🟡</span>
+      {% else %}<span title="sin verificar">🔴</span>{% endif %}
+      {% elif ct.linkedin_url %}
+      <a href="{{ ct.linkedin_url }}" target="_blank" rel="noopener" style="color:var(--accent);font-size:0.77rem">🔵 LinkedIn</a>
+      {% else %}<span style="color:var(--muted);font-size:0.74rem">sin email</span>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <div class="status-strip">
+    {% if d.contacted_at %}<span>📅 {{ d.contacted_at }}</span>{% endif %}
+    {% if d.contact_method %}<span class="badge badge-muted">{{ d.contact_method }}</span>{% endif %}
+    {% if d.response %}
+    <span class="badge {% if d.response in ('interested','meeting_scheduled') %}badge-green{% elif d.response in ('not_interested','wrong_contact') %}badge-red{% elif d.response == 'call_back' %}badge-amber{% else %}badge-muted{% endif %}">
+      {{ d.response | replace('_',' ') }}
+    </span>
+    {% endif %}
+    {% if d.follow_up_overdue %}<span style="color:var(--red);font-weight:600">⚠ {{ d.follow_up_date_display }}</span>
+    {% elif d.follow_up_today %}<span style="color:var(--amber);font-weight:600">📅 Hoy</span>
+    {% elif d.follow_up_date %}<span>📅 {{ d.follow_up_date_display }}</span>{% endif %}
+    {% if d.comment %}<span style="font-style:italic">{{ d.comment[:55] }}{% if d.comment|length > 55 %}…{% endif %}</span>{% endif %}
+  </div>
+
+  <div class="card-actions">
+    <button class="btn-action btn-feedback"
+      onclick="openFeedbackModal({{ d.id }}, '{{ d.name|replace("'", "\\'")|e }}')">
+      💬 Feedback
+    </button>
+    <form method="POST" action="/company/{{ d.id }}/toggle-contact" style="flex:1;display:contents">
+      <button type="submit" class="btn-action btn-unmark"
+        onclick="return confirm('¿Desmarcar {{ d.name|replace("'","\\'")|e }} como contactada?')">
+        ✕ Desmarcar
+      </button>
+    </form>
+  </div>
+{% endmacro %}
+
 <div style="margin-bottom:1.25rem">
   <h1 style="font-size:1.2rem;font-weight:800">📋 Empresas Contactadas</h1>
 </div>
@@ -186,71 +250,7 @@
 </details>
 {% endfor %}
 
-<!-- ── Card body macro ──────────────────────────────────────────────── -->
-{% macro _card_body(d) %}
-  <div class="lead-name">{{ d.name }}</div>
-
-  <div class="lead-meta">
-    {% if d.location %}<span>📍 {{ d.location }}</span>{% endif %}
-    {% if d.website_url %}
-    <a href="{{ d.website_url }}" target="_blank" rel="noopener" style="color:var(--accent)">🌐 {{ d.display_url }}</a>
-    {% endif %}
-    {% if d.score is not none %}
-    <span class="score {% if d.score >= 70 %}score-high{% elif d.score >= 45 %}score-mid{% else %}score-low{% endif %}">{{ d.score }}</span>
-    {% endif %}
-  </div>
-
-  {% if d.description %}<div class="lead-desc">{{ d.description }}</div>{% endif %}
-  {% if d.notable %}<div class="lead-notable">⭐ {{ d.notable }}</div>{% endif %}
-
-  {% if d.contacts %}
-  <div class="contact-rows">
-    {% for ct in d.contacts %}
-    <div class="contact-row">
-      {% if ct.name %}<span class="contact-name">{{ ct.name }}</span>{% endif %}
-      {% if ct.role %}<span class="contact-role">· {{ ct.role }}</span>{% endif %}
-      {% if ct.email %}
-      <a href="mailto:{{ ct.email }}" style="color:var(--accent);font-size:0.77rem">{{ ct.email }}</a>
-      {% if ct.email_status == 'verified' %}<span title="verificado{% if ct.email_source %} vía {{ ct.email_source }}{% endif %}">✅</span>
-      {% elif ct.email_status == 'probable' %}<span title="probable">🟡</span>
-      {% else %}<span title="sin verificar">🔴</span>{% endif %}
-      {% elif ct.linkedin_url %}
-      <a href="{{ ct.linkedin_url }}" target="_blank" rel="noopener" style="color:var(--accent);font-size:0.77rem">🔵 LinkedIn</a>
-      {% else %}<span style="color:var(--muted);font-size:0.74rem">sin email</span>{% endif %}
-    </div>
-    {% endfor %}
-  </div>
-  {% endif %}
-
-  <div class="status-strip">
-    {% if d.contacted_at %}<span>📅 {{ d.contacted_at }}</span>{% endif %}
-    {% if d.contact_method %}<span class="badge badge-muted">{{ d.contact_method }}</span>{% endif %}
-    {% if d.response %}
-    <span class="badge {% if d.response in ('interested','meeting_scheduled') %}badge-green{% elif d.response in ('not_interested','wrong_contact') %}badge-red{% elif d.response == 'call_back' %}badge-amber{% else %}badge-muted{% endif %}">
-      {{ d.response | replace('_',' ') }}
-    </span>
-    {% endif %}
-    {% if d.follow_up_overdue %}<span style="color:var(--red);font-weight:600">⚠ {{ d.follow_up_date_display }}</span>
-    {% elif d.follow_up_today %}<span style="color:var(--amber);font-weight:600">📅 Hoy</span>
-    {% elif d.follow_up_date %}<span>📅 {{ d.follow_up_date_display }}</span>{% endif %}
-    {% if d.comment %}<span style="font-style:italic">{{ d.comment[:55] }}{% if d.comment|length > 55 %}…{% endif %}</span>{% endif %}
-  </div>
-
-  <div class="card-actions">
-    <button class="btn-action btn-feedback"
-      onclick="openFeedbackModal({{ d.id }}, '{{ d.name|replace("'", "\\'")|e }}')">
-      💬 Feedback
-    </button>
-    <form method="POST" action="/company/{{ d.id }}/toggle-contact" style="flex:1;display:contents">
-      <button type="submit" class="btn-action btn-unmark"
-        onclick="return confirm('¿Desmarcar {{ d.name|replace("'","\\'")|e }} como contactada?')">
-        ✕ Desmarcar
-      </button>
-    </form>
-  </div>
-{% endmacro %}
-
-<!-- ── Feedback Modal (same as run.html) ───────────────────────────── -->
+<!-- ── Feedback Modal ───────────────────────────────────────────────── -->
 <div id="feedback-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:300;align-items:center;justify-content:center">
   <div id="feedback-modal-inner" class="card" style="width:100%;max-width:520px;padding:1.75rem;max-height:90vh;overflow-y:auto">
     <div class="flex items-center justify-between" style="margin-bottom:1.25rem">
