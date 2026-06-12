@@ -106,31 +106,35 @@
     </div>
   </div>
 
+  <!-- Search Criteria — Who to Find -->
+  <div class="card">
+    <div class="section-title">Search Criteria — Who to Find</div>
+    <div>
+      <label style="font-size:0.85rem;color:var(--muted);display:block;margin-bottom:0.35rem;font-weight:600">Target Internal Personnel</label>
+      <textarea name="target_roles" rows="6"
+        placeholder="HR Manager / Gerente de Recursos Humanos
+L&D Director / Director de Aprendizaje y Desarrollo
+Talent & Performance Lead / Responsable de Talento
+HR Business Partner / HR Partner
+People & Culture Manager
+Training Coordinator / Coordinador de Capacitación"
+        style="width:100%;padding:0.6rem 0.75rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.9rem;resize:vertical;font-family:inherit">{{ profile.target_roles if profile else '' }}</textarea>
+      <div style="font-size:0.75rem;color:var(--muted);margin-top:0.25rem">Roles to search for within each target company (one per line, priority order). E.g. HR Manager, L&amp;D Director, Talent &amp; Performance Lead. Leave empty to use global fallback.</div>
+    </div>
+  </div>
+
   <!-- Scoring & Outreach -->
   <div class="card">
     <div class="section-title">Scoring & Outreach</div>
-    <div style="display:grid;grid-template-columns:1fr;gap:1rem">
-      <div>
-        <label style="font-size:0.85rem;color:var(--muted);display:block;margin-bottom:0.35rem;font-weight:600">Outreach Tone</label>
-        <select name="outreach_tone"
-          style="width:100%;padding:0.6rem 0.75rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.95rem">
-          <option value="warm" {{ 'selected' if (profile and profile.outreach_tone == 'warm') or not profile else '' }}>Warm</option>
-          <option value="direct" {{ 'selected' if profile and profile.outreach_tone == 'direct' else '' }}>Direct</option>
-          <option value="professional" {{ 'selected' if profile and profile.outreach_tone == 'professional' else '' }}>Professional</option>
-          <option value="referral" {{ 'selected' if profile and profile.outreach_tone == 'referral' else '' }}>Referral-style</option>
-        </select>
-      </div>
-      <div>
-        <label style="font-size:0.85rem;color:var(--muted);display:block;margin-bottom:0.35rem;font-weight:600">Target Roles</label>
-        <textarea name="target_roles" rows="5"
-          placeholder="Director / Owner / Founder of English Academy or Language Institute
-Academic Director / Coordinador Académico de Instituto de Inglés
-Administrative Manager / Administrador de Instituto de Idiomas
-Head of Studies / Jefe de Estudios de Academia de Inglés
-Operations Manager / Gerente Operativo de Instituto de Idiomas"
-          style="width:100%;padding:0.6rem 0.75rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.9rem;resize:vertical;font-family:inherit">{{ profile.target_roles if profile else '' }}</textarea>
-        <div style="font-size:0.75rem;color:var(--muted);margin-top:0.25rem">One per line, ordered by priority. Leave empty to use global fallback.</div>
-      </div>
+    <div>
+      <label style="font-size:0.85rem;color:var(--muted);display:block;margin-bottom:0.35rem;font-weight:600">Outreach Tone</label>
+      <select name="outreach_tone"
+        style="width:100%;padding:0.6rem 0.75rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.95rem">
+        <option value="warm" {{ 'selected' if (profile and profile.outreach_tone == 'warm') or not profile else '' }}>Warm</option>
+        <option value="direct" {{ 'selected' if profile and profile.outreach_tone == 'direct' else '' }}>Direct</option>
+        <option value="professional" {{ 'selected' if profile and profile.outreach_tone == 'professional' else '' }}>Professional</option>
+        <option value="referral" {{ 'selected' if profile and profile.outreach_tone == 'referral' else '' }}>Referral-style</option>
+      </select>
     </div>
   </div>
 

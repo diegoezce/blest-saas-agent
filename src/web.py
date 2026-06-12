@@ -384,9 +384,11 @@ def create_app() -> Flask:
                     md and md not in ("__generating__",) and not md.startswith("__error__:")
                 )
 
+        from src.integrations.zoho_mail import is_configured as zoho_is_configured
         return render_template(
             "run.html", run=run_data, report=report_data,
             contact_info=contact_info, report_has_professional=report_has_professional,
+            zoho_configured=zoho_is_configured(),
         )
 
     # ── Professional Report ──────────────────────────────────────────────────
@@ -670,6 +672,120 @@ def create_app() -> Flask:
 
         flash("Comentario guardado correctamente.", "success")
         return redirect(request.referrer or url_for("index"))
+
+    # ── Zoho Mail Drafts ─────────────────────────────────────────────────────
+
+    @app.route("/run/<int:run_id>/zoho-drafts", methods=["POST"])
+    @_require_auth
+    def create_zoho_drafts(run_id):
+        from src.database.session import get_session
+        from src.database.models import DiscoveryRun, DailyReport
+        from src.dashboard import _enrich_drafts_from_db
+        from src.integrations.zoho_mail import create_draft, is_configured
+
+        if not is_configured():
+            return jsonify({"error": "Zoho Mail not configured"}), 503
+
+        with get_session() as session:
+            run = session.get(DiscoveryRun, run_id)
+            if not run:
+                abort(404)
+            report = session.query(DailyReport).filter_by(run_id=run_id).first()
+            if not report or not report.report_json:
+                return jsonify({"error": "no report data"}), 404
+            report_data = _enrich_drafts_from_db(session, dict(report.report_json))
+
+        # Build one draft per company: prefer email channel, fall back to first draft
+        all_drafts = report_data.get("outreach_drafts", [])
+        companies_seen: dict[str, dict] = {}
+        for d in all_drafts:
+            company = d.get("company_name", "")
+            if not company:
+                continue
+            if company not in companies_seen:
+                companies_seen[company] = d
+            elif d.get("channel") == "email":
+                # Prefer email channel over LinkedIn
+                companies_seen[company] = d
+
+        created = 0
+        skipped = 0
+        errors = []
+        for company_name, draft in companies_seen.items():
+            to_address = draft.get("contact_email")
+            if not to_address:
+                skipped += 1
+                continue
+            subject = draft.get("subject_line") or f"Outreach — {company_name}"
+            body = draft.get("body", "")
+            try:
+                create_draft(to_address=to_address, subject=subject, content=body)
+                created += 1
+            except Exception as e:
+                logger.warning(f"Zoho draft failed for {company_name}: {e}")
+                errors.append(f"{company_name}: {e}")
+
+        return jsonify({"created": created, "skipped": skipped, "errors": errors})
+
+    # ── Contact Enrichment ───────────────────────────────────────────────────
+
+    # Per-run: track in-progress bulk enrichment {run_id: {"done": int, "total": int}}
+    _enrich_progress: dict[int, dict] = {}
+
+    @app.route("/contact/<int:contact_id>/enrich", methods=["POST"])
+    @_require_auth
+    def enrich_contact_route(contact_id):
+        from src.enrichment.pipeline import enrich_contact
+
+        result = enrich_contact(contact_id)
+        return jsonify({
+            "contact_id": contact_id,
+            "email": result.email,
+            "email_status": result.email_status,
+            "email_source": result.email_source,
+            "phone_whatsapp": result.phone_whatsapp,
+        })
+
+    @app.route("/run/<int:run_id>/enrich-all", methods=["POST"])
+    @_require_auth
+    def enrich_run_all(run_id):
+        from src.database.session import get_session
+        from src.database.models import Contact, Company, Opportunity
+        from src.enrichment.pipeline import enrich_contact
+
+        with get_session() as session:
+            opp_company_ids = [
+                o.company_id for o in
+                session.query(Opportunity).filter_by(run_id=run_id).all()
+            ]
+            if not opp_company_ids:
+                return jsonify({"error": "no opportunities for this run"}), 404
+            contact_ids = [
+                c.id for c in
+                session.query(Contact).filter(Contact.company_id.in_(opp_company_ids)).all()
+            ]
+
+        if not contact_ids:
+            return jsonify({"error": "no contacts found"}), 404
+
+        _enrich_progress[run_id] = {"done": 0, "total": len(contact_ids)}
+
+        def _bulk(ids: list[int]) -> None:
+            for cid in ids:
+                try:
+                    enrich_contact(cid)
+                except Exception as e:
+                    logger.warning(f"Bulk enrich failed for contact {cid}: {e}")
+                _enrich_progress[run_id]["done"] += 1
+
+        threading.Thread(target=_bulk, args=(contact_ids,), daemon=True).start()
+        return jsonify({"started": True, "total": len(contact_ids)}), 202
+
+    @app.route("/run/<int:run_id>/enrich-status")
+    @_require_auth
+    def enrich_status(run_id):
+        progress = _enrich_progress.get(run_id, {})
+        return jsonify(progress)
 
     return app
 

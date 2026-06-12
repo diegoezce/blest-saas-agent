@@ -13,3 +13,4 @@ reports/*.json
 reports/*.md
 data/
 .DS_Store
+.zoho_tokens.json

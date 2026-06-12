@@ -39,6 +39,13 @@ class Settings(BaseSettings):
     min_employees: int = 20
     max_employees: int = 500
 
+    # Zoho Mail integration
+    zoho_client_id: str = ""
+    zoho_client_secret: str = ""
+    zoho_refresh_token: str = ""
+    zoho_account_id: str = ""
+    zoho_from_address: str = ""
+
     # Logging
     log_level: str = "INFO"
     log_file: str = "./logs/agent.log"
@@ -56,7 +63,7 @@ class Settings(BaseSettings):
     def target_industries_list(self) -> list[str]:
         return [i.strip() for i in self.target_industries.split(",")]
 
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+    model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
 
 @lru_cache

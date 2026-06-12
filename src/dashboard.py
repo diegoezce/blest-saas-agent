@@ -151,16 +151,22 @@ def _enrich_drafts_from_db(session, report_json: dict) -> dict:
             contact_map[company.name] = best
     enriched_drafts = []
     for d in drafts:
-        if not d.get("contact_email") and not d.get("contact_linkedin_url"):
-            contact = contact_map.get(d.get("company_name", ""))
-            if contact:
-                d = {
-                    **d,
-                    "contact_name": d.get("contact_name") or contact.name,
-                    "contact_role": d.get("contact_role") or contact.role,
-                    "contact_email": contact.email,
-                    "contact_linkedin_url": contact.linkedin_url,
-                }
+        contact = contact_map.get(d.get("company_name", ""))
+        if contact and not d.get("contact_email") and not d.get("contact_linkedin_url"):
+            d = {
+                **d,
+                "contact_name": d.get("contact_name") or contact.name,
+                "contact_role": d.get("contact_role") or contact.role,
+                "contact_email": contact.email,
+                "contact_linkedin_url": contact.linkedin_url,
+            }
+        if contact:
+            d = {
+                **d,
+                "contact_id": contact.id,
+                "email_status": contact.email_status,
+                "phone_whatsapp": contact.phone_whatsapp,
+            }
         enriched_drafts.append(d)
     return {**report_json, "outreach_drafts": enriched_drafts}
 

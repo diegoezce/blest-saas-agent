@@ -126,3 +126,26 @@ def _run_migrations() -> None:
                 logger.info("Migration: added profile_id column to discovery_runs")
     except Exception as e:
         logger.info(f"Migration note (non-fatal): {e}")
+
+    # Contact enrichment columns
+    try:
+        engine = get_engine()
+        inspector = inspect(engine)
+        contact_cols = {c["name"] for c in inspector.get_columns("contacts")}
+        new_cols = [
+            ("email_status",   "VARCHAR(20)"),
+            ("email_source",   "VARCHAR(30)"),
+            ("phone_whatsapp", "TEXT"),
+            ("enriched_at",    "TIMESTAMP"),
+            ("enrichment_log", "JSONB"),
+        ]
+        with engine.connect() as conn:
+            for col_name, col_type in new_cols:
+                if col_name not in contact_cols:
+                    conn.execute(text(
+                        f"ALTER TABLE contacts ADD COLUMN IF NOT EXISTS {col_name} {col_type}"
+                    ))
+                    conn.commit()
+                    logger.info(f"Migration: added contacts.{col_name}")
+    except Exception as e:
+        logger.info(f"Migration note (non-fatal): {e}")

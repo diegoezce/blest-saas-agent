@@ -90,6 +90,13 @@ details.lead[open] .lead-chevron { transform:rotate(90deg); }
         </button>
       </form>
       {% endif %}
+      {% if zoho_configured %}
+      <button data-run-id="{{ run.id }}" onclick="createZohoDrafts(this)"
+              style="background:var(--surface-hover);border:1px solid var(--border);color:var(--text);padding:0.4rem 0.85rem;border-radius:6px;font-size:0.85rem;cursor:pointer">
+        📧 Zoho Drafts
+      </button>
+      <span id="zoho-result" style="font-size:0.8rem;color:var(--muted);display:none"></span>
+      {% endif %}
     </div>
     {% endif %}
   </div>
@@ -294,7 +301,7 @@ details.lead[open] .lead-chevron { transform:rotate(90deg); }
     <span class="section-chevron">▶</span>
   </summary>
 
-  <div style="display:flex;gap:0.5rem;margin-bottom:1rem">
+  <div style="display:flex;gap:0.5rem;margin-bottom:1rem;flex-wrap:wrap;align-items:center">
     <button onclick="setAllLeads(true);event.stopPropagation()"
       style="background:var(--surface-hover);border:1px solid var(--border);color:var(--muted);padding:0.25rem 0.65rem;border-radius:6px;cursor:pointer;font-size:0.8rem">
       Expandir todos
@@ -303,6 +310,11 @@ details.lead[open] .lead-chevron { transform:rotate(90deg); }
       style="background:var(--surface-hover);border:1px solid var(--border);color:var(--muted);padding:0.25rem 0.65rem;border-radius:6px;cursor:pointer;font-size:0.8rem">
       Colapsar todos
     </button>
+    <button id="enrich-all-btn" data-run-id="{{ run.id }}" onclick="enrichAll(this);event.stopPropagation()"
+      style="background:var(--surface-hover);border:1px solid var(--border);color:var(--accent);padding:0.25rem 0.65rem;border-radius:6px;cursor:pointer;font-size:0.8rem">
+      ⚡ Enrich All
+    </button>
+    <span id="enrich-progress" style="font-size:0.78rem;color:var(--muted);display:none"></span>
   </div>
 
   {% for company_name in companies_seen %}
@@ -345,6 +357,24 @@ details.lead[open] .lead-chevron { transform:rotate(90deg); }
              onclick="event.stopPropagation()">
             {{ first.get('contact_email') }}
           </a>
+        {% endif %}
+        {% set estatus = first.get('email_status') %}
+        {% if estatus == 'verified' %}
+          <span title="Email verificado" style="font-size:0.82rem">✅</span>
+        {% elif estatus == 'probable' %}
+          <span title="Email probable (no verificado)" style="font-size:0.82rem">🟡</span>
+        {% elif estatus == 'not_found' %}
+          <span title="No se encontró email" style="font-size:0.82rem;color:var(--muted)">🔴</span>
+        {% elif first.get('contact_linkedin_url') %}
+          <span title="Solo LinkedIn" style="font-size:0.82rem">🔵</span>
+        {% endif %}
+        {% if first.get('contact_id') and estatus not in ('verified',) %}
+          <button
+            data-contact-id="{{ first.get('contact_id') }}"
+            onclick="enrichContact(this);event.stopPropagation()"
+            style="font-size:0.72rem;padding:0.1rem 0.45rem;background:var(--surface-hover);border:1px solid var(--border);border-radius:4px;color:var(--muted);cursor:pointer">
+            Enrich
+          </button>
         {% endif %}
         {% if first.get('contact_linkedin_url') %}
           <a href="{{ first.get('contact_linkedin_url') }}" target="_blank" rel="noopener"
@@ -589,5 +619,105 @@ function closeFeedbackModal() {
 document.getElementById('feedback-modal').addEventListener('click', function(e) {
   if (e.target === this) closeFeedbackModal();
 });
+
+// ── Zoho Mail Drafts ─────────────────────────────────────────────────────────
+function createZohoDrafts(btn) {
+  const runId = btn.dataset.runId;
+  const resultEl = document.getElementById('zoho-result');
+  btn.disabled = true;
+  btn.textContent = '⟳ Creando…';
+  resultEl.style.display = 'none';
+  fetch('/run/' + runId + '/zoho-drafts', { method: 'POST' })
+    .then(r => r.json())
+    .then(data => {
+      btn.textContent = '📧 Zoho Drafts';
+      btn.disabled = false;
+      if (data.error) {
+        resultEl.textContent = '❌ ' + data.error;
+      } else {
+        const parts = ['✓ ' + data.created + ' draft' + (data.created !== 1 ? 's' : '') + ' creados'];
+        if (data.skipped > 0) parts.push(data.skipped + ' sin email');
+        if (data.errors && data.errors.length) parts.push(data.errors.length + ' errores');
+        resultEl.textContent = parts.join(' · ');
+      }
+      resultEl.style.display = 'inline';
+    })
+    .catch(() => {
+      btn.textContent = '📧 Zoho Drafts';
+      btn.disabled = false;
+      resultEl.textContent = '❌ Error de red';
+      resultEl.style.display = 'inline';
+    });
+}
+
+// ── Contact Enrichment ────────────────────────────────────────────────────────
+function enrichContact(btn) {
+  const contactId = btn.dataset.contactId;
+  btn.disabled = true;
+  btn.textContent = '…';
+  fetch('/contact/' + contactId + '/enrich', { method: 'POST' })
+    .then(r => r.json())
+    .then(data => {
+      const status = data.email_status;
+      const badge = {
+        'verified': '✅',
+        'probable': '🟡',
+        'catch_all': '🟡',
+        'not_found': '🔴',
+      }[status] || '🔵';
+      // Insert badge before the button and remove button
+      const span = document.createElement('span');
+      span.title = status;
+      span.style.fontSize = '0.82rem';
+      span.textContent = badge;
+      btn.parentNode.insertBefore(span, btn);
+      if (status === 'verified' || status === 'not_found') {
+        btn.remove();
+      } else {
+        btn.textContent = 'Retry';
+        btn.disabled = false;
+      }
+      // Show found email if any
+      if (data.email) {
+        const a = document.createElement('a');
+        a.href = 'mailto:' + data.email;
+        a.style.cssText = 'font-size:0.82rem;color:var(--accent);text-decoration:none';
+        a.onclick = e => e.stopPropagation();
+        a.textContent = data.email;
+        btn.parentNode.insertBefore(a, span);
+      }
+    })
+    .catch(() => { btn.textContent = 'Error'; btn.disabled = false; });
+}
+
+function enrichAll(btn) {
+  const runId = btn.dataset.runId;
+  btn.disabled = true;
+  btn.textContent = '⟳ Enriching…';
+  const progress = document.getElementById('enrich-progress');
+  progress.style.display = 'inline';
+
+  fetch('/run/' + runId + '/enrich-all', { method: 'POST' })
+    .then(r => r.json())
+    .then(data => {
+      if (data.error) { btn.textContent = 'Error: ' + data.error; return; }
+      const total = data.total;
+      const poll = setInterval(() => {
+        fetch('/run/' + runId + '/enrich-status')
+          .then(r => r.json())
+          .then(s => {
+            const done = s.done || 0;
+            progress.textContent = done + '/' + total + ' enriched';
+            btn.textContent = '⟳ ' + done + '/' + total;
+            if (done >= total) {
+              clearInterval(poll);
+              btn.textContent = '✓ Done';
+              progress.textContent = total + ' contacts processed — reload to see results';
+            }
+          });
+      }, 2000);
+    })
+    .catch(() => { btn.textContent = '⚡ Enrich All'; btn.disabled = false; });
+}
 </script>
 {% endblock %}

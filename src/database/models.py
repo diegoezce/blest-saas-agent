@@ -137,6 +137,13 @@ class Contact(Base):
     raw_data = Column(JSONB, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
 
+    # Enrichment fields
+    email_status = Column(String(20), nullable=True)   # verified | probable | catch_all | not_found
+    email_source = Column(String(30), nullable=True)   # site_scrape | pattern_verified | hunter
+    phone_whatsapp = Column(Text, nullable=True)
+    enriched_at = Column(DateTime, nullable=True)
+    enrichment_log = Column(JSONB, nullable=True)
+
     company = relationship("Company", back_populates="contacts")
 
 
