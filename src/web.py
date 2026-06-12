@@ -846,6 +846,8 @@ def create_app() -> Flask:
         from src.database.models import Company, ContactStatus, Contact, Opportunity, DiscoveryRun, Profile
         from datetime import date
 
+        today = date.today()
+
         with get_session() as db:
             pairs = (
                 db.query(Company, ContactStatus)
@@ -854,13 +856,15 @@ def create_app() -> Flask:
                 .all()
             )
 
-            company_ids = [c.id for c, _ in pairs]
-            if not company_ids:
+            if not pairs:
                 return render_template(
                     "contacts_report.html",
                     by_profile={}, profiles_order=[], total=0, needs_follow_up=0, overdue=0,
                 )
 
+            company_ids = [c.id for c, _ in pairs]
+
+            # Contacts per company — single bulk query
             contacts_rows = (
                 db.query(Contact)
                 .filter(Contact.company_id.in_(company_ids))
@@ -869,8 +873,17 @@ def create_app() -> Flask:
             )
             contacts_by_company: dict = {}
             for c in contacts_rows:
-                contacts_by_company.setdefault(c.company_id, []).append(c)
+                contacts_by_company.setdefault(c.company_id, []).append({
+                    "name": c.name or "",
+                    "role": c.role or "",
+                    "email": c.email or "",
+                    "email_status": c.email_status or "",
+                    "email_source": c.email_source or "",
+                    "linkedin_url": c.linkedin_url or "",
+                    "phone_whatsapp": c.phone_whatsapp or "",
+                })
 
+            # Best opportunity per company — single bulk query
             opp_rows = (
                 db.query(Opportunity, DiscoveryRun, Profile)
                 .join(DiscoveryRun, Opportunity.run_id == DiscoveryRun.id)
@@ -886,13 +899,11 @@ def create_app() -> Flask:
                     best_opp[opp.company_id] = opp
                     opp_profile[opp.company_id] = profile
 
-            today = date.today()
+            # Serialize all data to plain dicts while session is open
             companies_data = []
             for company, status in pairs:
                 opp = best_opp.get(company.id)
                 profile = opp_profile.get(company.id)
-                profile_name = profile.name if profile else "Default"
-                profile_id = profile.id if profile else None
 
                 desc = company.description or ""
                 words = desc.split()
@@ -909,19 +920,32 @@ def create_app() -> Flask:
                 if not notable and opp and opp.score_explanation:
                     notable = opp.score_explanation.split(".")[0].strip()[:150]
 
-                follow_up_overdue = bool(status.follow_up_date and status.follow_up_date < today)
-                follow_up_today = bool(status.follow_up_date and status.follow_up_date == today)
-                needs_followup = bool(status.follow_up_date)
+                follow_up_date = status.follow_up_date
+                follow_up_overdue = bool(follow_up_date and follow_up_date < today)
+                follow_up_today = bool(follow_up_date and follow_up_date == today)
+                needs_followup = bool(follow_up_date)
+
+                website = company.website_url or ""
+                domain = company.domain or ""
+                display_url = domain or website.replace("https://", "").replace("http://", "").split("/")[0]
 
                 companies_data.append({
-                    "company": company,
-                    "status": status,
-                    "contacts": contacts_by_company.get(company.id, []),
-                    "profile_name": profile_name,
-                    "profile_id": profile_id,
-                    "score": opp.score if opp else None,
+                    "id": company.id,
+                    "name": company.name or "",
+                    "website_url": website,
+                    "display_url": display_url[:35],
+                    "location": company.location or "",
                     "description": desc,
                     "notable": notable,
+                    "profile_name": profile.name if profile else "Default",
+                    "score": opp.score if opp else None,
+                    "contacts": contacts_by_company.get(company.id, []),
+                    "contacted_at": status.contacted_at.strftime("%d/%m/%Y") if status.contacted_at else "",
+                    "contact_method": status.contact_method or "",
+                    "response": status.response_received or "",
+                    "comment": status.comment or "",
+                    "follow_up_date": str(follow_up_date) if follow_up_date else "",
+                    "follow_up_date_display": follow_up_date.strftime("%d/%m/%Y") if follow_up_date else "",
                     "follow_up_overdue": follow_up_overdue,
                     "follow_up_today": follow_up_today,
                     "needs_followup": needs_followup,
@@ -947,7 +971,6 @@ def create_app() -> Flask:
             total=total,
             needs_follow_up=needs_follow_up,
             overdue=overdue,
-            today=today,
         )
 
     return app
