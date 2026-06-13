@@ -267,20 +267,14 @@ details.lead[open] .lead-chevron { transform:rotate(90deg); }
       <div style="font-weight:700;font-size:1rem;margin-bottom:0.75rem">{{ insight.get('company_name', '') }}</div>
       {% if insight.get('why_they_need_training') %}
         <div style="margin-bottom:0.75rem">
-          <div style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);margin-bottom:0.25rem">Why they need training</div>
-          <div style="font-size:0.9rem">{{ insight.get('why_they_need_training') }}</div>
-        </div>
-      {% endif %}
-      {% if insight.get('suggested_approach') %}
-        <div style="margin-bottom:0.75rem">
-          <div style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);margin-bottom:0.25rem">Suggested approach</div>
-          <div style="font-size:0.9rem">{{ insight.get('suggested_approach') }}</div>
+          <div style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);margin-bottom:0.25rem">Why</div>
+          <div style="font-size:0.9rem">{{ insight.get('why_they_need_training') | truncate(120, true, '…') }}</div>
         </div>
       {% endif %}
       {% if insight.get('conversation_starter') %}
         <div style="background:rgba(56,189,248,0.08);border:1px solid rgba(56,189,248,0.2);border-radius:6px;padding:0.6rem 0.85rem">
-          <div style="font-size:0.75rem;color:var(--accent);margin-bottom:0.2rem;font-weight:600">Conversation starter</div>
-          <div style="font-size:0.88rem;font-style:italic">"{{ insight.get('conversation_starter') }}"</div>
+          <div style="font-size:0.75rem;color:var(--accent);margin-bottom:0.2rem;font-weight:600">Starter</div>
+          <div style="font-size:0.88rem;font-style:italic">"{{ insight.get('conversation_starter') | truncate(100, true, '…') }}"</div>
         </div>
       {% endif %}
     </div>
@@ -905,12 +899,14 @@ function enrichAll(btn) {
           .then(r => r.json())
           .then(s => {
             const done = s.done || 0;
-            progress.textContent = done + '/' + total + ' enriched';
+            const failed = s.failed || 0;
+            const ok = done - failed;
             btn.textContent = '⟳ ' + done + '/' + total;
+            progress.textContent = ok + ' OK' + (failed ? ' · ' + failed + ' error' : '');
             if (done >= total) {
               clearInterval(poll);
-              btn.textContent = '✓ Done';
-              progress.textContent = total + ' contacts processed — reload to see results';
+              btn.textContent = '✓ Listo';
+              progress.textContent = ok + ' enriquecidos' + (failed ? ' · ' + failed + ' fallaron' : '') + ' — recargá para ver';
             }
           });
       }, 2000);

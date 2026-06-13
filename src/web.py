@@ -1,4 +1,5 @@
 import os
+import time
 
 import logging
 import threading
@@ -800,33 +801,41 @@ def create_app() -> Flask:
     @_require_auth
     def enrich_run_all(run_id):
         from src.database.session import get_session
-        from src.database.models import Contact, Company, Opportunity
+        from src.database.models import Contact, Opportunity
         from src.enrichment.pipeline import enrich_contact
 
-        with get_session() as session:
+        with get_session() as db:
             opp_company_ids = [
                 o.company_id for o in
-                session.query(Opportunity).filter_by(run_id=run_id).all()
+                db.query(Opportunity).filter_by(run_id=run_id).all()
             ]
             if not opp_company_ids:
                 return jsonify({"error": "no opportunities for this run"}), 404
+            # Only enrich contacts that haven't been enriched yet
             contact_ids = [
                 c.id for c in
-                session.query(Contact).filter(Contact.company_id.in_(opp_company_ids)).all()
+                db.query(Contact)
+                .filter(Contact.company_id.in_(opp_company_ids))
+                .filter(Contact.enriched_at.is_(None))
+                .all()
             ]
 
         if not contact_ids:
-            return jsonify({"error": "no contacts found"}), 404
+            return jsonify({"error": "no unenriched contacts found"}), 404
 
-        _enrich_progress[run_id] = {"done": 0, "total": len(contact_ids)}
+        _enrich_progress[run_id] = {"done": 0, "total": len(contact_ids), "failed": 0}
 
         def _bulk(ids: list[int]) -> None:
-            for cid in ids:
+            for i, cid in enumerate(ids):
                 try:
                     enrich_contact(cid)
                 except Exception as e:
                     logger.warning(f"Bulk enrich failed for contact {cid}: {e}")
+                    _enrich_progress[run_id]["failed"] += 1
                 _enrich_progress[run_id]["done"] += 1
+                # Small delay between contacts to avoid rate-limiting upstream APIs
+                if i < len(ids) - 1:
+                    time.sleep(2)
 
         threading.Thread(target=_bulk, args=(contact_ids,), daemon=True).start()
         return jsonify({"started": True, "total": len(contact_ids)}), 202
