@@ -4,7 +4,6 @@
 {% block content %}
 {% set quick_wins = report.get('quick_wins', []) %}
 {% set strategic = report.get('strategic_opportunities', []) %}
-{% set insights = report.get('top_insights', []) %}
 {% set drafts = report.get('outreach_drafts', []) %}
 {% set follow_ups = report.get('follow_up_suggestions', []) %}
 {% set all_opps = quick_wins + strategic %}
@@ -127,16 +126,11 @@ details.lead[open] .lead-chevron { transform:rotate(90deg); }
 </div>
 
 <!-- Section index -->
-{% if all_opps or insights or drafts or follow_ups %}
+{% if all_opps or drafts or follow_ups %}
 <div style="display:flex;flex-wrap:wrap;gap:0.5rem;margin-bottom:1.75rem;font-size:0.82rem">
   {% if all_opps %}
   <a href="#opportunities" style="background:var(--surface-hover);border:1px solid var(--border);padding:0.3rem 0.7rem;border-radius:20px;text-decoration:none;color:var(--muted)">
     📊 Oportunidades ({{ all_opps|length }})
-  </a>
-  {% endif %}
-  {% if insights %}
-  <a href="#insights" style="background:var(--surface-hover);border:1px solid var(--border);padding:0.3rem 0.7rem;border-radius:20px;text-decoration:none;color:var(--muted)">
-    💡 Insights ({{ insights|length }})
   </a>
   {% endif %}
   {% if drafts %}
@@ -160,7 +154,7 @@ details.lead[open] .lead-chevron { transform:rotate(90deg); }
 
 <!-- Opportunities -->
 {% if all_opps %}
-<details id="opportunities" class="section" open>
+<details id="opportunities" class="section">
   <summary>
     <span class="section-title" style="margin-bottom:0">📊 Top Opportunities</span>
     <span class="text-muted" style="font-size:0.8rem">({{ all_opps|length }})</span>
@@ -253,36 +247,6 @@ details.lead[open] .lead-chevron { transform:rotate(90deg); }
 </details>
 {% endif %}
 
-<!-- Insights -->
-{% if insights %}
-<details id="insights" class="section" open>
-  <summary>
-    <span class="section-title" style="margin-bottom:0">💡 Company Insights</span>
-    <span class="text-muted" style="font-size:0.8rem">({{ insights|length }})</span>
-    <span class="section-chevron">▶</span>
-  </summary>
-  <div class="grid-2">
-    {% for insight in insights %}
-    <div class="card">
-      <div style="font-weight:700;font-size:1rem;margin-bottom:0.75rem">{{ insight.get('company_name', '') }}</div>
-      {% if insight.get('why_they_need_training') %}
-        <div style="margin-bottom:0.75rem">
-          <div style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);margin-bottom:0.25rem">Why</div>
-          <div style="font-size:0.9rem">{{ insight.get('why_they_need_training') | truncate(120, true, '…') }}</div>
-        </div>
-      {% endif %}
-      {% if insight.get('conversation_starter') %}
-        <div style="background:rgba(56,189,248,0.08);border:1px solid rgba(56,189,248,0.2);border-radius:6px;padding:0.6rem 0.85rem">
-          <div style="font-size:0.75rem;color:var(--accent);margin-bottom:0.2rem;font-weight:600">Starter</div>
-          <div style="font-size:0.88rem;font-style:italic">"{{ insight.get('conversation_starter') | truncate(100, true, '…') }}"</div>
-        </div>
-      {% endif %}
-    </div>
-    {% endfor %}
-  </div>
-</details>
-{% endif %}
-
 <!-- Outreach Drafts grouped by company as collapsible leads -->
 {% if drafts %}
 {% set companies_seen = [] %}
@@ -292,7 +256,7 @@ details.lead[open] .lead-chevron { transform:rotate(90deg); }
   {% endif %}
 {% endfor %}
 
-<details id="outreach" class="section" open>
+<details id="outreach" class="section">
   <summary>
     <span class="section-title" style="margin-bottom:0">✉ Outreach Drafts</span>
     <span class="text-muted" style="font-size:0.8rem">({{ drafts|length }} drafts · {{ companies_seen|length }} empresas)</span>
@@ -439,7 +403,7 @@ details.lead[open] .lead-chevron { transform:rotate(90deg); }
 
 <!-- Follow-up suggestions -->
 {% if follow_ups %}
-<details id="followups" class="section" open>
+<details id="followups" class="section">
   <summary>
     <span class="section-title" style="margin-bottom:0">📋 Follow-Up Suggestions</span>
     <span class="text-muted" style="font-size:0.8rem">({{ follow_ups|length }})</span>
@@ -458,7 +422,7 @@ details.lead[open] .lead-chevron { transform:rotate(90deg); }
 </details>
 {% endif %}
 
-{% if not all_opps and not insights and not drafts %}
+{% if not all_opps and not drafts %}
 <div class="card" style="text-align:center;padding:3rem;color:var(--muted)">
   <div style="font-size:2rem;margin-bottom:0.75rem">📊</div>
   <p>No report data available for this run yet.</p>

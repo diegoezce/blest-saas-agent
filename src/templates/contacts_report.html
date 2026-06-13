@@ -25,8 +25,14 @@
     margin-bottom: 0.9rem;
     padding-bottom: 0.5rem;
     border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    user-select: none;
+    list-style: none;
   }
+  .profile-heading::-webkit-details-marker { display: none; }
   .profile-heading h2 { font-size: 1rem; font-weight: 700; }
+  .profile-chevron { color: var(--muted); font-size: 0.65rem; transition: transform 0.15s; margin-left: auto; }
+  details[open] > .profile-heading .profile-chevron { transform: rotate(90deg); }
 
   .followup-label {
     font-size: 0.73rem;
@@ -130,12 +136,13 @@
 
 {% for profile_name in profiles_order %}
 {% set group = by_profile[profile_name] %}
-<div class="profile-section">
+<details class="profile-section">
 
-  <div class="profile-heading">
+  <summary class="profile-heading">
     <h2>{{ profile_name }}</h2>
     <span class="badge badge-muted">{{ group | length }}</span>
-  </div>
+    <span class="profile-chevron">▶</span>
+  </summary>
 
   <!-- Follow-up subsection -->
   {% set fu_group = group | selectattr("needs_followup") | list %}
@@ -262,7 +269,7 @@
   </div>
   {% endif %}
 
-</div>
+</details>
 {% endfor %}
 
 {% endblock %}
