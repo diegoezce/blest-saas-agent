@@ -32,6 +32,10 @@ class Profile(Base):
     # How to score
     scoring_rubric = Column(JSONB, nullable=True, comment="Custom scoring rubric JSON")
     outreach_tone = Column(Text, nullable=True, comment="e.g. warm, direct, referral")
+    outreach_instructions = Column(
+        Text, nullable=True,
+        comment="Custom outreach guidance: value props, proof points, what to emphasize/avoid",
+    )
 
     # Contact targeting
     target_roles = Column(Text, nullable=True, comment="Comma-separated priority role list")

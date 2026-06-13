@@ -38,6 +38,13 @@ def run_outreach_node(state: AgentState) -> AgentState:
 
     outreach_service_desc = po.get("search_focus_terms") or "improve their business communication skills"
 
+    custom = (po.get("outreach_instructions") or "").strip()
+    custom_block = (
+        f"\nWHAT {po['agent_company_name'].upper()} OFFERS & HOW TO PITCH "
+        f"(use only what is relevant; never contradict COMPANY DATA):\n{custom}\n"
+        if custom else ""
+    )
+
     for scored_company in top:
         company_name = scored_company["company_name"]
         company  = companies_map.get(company_name, {})
@@ -78,6 +85,7 @@ def run_outreach_node(state: AgentState) -> AgentState:
                         outreach_service_description=outreach_service_desc,
                         outreach_tone=po.get("outreach_tone", "warm"),
                         company_and_insight_json=json.dumps(payload, ensure_ascii=False, indent=2),
+                        custom_instructions_block=custom_block,
                     ),
                 }],
                 response_model=CompanyOutreach,

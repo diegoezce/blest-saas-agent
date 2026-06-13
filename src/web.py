@@ -64,6 +64,7 @@ def _profile_form_data() -> dict:
         "max_employees": _int_or_none(request.form.get("max_employees")),
         "search_focus_terms": request.form.get("search_focus_terms", "").strip() or None,
         "outreach_tone": request.form.get("outreach_tone", "warm"),
+        "outreach_instructions": request.form.get("outreach_instructions", "").strip() or None,
         "target_roles": request.form.get("target_roles", "").strip() or None,
     }
 
@@ -908,11 +909,68 @@ def create_app() -> Flask:
                     best_opp[opp.company_id] = opp
                     opp_profile[opp.company_id] = profile
 
+            # ── Deduplicate companies that point to the same real business ──
+            # The same company can exist as multiple rows (name variants, missing
+            # domain on one run). Group by domain or normalized name so it shows
+            # once and feedback targets a single canonical record.
+            from src.tools.db_tools import normalize_company_name
+
+            def _dedup_key(c) -> str:
+                if c.domain:
+                    return "d:" + c.domain.lower().strip()
+                norm = normalize_company_name(c.name)
+                return "n:" + norm if norm else f"id:{c.id}"
+
+            def _feedback_weight(s) -> int:
+                w = 0
+                if s.response_received:
+                    w += 4
+                if s.follow_up_date:
+                    w += 2
+                if s.comment or s.contact_method:
+                    w += 1
+                return w
+
+            groups: dict = {}          # key → list of (company, status)
+            group_order: list = []
+            for company, status in pairs:   # already ordered by contacted_at desc
+                key = _dedup_key(company)
+                if key not in groups:
+                    groups[key] = []
+                    group_order.append(key)
+                groups[key].append((company, status))
+
             # Serialize all data to plain dicts while session is open
             companies_data = []
-            for company, status in pairs:
-                opp = best_opp.get(company.id)
-                profile = opp_profile.get(company.id)
+            for key in group_order:
+                members = groups[key]
+                # Canonical = richest feedback, tie-break = most recent (list order)
+                company, status = max(
+                    members,
+                    key=lambda m: (_feedback_weight(m[1]), -members.index(m)),
+                )
+                # Merge contacts from every duplicate row, de-duped by email/name
+                merged_contacts: list = []
+                seen_ct: set = set()
+                for m_company, _ in members:
+                    for ct in contacts_by_company.get(m_company.id, []):
+                        sig = (ct.get("email") or "").lower() or (ct.get("name") or "").lower()
+                        if sig and sig in seen_ct:
+                            continue
+                        if sig:
+                            seen_ct.add(sig)
+                        merged_contacts.append(ct)
+
+                # Best opportunity across all duplicate rows
+                opp = None
+                profile = None
+                for m_company, _ in members:
+                    m_opp = best_opp.get(m_company.id)
+                    if m_opp and (opp is None or (m_opp.score or 0) > (opp.score or 0)):
+                        opp = m_opp
+                        profile = opp_profile.get(m_company.id)
+                if profile is None:
+                    profile = opp_profile.get(company.id)
 
                 desc = company.description or ""
                 words = desc.split()
@@ -948,7 +1006,7 @@ def create_app() -> Flask:
                     "notable": notable,
                     "profile_name": profile.name if profile else "Default",
                     "score": opp.score if opp else None,
-                    "contacts": contacts_by_company.get(company.id, []),
+                    "contacts": merged_contacts,
                     "contacted_at": status.contacted_at.strftime("%d/%m/%Y") if status.contacted_at else "",
                     "contact_method": status.contact_method or "",
                     "response": status.response_received or "",

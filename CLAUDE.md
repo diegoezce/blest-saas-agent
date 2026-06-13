@@ -56,6 +56,7 @@ The app supports multiple profiles, each representing a different product/servic
 | `search_focus_terms` | Extra context for search query generation |
 | `scoring_rubric` | JSONB - custom scoring rubric; falls back to DEFAULT_SCORING_RUBRIC |
 | `outreach_tone` | One of: warm, direct, professional, referral |
+| `outreach_instructions` | Free-text pitch/value-prop guidance injected into the outreach prompt (what the company offers, proof points, what to emphasize/avoid). Tunable from the profile form. |
 | `target_roles` | One per line, priority order — internal personnel to find at each company (e.g. HR Manager, L&D Director). Shown in profile form as "Target Internal Personnel" under "Search Criteria — Who to Find" |
 
 ### How Profile Overrides Work

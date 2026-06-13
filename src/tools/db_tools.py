@@ -1,11 +1,19 @@
 import datetime
 import logging
+import re
 
 from src.database.models import Company, Contact, DailyReport, DiscoveryRun, Opportunity
 from src.database.session import get_session
 from src.graph.state import AgentState
 
 logger = logging.getLogger(__name__)
+
+# Legal/entity suffixes stripped when comparing company names for dedup
+_LEGAL_SUFFIXES = (
+    "sa", "s a", "srl", "s r l", "sas", "s a s", "saic", "sca",
+    "inc", "llc", "ltd", "ltda", "co", "corp", "gmbh",
+    "sociedad anonima", "sociedad de responsabilidad limitada",
+)
 
 
 def _normalize_domain(url: str | None) -> str | None:
@@ -18,6 +26,23 @@ def _normalize_domain(url: str | None) -> str | None:
     return url.split("/")[0].strip() or None
 
 
+def normalize_company_name(name: str | None) -> str:
+    """Normalize a company name for dedup: lowercase, drop punctuation, accents-light,
+    collapse whitespace, strip trailing legal suffixes (SA, SRL, Inc, Ltd...)."""
+    if not name:
+        return ""
+    s = name.lower().strip()
+    s = re.sub(r"[.,/&]", " ", s)
+    s = re.sub(r"[^\w\s]", "", s)
+    s = re.sub(r"\s+", " ", s).strip()
+    # strip one trailing legal suffix if present
+    for suf in sorted(_LEGAL_SUFFIXES, key=len, reverse=True):
+        if s.endswith(" " + suf):
+            s = s[: -(len(suf) + 1)].strip()
+            break
+    return s
+
+
 def _upsert_company(session, data: dict) -> int:
     domain = _normalize_domain(data.get("website_url") or data.get("domain"))
 
@@ -28,6 +53,21 @@ def _upsert_company(session, data: dict) -> int:
         existing = session.query(Company).filter(
             Company.name.ilike(data.get("name", ""))
         ).first()
+    # Fall back to normalized-name match ("Acme S.A." == "Acme")
+    if not existing:
+        norm = normalize_company_name(data.get("name"))
+        if norm:
+            token = norm.split(" ")[0]
+            candidates = (
+                session.query(Company)
+                .filter(Company.name.ilike(f"%{token}%"))
+                .limit(100)
+                .all()
+            )
+            for c in candidates:
+                if normalize_company_name(c.name) == norm:
+                    existing = c
+                    break
 
     if existing:
         existing.last_updated_at = datetime.datetime.utcnow()

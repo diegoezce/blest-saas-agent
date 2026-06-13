@@ -127,6 +127,21 @@ def _run_migrations() -> None:
     except Exception as e:
         logger.info(f"Migration note (non-fatal): {e}")
 
+    # Profile outreach_instructions column
+    try:
+        engine = get_engine()
+        inspector = inspect(engine)
+        profile_cols = {c["name"] for c in inspector.get_columns("profiles")}
+        if "outreach_instructions" not in profile_cols:
+            with engine.connect() as conn:
+                conn.execute(text(
+                    "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS outreach_instructions TEXT"
+                ))
+                conn.commit()
+                logger.info("Migration: added profiles.outreach_instructions")
+    except Exception as e:
+        logger.info(f"Migration note (non-fatal): {e}")
+
     # Contact enrichment columns
     try:
         engine = get_engine()

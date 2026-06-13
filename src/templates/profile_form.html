@@ -136,6 +136,18 @@ Training Coordinator / Coordinador de Capacitación"
         <option value="referral" {{ 'selected' if profile and profile.outreach_tone == 'referral' else '' }}>Referral-style</option>
       </select>
     </div>
+
+    <div style="margin-top:1rem">
+      <label style="font-size:0.85rem;color:var(--muted);display:block;margin-bottom:0.35rem;font-weight:600">Outreach Instructions / Pitch</label>
+      <p style="font-size:0.78rem;color:var(--muted);margin-bottom:0.5rem;line-height:1.5">
+        Guía concreta para los emails: qué ofrece {{ profile.agent_company_name if profile else 'tu empresa' }},
+        propuesta de valor, pruebas/casos, ángulos que funcionan y qué evitar. Esto se inyecta directo
+        en el prompt — cuanto más específico y verídico, menos inventa el modelo.
+      </p>
+      <textarea name="outreach_instructions" rows="6"
+        placeholder="Ej: Blest da clases de inglés corporativo 100% online con profesores nativos, planes flexibles por equipo y reportes de progreso para RR.HH. Mencioná que trabajamos con empresas tech de Argentina con clientes en EEUU. NO prometer certificaciones oficiales. NO asumir que la empresa ya da capacitación."
+        style="width:100%;padding:0.6rem 0.75rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.9rem;resize:vertical;font-family:inherit">{{ profile.outreach_instructions if profile and profile.outreach_instructions else '' }}</textarea>
+    </div>
   </div>
 
   <!-- Actions -->

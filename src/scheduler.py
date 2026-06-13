@@ -34,6 +34,7 @@ def load_profile(profile_id: int | None = None) -> tuple[int | None, dict | None
             "search_focus_terms": profile.search_focus_terms,
             "scoring_rubric": profile.scoring_rubric,
             "outreach_tone": profile.outreach_tone,
+            "outreach_instructions": profile.outreach_instructions,
             "target_roles": profile.target_roles,
         }
 
