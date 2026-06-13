@@ -31,37 +31,45 @@ def run_outreach_node(state: AgentState) -> AgentState:
 
     top = scored[: cfg.max_companies_for_outreach]
     companies_map = {c["name"]: c for c in state.get("companies", [])}
-    insights_map = {i["company_name"]: i for i in state.get("insights", [])}
-    contacts_map = {c["company_name"]: c for c in state.get("contacts", [])}
+    contacts_map  = {c["company_name"]: c for c in state.get("contacts", [])}
 
-    logger.info(f"Step 5: Generating outreach drafts for top {len(top)} companies...")
+    logger.info(f"Step 5: Generating outreach for {len(top)} companies (fast model)...")
     all_drafts: list[dict] = []
 
-    outreach_service_desc = "improve their business communication skills"
-    if po.get("search_focus_terms"):
-        outreach_service_desc = po["search_focus_terms"]
+    outreach_service_desc = po.get("search_focus_terms") or "improve their business communication skills"
 
     for scored_company in top:
         company_name = scored_company["company_name"]
-        company = companies_map.get(company_name, {})
-        insight = insights_map.get(company_name, {})
+        company  = companies_map.get(company_name, {})
         contacts = contacts_map.get(company_name, {})
 
         primary_contact = None
         if contacts and contacts.get("contacts"):
             primary_contact = contacts["contacts"][0]
 
+        # Lean payload — no insights (skipped), just what's needed for personalization
         payload = {
-            "company": company,
-            "scored_opportunity": scored_company,
-            "insight": insight,
-            "primary_contact": primary_contact,
+            "company_name":   company_name,
+            "website":        company.get("website_url"),
+            "industry":       company.get("industry"),
+            "size":           company.get("size_estimate"),
+            "location":       company.get("location"),
+            "description":    company.get("description"),
+            "signals":        company.get("signals", []),
+            "intl_clients":   company.get("has_international_clients"),
+            "english_jobs":   company.get("has_english_job_postings"),
+            "remote":         company.get("remote_friendly"),
+            "score":          scored_company.get("score"),
+            "priority":       scored_company.get("priority"),
+            "contact_name":   primary_contact.get("name") if primary_contact else None,
+            "contact_role":   primary_contact.get("role") if primary_contact else None,
+            "contact_email":  primary_contact.get("email") if primary_contact else None,
         }
 
         try:
             result = _llm().messages.create(
-                model=cfg.reasoning_model,
-                max_tokens=2048,
+                model=cfg.fast_model,
+                max_tokens=1024,
                 messages=[{
                     "role": "user",
                     "content": OUTREACH_PROMPT.format(
@@ -88,5 +96,5 @@ def run_outreach_node(state: AgentState) -> AgentState:
             logger.error(f"Outreach failed for {company_name}: {e}", exc_info=True)
             state["errors"].append(f"Outreach error ({company_name}): {e}")
 
-    logger.info(f"Generated {len(all_drafts)} outreach drafts total")
+    logger.info(f"Generated {len(all_drafts)} outreach drafts for {len(top)} companies")
     return {**state, "outreach_drafts": all_drafts}
