@@ -65,8 +65,8 @@ def run_discovery_node(state: AgentState) -> AgentState:
             return {**state, "search_queries": queries, "raw_search_results": [], "companies": []}
 
         results_text = "\n\n---\n\n".join(
-            f"Title: {r['title']}\nURL: {r['url']}\nContent: {r['content'][:600]}"
-            for r in raw_results[:50]
+            f"Title: {r['title']}\nURL: {r['url']}\nContent: {r['content'][:500]}"
+            for r in raw_results[:80]
         )
 
         industry_signals = ""

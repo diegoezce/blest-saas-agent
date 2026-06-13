@@ -3,7 +3,7 @@
 {% block content %}
 
 <style>
-  .cr-stats { display: flex; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 1.75rem; }
+  .cr-stats { display: flex; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
   .cr-stat {
     background: var(--surface);
     border: 1px solid var(--border);
@@ -12,49 +12,47 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    min-width: 100px;
+    min-width: 90px;
   }
   .cr-stat-num { font-size: 1.6rem; font-weight: 800; line-height: 1; }
   .cr-stat-label { font-size: 0.72rem; color: var(--muted); margin-top: 0.2rem; text-align: center; }
 
-  .profile-section { margin-bottom: 2.25rem; }
-  .profile-heading {
+  /* Collapsible profile sections */
+  details.profile-section { margin-bottom: 1.75rem; }
+  details.profile-section > summary {
     display: flex;
     align-items: center;
     gap: 0.65rem;
-    margin-bottom: 0.9rem;
     padding-bottom: 0.5rem;
     border-bottom: 1px solid var(--border);
     cursor: pointer;
-    user-select: none;
     list-style: none;
+    user-select: none;
+    margin-bottom: 0.9rem;
   }
-  .profile-heading::-webkit-details-marker { display: none; }
-  .profile-heading h2 { font-size: 1rem; font-weight: 700; }
-  .profile-chevron { color: var(--muted); font-size: 0.65rem; transition: transform 0.15s; margin-left: auto; }
-  details[open] > .profile-heading .profile-chevron { transform: rotate(90deg); }
+  details.profile-section > summary::-webkit-details-marker { display: none; }
+  details.profile-section > summary::before {
+    content: '▶';
+    font-size: 0.65rem;
+    color: var(--muted);
+    transition: transform 0.15s;
+    flex-shrink: 0;
+  }
+  details.profile-section[open] > summary::before { transform: rotate(90deg); }
+  details.profile-section > summary h2 { font-size: 1rem; font-weight: 700; }
 
   .followup-label {
-    font-size: 0.73rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--amber);
-    margin-bottom: 0.5rem;
+    font-size: 0.73rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.06em; color: var(--amber); margin-bottom: 0.5rem;
   }
   .rest-label {
-    font-size: 0.73rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--muted);
-    margin-bottom: 0.5rem;
-    margin-top: 1.1rem;
+    font-size: 0.73rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.06em; color: var(--muted); margin-bottom: 0.5rem; margin-top: 1rem;
   }
 
   .lead-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
     gap: 0.75rem;
   }
 
@@ -65,42 +63,118 @@
     padding: 0.9rem 1.1rem;
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
+    gap: 0.45rem;
   }
   .lead-card.overdue   { border-left: 3px solid var(--red); }
   .lead-card.due-today { border-left: 3px solid var(--amber); }
   .lead-card.upcoming  { border-left: 3px solid var(--accent); }
 
-  .lead-name { font-weight: 700; font-size: 0.97rem; }
-  .lead-meta { display: flex; flex-wrap: wrap; gap: 0.4rem; font-size: 0.79rem; color: var(--muted); align-items: center; }
-  .lead-desc { font-size: 0.81rem; color: var(--muted); line-height: 1.5; }
-  .lead-notable { font-size: 0.78rem; color: var(--muted); font-style: italic; border-left: 2px solid var(--border); padding-left: 0.5rem; }
+  .lead-name { font-weight: 700; font-size: 0.95rem; }
+  .lead-meta { display: flex; flex-wrap: wrap; gap: 0.35rem; font-size: 0.78rem; color: var(--muted); align-items: center; }
+  .lead-desc { font-size: 0.8rem; color: var(--muted); line-height: 1.5; }
+  .lead-notable { font-size: 0.77rem; color: var(--muted); font-style: italic; border-left: 2px solid var(--border); padding-left: 0.5rem; }
 
-  .contact-rows { display: flex; flex-direction: column; gap: 0.25rem; border-top: 1px solid var(--border); padding-top: 0.45rem; }
-  .contact-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem; font-size: 0.8rem; }
+  .contact-rows { display: flex; flex-direction: column; gap: 0.2rem; border-top: 1px solid var(--border); padding-top: 0.4rem; }
+  .contact-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem; font-size: 0.79rem; }
   .contact-name { font-weight: 600; }
   .contact-role { color: var(--muted); }
 
   .status-strip {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.35rem;
-    align-items: center;
-    font-size: 0.75rem;
-    color: var(--muted);
-    border-top: 1px solid var(--border);
-    padding-top: 0.4rem;
+    display: flex; flex-wrap: wrap; gap: 0.3rem; align-items: center;
+    font-size: 0.74rem; color: var(--muted);
+    border-top: 1px solid var(--border); padding-top: 0.35rem;
   }
+
+  .card-actions {
+    display: flex; gap: 0.4rem; border-top: 1px solid var(--border); padding-top: 0.4rem;
+  }
+  .btn-action {
+    flex: 1; font-size: 0.78rem; padding: 0.3rem 0.5rem; border-radius: 6px;
+    cursor: pointer; border: 1px solid var(--border); background: var(--surface-hover);
+    color: var(--muted); font-family: inherit; text-align: center;
+  }
+  .btn-action:hover { color: var(--text); border-color: var(--muted); }
+  .btn-feedback { color: var(--accent); border-color: rgba(56,189,248,0.3); }
+  .btn-feedback:hover { background: rgba(56,189,248,0.08); }
+  .btn-unmark { color: var(--red); border-color: rgba(248,113,113,0.3); }
+  .btn-unmark:hover { background: rgba(248,113,113,0.08); }
 
   .empty-state { text-align: center; padding: 3.5rem 1rem; color: var(--muted); }
 
+  /* Feedback modal mobile */
+  #feedback-modal-inner { max-width: 100% !important; margin: 0.75rem; border-radius: 12px; }
+
   @media (max-width: 600px) {
     .lead-grid { grid-template-columns: 1fr; }
-    .cr-stats { gap: 0.5rem; }
-    .cr-stat { min-width: 80px; padding: 0.5rem 0.75rem; }
-    .cr-stat-num { font-size: 1.3rem; }
+    .cr-stats { gap: 0.4rem; }
+    .cr-stat { min-width: 75px; padding: 0.45rem 0.65rem; }
+    .cr-stat-num { font-size: 1.25rem; }
   }
 </style>
+
+<!-- ── Card body macro (must be defined before use in Jinja2) ──────── -->
+{% macro _card_body(d) %}
+  <div class="lead-name">{{ d.name }}</div>
+
+  <div class="lead-meta">
+    {% if d.location %}<span>📍 {{ d.location }}</span>{% endif %}
+    {% if d.website_url %}
+    <a href="{{ d.website_url }}" target="_blank" rel="noopener" style="color:var(--accent)">🌐 {{ d.display_url }}</a>
+    {% endif %}
+    {% if d.score is not none %}
+    <span class="score {% if d.score >= 70 %}score-high{% elif d.score >= 45 %}score-mid{% else %}score-low{% endif %}">{{ d.score }}</span>
+    {% endif %}
+  </div>
+
+  {% if d.description %}<div class="lead-desc">{{ d.description }}</div>{% endif %}
+  {% if d.notable %}<div class="lead-notable">⭐ {{ d.notable }}</div>{% endif %}
+
+  {% if d.contacts %}
+  <div class="contact-rows">
+    {% for ct in d.contacts %}
+    <div class="contact-row">
+      {% if ct.name %}<span class="contact-name">{{ ct.name }}</span>{% endif %}
+      {% if ct.role %}<span class="contact-role">· {{ ct.role }}</span>{% endif %}
+      {% if ct.email %}
+      <a href="mailto:{{ ct.email }}" style="color:var(--accent);font-size:0.77rem">{{ ct.email }}</a>
+      {% if ct.email_status == 'verified' %}<span title="verificado{% if ct.email_source %} vía {{ ct.email_source }}{% endif %}">✅</span>
+      {% elif ct.email_status == 'probable' %}<span title="probable">🟡</span>
+      {% else %}<span title="sin verificar">🔴</span>{% endif %}
+      {% elif ct.linkedin_url %}
+      <a href="{{ ct.linkedin_url }}" target="_blank" rel="noopener" style="color:var(--accent);font-size:0.77rem">🔵 LinkedIn</a>
+      {% else %}<span style="color:var(--muted);font-size:0.74rem">sin email</span>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <div class="status-strip">
+    {% if d.contacted_at %}<span>📅 {{ d.contacted_at }}</span>{% endif %}
+    {% if d.contact_method %}<span class="badge badge-muted">{{ d.contact_method }}</span>{% endif %}
+    {% if d.response %}
+    <span class="badge {% if d.response in ('interested','meeting_scheduled') %}badge-green{% elif d.response in ('not_interested','wrong_contact') %}badge-red{% elif d.response == 'call_back' %}badge-amber{% else %}badge-muted{% endif %}">
+      {{ d.response | replace('_',' ') }}
+    </span>
+    {% endif %}
+    {% if d.follow_up_overdue %}<span style="color:var(--red);font-weight:600">⚠ {{ d.follow_up_date_display }}</span>
+    {% elif d.follow_up_today %}<span style="color:var(--amber);font-weight:600">📅 Hoy</span>
+    {% elif d.follow_up_date %}<span>📅 {{ d.follow_up_date_display }}</span>{% endif %}
+    {% if d.comment %}<span style="font-style:italic">{{ d.comment[:55] }}{% if d.comment|length > 55 %}…{% endif %}</span>{% endif %}
+  </div>
+
+  <div class="card-actions">
+    <button class="btn-action btn-feedback"
+      onclick="openFeedbackModal({{ d.id }}, '{{ d.name|replace("'", "\\'")|e }}')">
+      💬 Feedback
+    </button>
+    <form method="POST" action="/company/{{ d.id }}/toggle-contact" style="flex:1;display:contents">
+      <button type="submit" class="btn-action btn-unmark"
+        onclick="return confirm('¿Desmarcar {{ d.name|replace("'","\\'")|e }} como contactada?')">
+        ✕ Desmarcar
+      </button>
+    </form>
+  </div>
+{% endmacro %}
 
 <div style="margin-bottom:1.25rem">
   <h1 style="font-size:1.2rem;font-weight:800">📋 Empresas Contactadas</h1>
@@ -128,7 +202,7 @@
 
 {% if not profiles_order %}
 <div class="empty-state card">
-  <div style="font-size:2rem;margin-bottom:0.75rem">📭</div>
+  <div style="font-size:2rem;margin-bottom:0.65rem">📭</div>
   <p style="font-weight:600">Sin empresas contactadas todavía</p>
   <p style="font-size:0.83rem;margin-top:0.35rem">Marcá empresas desde cualquier reporte de descubrimiento.</p>
 </div>
@@ -137,133 +211,37 @@
 {% for profile_name in profiles_order %}
 {% set group = by_profile[profile_name] %}
 <details class="profile-section">
-
-  <summary class="profile-heading">
+  <summary>
     <h2>{{ profile_name }}</h2>
     <span class="badge badge-muted">{{ group | length }}</span>
-    <span class="profile-chevron">▶</span>
+    {% set overdue_count = group | selectattr("follow_up_overdue") | list | length %}
+    {% if overdue_count %}
+    <span class="badge badge-red">{{ overdue_count }} vencido{{ 's' if overdue_count != 1 }}</span>
+    {% endif %}
   </summary>
 
   <!-- Follow-up subsection -->
   {% set fu_group = group | selectattr("needs_followup") | list %}
   {% if fu_group %}
   <div class="followup-label">⏰ Seguimiento pendiente</div>
-  <div class="lead-grid" style="margin-bottom:0.5rem">
+  <div class="lead-grid" style="margin-bottom:0.75rem">
     {% for d in fu_group %}
-    <div class="lead-card {% if d.follow_up_overdue %}overdue{% elif d.follow_up_today %}due-today{% else %}upcoming{% endif %}">
-
-      <div class="lead-name">{{ d.name }}</div>
-
-      <div class="lead-meta">
-        {% if d.location %}<span>📍 {{ d.location }}</span>{% endif %}
-        {% if d.website_url %}
-        <a href="{{ d.website_url }}" target="_blank" rel="noopener"
-           style="color:var(--accent)">🌐 {{ d.display_url }}</a>
-        {% endif %}
-        {% if d.score is not none %}
-        <span class="score {% if d.score >= 70 %}score-high{% elif d.score >= 45 %}score-mid{% else %}score-low{% endif %}">{{ d.score }}</span>
-        {% endif %}
-      </div>
-
-      {% if d.description %}<div class="lead-desc">{{ d.description }}</div>{% endif %}
-      {% if d.notable %}<div class="lead-notable">⭐ {{ d.notable }}</div>{% endif %}
-
-      {% if d.contacts %}
-      <div class="contact-rows">
-        {% for ct in d.contacts %}
-        <div class="contact-row">
-          {% if ct.name %}<span class="contact-name">{{ ct.name }}</span>{% endif %}
-          {% if ct.role %}<span class="contact-role">· {{ ct.role }}</span>{% endif %}
-          {% if ct.email %}
-          <a href="mailto:{{ ct.email }}" style="color:var(--accent);font-size:0.78rem">{{ ct.email }}</a>
-          {% if ct.email_status == 'verified' %}<span title="verificado{% if ct.email_source %} vía {{ ct.email_source }}{% endif %}">✅</span>
-          {% elif ct.email_status == 'probable' %}<span title="probable">🟡</span>
-          {% else %}<span title="sin verificar">🔴</span>{% endif %}
-          {% elif ct.linkedin_url %}
-          <a href="{{ ct.linkedin_url }}" target="_blank" rel="noopener" style="color:var(--accent);font-size:0.78rem">🔵 LinkedIn</a>
-          {% else %}<span style="color:var(--muted);font-size:0.75rem">sin email</span>{% endif %}
-        </div>
-        {% endfor %}
-      </div>
-      {% endif %}
-
-      <div class="status-strip">
-        {% if d.contacted_at %}<span>📅 {{ d.contacted_at }}</span>{% endif %}
-        {% if d.contact_method %}<span class="badge badge-muted">{{ d.contact_method }}</span>{% endif %}
-        {% if d.response %}
-        <span class="badge {% if d.response in ('interested','meeting_scheduled') %}badge-green{% elif d.response in ('not_interested','wrong_contact') %}badge-red{% elif d.response == 'call_back' %}badge-amber{% else %}badge-muted{% endif %}">
-          {{ d.response | replace('_',' ') }}
-        </span>
-        {% endif %}
-        {% if d.follow_up_overdue %}
-        <span style="color:var(--red);font-weight:600">⚠ Vencido: {{ d.follow_up_date_display }}</span>
-        {% elif d.follow_up_today %}
-        <span style="color:var(--amber);font-weight:600">📅 Hoy</span>
-        {% elif d.follow_up_date %}
-        <span>📅 {{ d.follow_up_date_display }}</span>
-        {% endif %}
-        {% if d.comment %}<span style="font-style:italic">{{ d.comment[:60] }}{% if d.comment|length > 60 %}…{% endif %}</span>{% endif %}
-      </div>
-
+    {% set card_class = "overdue" if d.follow_up_overdue else ("due-today" if d.follow_up_today else "upcoming") %}
+    <div class="lead-card {{ card_class }}">
+      {{ _card_body(d) }}
     </div>
     {% endfor %}
   </div>
   {% endif %}
 
-  <!-- Rest of contacted companies (no follow-up) -->
+  <!-- Rest (no follow-up) -->
   {% set rest_group = group | rejectattr("needs_followup") | list %}
   {% if rest_group %}
   {% if fu_group %}<div class="rest-label">Resto</div>{% endif %}
   <div class="lead-grid">
     {% for d in rest_group %}
     <div class="lead-card">
-
-      <div class="lead-name">{{ d.name }}</div>
-
-      <div class="lead-meta">
-        {% if d.location %}<span>📍 {{ d.location }}</span>{% endif %}
-        {% if d.website_url %}
-        <a href="{{ d.website_url }}" target="_blank" rel="noopener"
-           style="color:var(--accent)">🌐 {{ d.display_url }}</a>
-        {% endif %}
-        {% if d.score is not none %}
-        <span class="score {% if d.score >= 70 %}score-high{% elif d.score >= 45 %}score-mid{% else %}score-low{% endif %}">{{ d.score }}</span>
-        {% endif %}
-      </div>
-
-      {% if d.description %}<div class="lead-desc">{{ d.description }}</div>{% endif %}
-      {% if d.notable %}<div class="lead-notable">⭐ {{ d.notable }}</div>{% endif %}
-
-      {% if d.contacts %}
-      <div class="contact-rows">
-        {% for ct in d.contacts %}
-        <div class="contact-row">
-          {% if ct.name %}<span class="contact-name">{{ ct.name }}</span>{% endif %}
-          {% if ct.role %}<span class="contact-role">· {{ ct.role }}</span>{% endif %}
-          {% if ct.email %}
-          <a href="mailto:{{ ct.email }}" style="color:var(--accent);font-size:0.78rem">{{ ct.email }}</a>
-          {% if ct.email_status == 'verified' %}<span title="verificado{% if ct.email_source %} vía {{ ct.email_source }}{% endif %}">✅</span>
-          {% elif ct.email_status == 'probable' %}<span title="probable">🟡</span>
-          {% else %}<span title="sin verificar">🔴</span>{% endif %}
-          {% elif ct.linkedin_url %}
-          <a href="{{ ct.linkedin_url }}" target="_blank" rel="noopener" style="color:var(--accent);font-size:0.78rem">🔵 LinkedIn</a>
-          {% else %}<span style="color:var(--muted);font-size:0.75rem">sin email</span>{% endif %}
-        </div>
-        {% endfor %}
-      </div>
-      {% endif %}
-
-      <div class="status-strip">
-        {% if d.contacted_at %}<span>📅 {{ d.contacted_at }}</span>{% endif %}
-        {% if d.contact_method %}<span class="badge badge-muted">{{ d.contact_method }}</span>{% endif %}
-        {% if d.response %}
-        <span class="badge {% if d.response in ('interested','meeting_scheduled') %}badge-green{% elif d.response in ('not_interested','wrong_contact') %}badge-red{% elif d.response == 'call_back' %}badge-amber{% else %}badge-muted{% endif %}">
-          {{ d.response | replace('_',' ') }}
-        </span>
-        {% endif %}
-        {% if d.comment %}<span style="font-style:italic">{{ d.comment[:60] }}{% if d.comment|length > 60 %}…{% endif %}</span>{% endif %}
-      </div>
-
+      {{ _card_body(d) }}
     </div>
     {% endfor %}
   </div>
@@ -271,5 +249,116 @@
 
 </details>
 {% endfor %}
+
+<!-- ── Feedback Modal ───────────────────────────────────────────────── -->
+<div id="feedback-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:300;align-items:center;justify-content:center">
+  <div id="feedback-modal-inner" class="card" style="width:100%;max-width:520px;padding:1.75rem;max-height:90vh;overflow-y:auto">
+    <div class="flex items-center justify-between" style="margin-bottom:1.25rem">
+      <h2 style="font-size:1.15rem;font-weight:700" id="feedback-company-name">Company</h2>
+      <button onclick="closeFeedbackModal()" style="background:none;border:none;color:var(--muted);font-size:1.3rem;cursor:pointer;padding:0.25rem">&times;</button>
+    </div>
+    <form id="feedback-form" method="POST" action="">
+      <label style="font-size:0.85rem;color:var(--muted);display:block;margin-bottom:0.35rem;font-weight:600">Notas</label>
+      <textarea name="comment" rows="3" placeholder="¿Qué pasó al contactarlos? Notas..."
+        style="width:100%;padding:0.6rem 0.75rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.9rem;resize:vertical;margin-bottom:1rem;font-family:inherit"></textarea>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;margin-bottom:1rem">
+        <div>
+          <label style="font-size:0.85rem;color:var(--muted);display:block;margin-bottom:0.35rem;font-weight:600">Método</label>
+          <select name="contact_method"
+            style="width:100%;padding:0.5rem 0.6rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.85rem">
+            <option value="">— Seleccionar —</option>
+            <option value="email">Email</option>
+            <option value="linkedin">LinkedIn</option>
+            <option value="phone">Teléfono</option>
+            <option value="whatsapp">WhatsApp</option>
+            <option value="in_person">Presencial</option>
+            <option value="other">Otro</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:0.85rem;color:var(--muted);display:block;margin-bottom:0.35rem;font-weight:600">Respuesta</label>
+          <select name="response_received"
+            style="width:100%;padding:0.5rem 0.6rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.85rem">
+            <option value="">— Seleccionar —</option>
+            <option value="interested">Interesado</option>
+            <option value="not_interested">No interesado</option>
+            <option value="no_reply">Sin respuesta</option>
+            <option value="call_back">Llamar después</option>
+            <option value="meeting_scheduled">Reunión pactada</option>
+            <option value="already_training">Ya tiene proveedor</option>
+            <option value="wrong_contact">Persona equivocada</option>
+          </select>
+        </div>
+      </div>
+
+      <div style="margin-bottom:1.25rem">
+        <label style="font-size:0.85rem;color:var(--muted);display:block;margin-bottom:0.35rem;font-weight:600">Fecha de seguimiento</label>
+        <input type="date" name="follow_up_date"
+          style="width:100%;padding:0.5rem 0.6rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.85rem">
+      </div>
+
+      <div style="margin-bottom:1.25rem">
+        <div style="font-size:0.85rem;color:var(--muted);margin-bottom:0.5rem;font-weight:600">🔍 ¿Qué mejorar en la búsqueda?</div>
+        <div style="display:flex;flex-direction:column;gap:0.4rem;font-size:0.87rem">
+          <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer"><input type="checkbox" name="icp_wrong_industry" value="yes" style="accent-color:var(--accent)"> Industria incorrecta</label>
+          <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer"><input type="checkbox" name="icp_wrong_size" value="yes" style="accent-color:var(--accent)"> Empresa muy chica/grande</label>
+          <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer"><input type="checkbox" name="icp_wrong_contact" value="yes" style="accent-color:var(--accent)"> Contacto equivocado</label>
+          <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer"><input type="checkbox" name="icp_no_english_need" value="yes" style="accent-color:var(--accent)"> Inglés no es prioridad</label>
+          <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer"><input type="checkbox" name="icp_already_training" value="yes" style="accent-color:var(--accent)"> Ya tiene proveedor</label>
+          <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer"><input type="checkbox" name="icp_wrong_location" value="yes" style="accent-color:var(--accent)"> Ubicación incorrecta</label>
+          <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer"><input type="checkbox" name="icp_no_budget" value="yes" style="accent-color:var(--accent)"> Sin presupuesto</label>
+        </div>
+        <div style="margin-top:0.5rem">
+          <input type="text" name="icp_other_text" placeholder="Otro feedback..."
+            style="width:100%;padding:0.5rem 0.6rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.84rem">
+        </div>
+      </div>
+
+      <div style="display:flex;gap:0.75rem;border-top:1px solid var(--border);padding-top:1rem">
+        <button type="submit"
+          style="flex:1;background:#38bdf8;color:#0f172a;font-weight:700;border:none;padding:0.6rem;border-radius:6px;cursor:pointer;font-size:0.9rem">
+          Guardar
+        </button>
+        <button type="button" onclick="closeFeedbackModal()"
+          style="flex:1;background:var(--surface-hover);color:var(--text);border:1px solid var(--border);padding:0.6rem;border-radius:6px;cursor:pointer;font-size:0.9rem">
+          Cancelar
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function openFeedbackModal(companyId, companyName) {
+  const modal = document.getElementById('feedback-modal');
+  const form  = document.getElementById('feedback-form');
+  document.getElementById('feedback-company-name').textContent = '💬 ' + companyName;
+  form.action = '/company/' + companyId + '/feedback';
+  form.reset();
+  fetch('/company/' + companyId + '/feedback')
+    .then(r => r.json())
+    .then(data => {
+      if (!data.exists) return;
+      if (data.comment)          form.comment.value = data.comment;
+      if (data.contact_method)   form.contact_method.value = data.contact_method;
+      if (data.response_received) form.response_received.value = data.response_received;
+      if (data.follow_up_date)   form.follow_up_date.value = data.follow_up_date;
+      const icp = data.icp_feedback || {};
+      document.querySelectorAll('[name^="icp_"]').forEach(el => {
+        if (el.type === 'checkbox' && icp[el.name] === 'yes') el.checked = true;
+        if (el.type === 'text'     && icp[el.name])           el.value   = icp[el.name];
+      });
+    })
+    .catch(() => {});
+  modal.style.display = 'flex';
+}
+function closeFeedbackModal() {
+  document.getElementById('feedback-modal').style.display = 'none';
+}
+document.getElementById('feedback-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeFeedbackModal();
+});
+</script>
 
 {% endblock %}

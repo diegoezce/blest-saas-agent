@@ -27,11 +27,11 @@ class Settings(BaseSettings):
     scheduler_timezone: str = "America/Argentina/Buenos_Aires"
 
     # Workflow tuning
-    discovery_queries_per_run: int = 8
-    max_companies_to_score: int = 30
-    max_companies_for_contacts: int = 20
-    max_companies_for_insights: int = 10
-    max_companies_for_outreach: int = 5
+    discovery_queries_per_run: int = 12
+    max_companies_to_score: int = 50
+    max_companies_for_contacts: int = 30
+    max_companies_for_insights: int = 0
+    max_companies_for_outreach: int = 20
 
     # Business targeting (defaults — overridable by Profile)
     target_cities: str = "Buenos Aires,Córdoba,Rosario,Mendoza,Neuquén"
