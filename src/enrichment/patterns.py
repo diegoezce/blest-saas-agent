@@ -16,8 +16,11 @@ def generate_candidates(first: str, last: str, domain: str) -> list[str]:
     """Return email candidates ordered by prevalence."""
     f = _slugify(first)
     l = _slugify(last)
-    if not f or not l:
+    if not f:
         return []
+    if not l:
+        # Single-name contact — only first-name pattern is possible
+        return [f"{f}@{domain}"]
     return [
         f"{f}.{l}@{domain}",
         f"{f[0]}{l}@{domain}",

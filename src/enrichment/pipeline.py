@@ -93,13 +93,13 @@ def enrich_contact(contact_id: int) -> EnrichmentResult:
                 e for e in domain_emails
                 if e.split("@")[0] not in generic_prefixes
             ]
-            if person_emails and first and last:
-                # Check if any matches the contact's name directly
+            if person_emails and first:
+                # Check if any matches the contact's name (first or last)
                 f_slug = first.lower()
-                l_slug = last.lower()
+                l_slug = last.lower() if last else None
                 matched = next(
                     (e for e in person_emails
-                     if f_slug in e or l_slug in e),
+                     if f_slug in e or (l_slug and l_slug in e)),
                     None,
                 )
                 if matched:
@@ -120,7 +120,7 @@ def enrich_contact(contact_id: int) -> EnrichmentResult:
 
         # ── Layer 2: pattern generation + SMTP verification ────────────────
         layer2: dict = {}
-        if first and last:
+        if first:
             logger.info(f"{label} — Layer 2: SMTP pattern verification")
             try:
                 scrape_emails = layer1.get("emails_found", [])
@@ -162,7 +162,7 @@ def enrich_contact(contact_id: int) -> EnrichmentResult:
                 layer2["exception"] = str(e)
                 logger.warning(f"Layer 2 failed for contact {contact_id}: {e}")
         else:
-            logger.info(f"{label} — Layer 2 skipped (no first+last name)")
+            logger.info(f"{label} — Layer 2 skipped (no first name)")
 
         result.log["layer2"] = layer2
 
@@ -172,11 +172,11 @@ def enrich_contact(contact_id: int) -> EnrichmentResult:
 
         # ── Layer 3: Hunter.io fallback ────────────────────────────────────
         layer3: dict = {}
-        if first and last:
+        if first:
             logger.info(f"{label} — Layer 3: Hunter.io lookup")
             try:
                 hunter = HunterProvider()
-                found = hunter.find_email(domain, first, last)
+                found = hunter.find_email(domain, first, last or "")
                 if found:
                     layer3["hunter_email"] = found["email"]
                     layer3["hunter_score"] = found["score"]
@@ -199,7 +199,7 @@ def enrich_contact(contact_id: int) -> EnrichmentResult:
                 layer3["exception"] = str(e)
                 logger.warning(f"Layer 3 failed for contact {contact_id}: {e}")
         else:
-            logger.info(f"{label} — Layer 3 skipped (no first+last name)")
+            logger.info(f"{label} — Layer 3 skipped (no first name)")
 
         result.log["layer3"] = layer3
 
