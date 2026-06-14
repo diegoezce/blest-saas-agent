@@ -73,6 +73,68 @@ discover_companies → score_opportunities → find_contacts → generate_insigh
   → generate_outreach → generate_report → persist_to_db
 ```
 
+### Node behavior & AI usage
+
+The pipeline is tuned for **lead volume + low AI spend**. AI calls are kept to the
+strict minimum; text processing without AI wherever possible.
+
+| Node | AI? | Notes |
+|---|---|---|
+| `discover_companies` | ✅ Haiku ×2 | 1 query-generation call + 1 company-extraction call. Slices top 80 Tavily results, 500 chars each. |
+| `score_opportunities` | ❌ none | **Pure-Python rule-based scoring** (`src/graph/nodes/scoring.py`). No AI call. See "Scoring" below. |
+| `find_contacts` | ✅ Haiku | Finds internal personnel per `target_roles`. |
+| `generate_insights` | ⏸ disabled | `max_companies_for_insights=0` → node returns `[]` immediately, no AI call. Kept in the DAG but effectively a no-op. Old runs may still have stored insight data. |
+| `generate_outreach` | ✅ Haiku | One call per company (up to `max_companies_for_outreach`). Grounded prompt. See "Outreach" below. |
+| `generate_report` | ❌ none | Assembles the report dict. |
+| `persist_to_db` | ❌ none | Upserts companies (dedup), opportunities, contacts, daily report. |
+
+### Workflow tuning (`src/config.py` → `Settings`)
+
+| Setting | Default | Purpose |
+|---|---|---|
+| `discovery_queries_per_run` | 12 | Tavily search queries generated per run |
+| `max_companies_to_score` | 50 | Cap on unique companies carried into scoring |
+| `max_companies_for_contacts` | 30 | Companies to find contacts for |
+| `max_companies_for_insights` | 0 | **0 = insights disabled** (no AI) |
+| `max_companies_for_outreach` | 20 | Companies to draft outreach for |
+
+Net effect: ~15-20 concrete leads per run at roughly ~$0.12/run (vs the old AI-scoring
++ insights design at ~$0.48/run).
+
+### Scoring (rule-based, no AI)
+
+`src/graph/nodes/scoring.py` scores each company 0-100 in pure Python from structured
+fields — no AI call. Buckets: company size (0-20), international exposure (0-25),
+remote workforce (0-20), English hiring activity (0-15), industry/tech adoption (0-10),
+English keyword signals (0-10). Priority: `quick_win` ≥70, `strategic` ≥40,
+`low_priority` <40. `_parse_size()` turns "50-100"/"200+" into an approximate headcount.
+
+### Outreach (grounded, profile-tunable)
+
+`src/graph/nodes/outreach.py` + `src/prompts/outreach.py`. Uses **Haiku** (`fast_model`),
+one lean payload per company (no insights). The prompt enforces hard **grounding rules**
+to stop hallucination:
+- Reference ONLY facts present in the company payload.
+- Never claim the company "doesn't / lacks / hasn't" something (an absence can't be verified).
+- If data is thin, open with a truthful industry/role-level observation instead of inventing a specific.
+
+A profile's `outreach_instructions` (pitch, value props, proof points, what to emphasize/
+avoid) is injected into the prompt as a `WHAT <AGENT> OFFERS` block — this is the main
+lever to improve message quality per product.
+
+### Company deduplication
+
+`_upsert_company()` in `src/tools/db_tools.py` ensures one `Company` row per real
+business so feedback never splits across duplicates:
+1. Match by normalized **domain** (`_normalize_domain`).
+2. Else exact name (`ILIKE`).
+3. Else **normalized name** via `normalize_company_name()` — lowercases, strips
+   punctuation and legal suffixes (SA, SRL, Inc, Ltd…), so "Acme S.A." == "Acme".
+
+The `/contacts-report` page also de-dups at display time: rows sharing a domain or
+normalized name are merged into one card (contacts pooled), and the record with the
+richest feedback becomes canonical so the Feedback / Desmarcar buttons target a single row.
+
 ## Contact Enrichment
 
 After a discovery run, contacts can be enriched to find verified emails via a 3-layer pipeline:
@@ -107,6 +169,15 @@ After a discovery run, contacts can be enriched to find verified emails via a 3-
 - **CLI**: `python run.py --enrich-run <run_id>`
 - Both run asynchronously (background thread, same pattern as manual trigger)
 
+### Bulk enrichment ("⚡ Enrich All")
+- Route `POST /run/<id>/enrich-all` queues contacts and processes them **sequentially** in a daemon thread.
+- **Skips already-enriched contacts** (`enriched_at IS NOT NULL`) so re-runs only fill gaps.
+- Inserts a **2s delay between contacts** to avoid rate-limiting MillionVerifier/Hunter.
+- Progress dict `_enrich_progress[run_id] = {done, total, failed}`; the JS polls
+  `/run/<id>/enrich-status` every 2s and shows `N OK · M error`.
+- Each contact takes ~15-70s (scrape + SMTP checks + Hunter fallback), so a full
+  run of 30 contacts can take several minutes — this is expected.
+
 ## Zoho Mail Integration
 
 Pushes outreach drafts directly into the Zoho Mail drafts folder.
@@ -136,15 +207,16 @@ Key functions: `is_configured()`, `exchange_grant_token()`, `create_draft()`, `_
 | Route | Method | Description |
 |---|---|---|
 | `/` | GET | All runs list (profile filter, hide failed) |
-| `/run/<id>` | GET | Run detail — quick wins, strategic, contacts, insights, outreach drafts |
+| `/run/<id>` | GET | Run detail — quick wins, strategic, contacts, outreach drafts (all sections collapsed by default; insights section removed) |
 | `/run/latest` | GET | Redirect to latest run |
 | `/run/<id>/delete` | POST | Delete a failed run and its report |
 | `/run/<id>/export/<fmt>` | GET | Export as `csv` or `md` |
 | `/run/<id>/professional-report` | GET/POST | Generate/view AI professional report |
 | `/run/<id>/zoho-drafts` | POST | Push outreach drafts to Zoho Mail |
-| `/run/<id>/enrich-all` | POST | Bulk enrich all contacts (async) |
-| `/run/<id>/enrich-status` | GET | Enrichment progress `{done, total}` |
+| `/run/<id>/enrich-all` | POST | Bulk enrich all **un-enriched** contacts (async, queued) |
+| `/run/<id>/enrich-status` | GET | Enrichment progress `{done, total, failed}` |
 | `/contact/<id>/enrich` | POST | Enrich a single contact |
+| `/contacts-report` | GET | Contacted companies grouped by profile (dedup, follow-up tracking) |
 | `/trigger` | POST | Manual discovery run (requires TRIGGER_PASSWORD) |
 | `/schedule/update` | POST | Update cron schedule + profile |
 | `/toggle-scheduler` | POST | Pause/resume scheduler |
@@ -156,11 +228,25 @@ Key functions: `is_configured()`, `exchange_grant_token()`, `create_draft()`, `_
 | `/logs` | GET | SSE log stream (JSON) |
 
 ### Run detail UI features
+- All sections (`Opportunities`, `Outreach`, `Follow-ups`) are **collapsed by default**.
 - Email status badges per lead: ✅ verified / 🟡 probable / 🔵 LinkedIn only / 🔴 not found
 - Per-contact "Enrich" button (inline result update)
-- "⚡ Enrich All" bulk button with live progress counter
+- "⚡ Enrich All" bulk button with live progress counter (`N OK · M error`)
 - "📧 Zoho Drafts" button (visible only if Zoho configured)
 - Responsive: table → stacked cards on mobile (`data-label` attributes)
+- Insights section was removed (insights are no longer generated).
+
+### Contacted Companies Report (`/contacts-report`)
+Cross-run view of every company with a `ContactStatus` record, for follow-up tracking.
+- Grouped by profile; each profile section is a **collapsible `<details>`, collapsed by default**, with an overdue badge.
+- **De-duplicated**: rows for the same business (by domain or normalized name) collapse into one card.
+- Each card: name, location, website, score, ≤40-word description, 1 notable fact, pooled
+  contact rows (name · role · email + status badge), and a status strip
+  (contacted date, method, response, follow-up date, comment).
+- Follow-up highlighting: ⚠ overdue (red border), 📅 Hoy (amber), upcoming (accent).
+- Card actions: **💬 Feedback** (opens the feedback modal) and **✕ Desmarcar** (removes
+  the `ContactStatus`) — both target the canonical (richest-feedback) record.
+- Stats bar: total contacted, follow-ups scheduled, overdue.
 
 ## Schedule
 
@@ -174,9 +260,16 @@ Key functions: `is_configured()`, `exchange_grant_token()`, `create_draft()`, `_
 
 SQLAlchemy models in `src/database/models.py`. Migration runs automatically on startup via
 `_run_migrations()` in `src/database/session.py` — uses `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`.
+Current migrations: `discovery_runs.profile_id`, `profiles.outreach_instructions`, and the
+five `contacts.*` enrichment columns.
 
 Key models: `Profile`, `DiscoveryRun`, `Company`, `Contact` (with enrichment fields), `Opportunity`,
 `ContactStatus`, `DailyReport`.
+
+- **`Company`** — deduplicated by domain/normalized name (one row per real business).
+- **`ContactStatus`** — feedback per company (PK = `company_id`, so exactly one per company):
+  `contacted_at`, `comment`, `contact_method`, `response_received`, `follow_up_date`,
+  `icp_feedback` (JSONB). Drives the `/contacts-report` page.
 
 ## Environment Variables
 
@@ -205,13 +298,15 @@ Key models: `Profile`, `DiscoveryRun`, `Company`, `Contact` (with enrichment fie
 | File | Purpose |
 |---|---|
 | `run.py` | Entry point + CLI |
-| `src/config.py` | Settings (pydantic-settings), `get_profile_overrides()` |
+| `src/config.py` | Settings (pydantic-settings), workflow tuning, `get_profile_overrides()` |
 | `src/database/models.py` | SQLAlchemy ORM models |
 | `src/database/session.py` | DB session, `init_db()`, `_run_migrations()` |
 | `src/web.py` | Flask app + all routes |
 | `src/scheduler.py` | APScheduler setup, `run_workflow_once()` |
 | `src/graph/workflow.py` | LangGraph DAG definition |
-| `src/graph/nodes/` | discovery, scoring, contacts, insights, outreach, report nodes |
+| `src/graph/nodes/` | discovery, scoring (rule-based), contacts, insights (disabled), outreach (grounded), report nodes |
+| `src/prompts/outreach.py` | Grounded outreach prompt with `custom_instructions_block` |
+| `src/tools/db_tools.py` | `persist_run_node`, `_upsert_company` (dedup), `normalize_company_name` |
 | `src/enrichment/pipeline.py` | 3-layer enrichment orchestrator |
 | `src/enrichment/scraper.py` | Site scraper (Layer 1) |
 | `src/enrichment/patterns.py` | Email pattern generation (Layer 2) |
@@ -219,5 +314,5 @@ Key models: `Profile`, `DiscoveryRun`, `Company`, `Contact` (with enrichment fie
 | `src/integrations/zoho_mail.py` | Zoho Mail OAuth2 + draft creation |
 | `src/dashboard.py` | Rich terminal dashboard, `_enrich_drafts_from_db()` |
 | `src/export.py` | CSV + Markdown export |
-| `src/templates/` | Jinja2 templates (base, runs, run, profile_form, profiles) |
+| `src/templates/` | Jinja2 templates (base, runs, run, profile_form, profiles, contacts_report) |
 | `tests/` | Unit tests for enrichment module (41 tests) |
