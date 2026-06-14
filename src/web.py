@@ -1066,14 +1066,23 @@ def create_app() -> Flask:
                     if cn and d.get("channel") == "email" and cn not in email_drafts:
                         email_drafts[cn] = d
 
+                # ContactStatus for all companies in this run
+                from src.database.models import ContactStatus
+                contact_statuses = {
+                    s.company_id: s for s in
+                    db.query(ContactStatus).filter(ContactStatus.company_id.in_(company_ids)).all()
+                }
+
                 for opp, co in opps_cos:
                     draft = email_drafts.get(co.name, {})
                     desc = (co.description or "").strip()
                     if len(desc) > 90:
                         desc = desc[:90] + "…"
+                    cs = contact_statuses.get(co.id)
                     for ct in ctcs_by_co.get(co.id, []):
                         contacts_data.append({
                             "company_name": co.name,
+                            "company_id": co.id,
                             "location": co.location or "",
                             "description": desc,
                             "score": opp.score or 0,
@@ -1086,6 +1095,8 @@ def create_app() -> Flask:
                             "enriched": ct.enriched_at is not None,
                             "subject": draft.get("subject_line", ""),
                             "body": draft.get("body", ""),
+                            "is_contacted": cs is not None,
+                            "contacted_at": str(cs.contacted_at)[:10] if cs and cs.contacted_at else "",
                         })
 
         return render_template(
