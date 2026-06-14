@@ -3,7 +3,7 @@ import re
 import time
 import urllib.robotparser
 from dataclasses import dataclass, field
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urlparse
 
 import requests
 from bs4 import BeautifulSoup
@@ -11,7 +11,7 @@ from bs4 import BeautifulSoup
 logger = logging.getLogger(__name__)
 
 _USER_AGENT = "BlestLeadAgent/1.0 (contact enrichment; +https://blest.app)"
-_TIMEOUT = 10
+_TIMEOUT = 8
 _MAX_PAGES = 6
 _PATHS_TO_CHECK = ["/", "/contacto", "/contact", "/nosotros", "/equipo", "/about"]
 
@@ -21,6 +21,34 @@ _EMAIL_RE = re.compile(r"[\w.+\-]+@[\w\-]+(?:\.[a-z]{2,})+", re.IGNORECASE)
 _PHONE_RE = re.compile(
     r"(?:\+54[\s\-]?9?[\s\-]?|0)(?:11|[2-9]\d{1,3})[\s\-]?\d{4}[\s\-]?\d{4}"
 )
+
+# Cache robots.txt per domain to avoid re-fetching for every path
+_robots_cache: dict[str, urllib.robotparser.RobotFileParser] = {}
+
+
+def _get_robots(domain: str) -> urllib.robotparser.RobotFileParser:
+    if domain in _robots_cache:
+        return _robots_cache[domain]
+    rp = urllib.robotparser.RobotFileParser()
+    try:
+        resp = requests.get(
+            f"https://{domain}/robots.txt",
+            headers={"User-Agent": _USER_AGENT},
+            timeout=5,
+        )
+        rp.parse(resp.text.splitlines())
+    except Exception:
+        pass  # assume all paths allowed if robots.txt unreachable/slow
+    _robots_cache[domain] = rp
+    return rp
+
+
+def _can_fetch(domain: str, path: str) -> bool:
+    try:
+        rp = _get_robots(domain)
+        return rp.can_fetch(_USER_AGENT, f"https://{domain}{path}")
+    except Exception:
+        return True
 
 
 @dataclass
@@ -32,34 +60,18 @@ class ScrapeResult:
     error: str | None = None
 
 
-def _can_fetch(domain: str, path: str) -> bool:
-    robots_url = f"https://{domain}/robots.txt"
-    rp = urllib.robotparser.RobotFileParser()
-    rp.set_url(robots_url)
-    try:
-        rp.read()
-        return rp.can_fetch(_USER_AGENT, f"https://{domain}{path}")
-    except Exception:
-        return True  # assume allowed if robots.txt unreachable
-
-
 def _get_page(url: str) -> str | None:
-    for attempt in range(2):
-        try:
-            resp = requests.get(
-                url,
-                headers={"User-Agent": _USER_AGENT},
-                timeout=_TIMEOUT,
-                allow_redirects=True,
-            )
-            resp.raise_for_status()
-            return resp.text
-        except requests.RequestException as e:
-            if attempt == 0:
-                logger.debug(f"Retry {url}: {e}")
-                time.sleep(2)
-            else:
-                logger.debug(f"Failed {url}: {e}")
+    try:
+        resp = requests.get(
+            url,
+            headers={"User-Agent": _USER_AGENT},
+            timeout=_TIMEOUT,
+            allow_redirects=True,
+        )
+        resp.raise_for_status()
+        return resp.text
+    except requests.RequestException as e:
+        logger.debug(f"Failed {url}: {e}")
     return None
 
 
@@ -88,8 +100,9 @@ def scrape_domain(domain: str) -> ScrapeResult:
         url = f"https://{domain}{path}"
         html = _get_page(url)
         if html is None:
-            # try http fallback once
-            html = _get_page(f"http://{domain}{path}")
+            # try http fallback only for the root path
+            if path == "/":
+                html = _get_page(f"http://{domain}{path}")
         if html is None:
             continue
 

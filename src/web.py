@@ -1,8 +1,8 @@
-import os
-import time
-
+import concurrent.futures
 import logging
+import os
 import threading
+import time
 import collections
 from functools import wraps
 
@@ -847,7 +847,13 @@ def create_app() -> Flask:
             for i, cid in enumerate(ids):
                 _enrich_progress[run_id]["current_name"] = names.get(cid, "")
                 try:
-                    enrich_contact(cid)
+                    # Hard 3-minute cap per contact so a hung scrape/SMTP call
+                    # can't freeze the entire queue indefinitely.
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                        pool.submit(enrich_contact, cid).result(timeout=180)
+                except concurrent.futures.TimeoutError:
+                    logger.warning(f"Bulk enrich timed out for contact {cid} (>180s)")
+                    _enrich_progress[run_id]["failed"] += 1
                 except Exception as e:
                     logger.warning(f"Bulk enrich failed for contact {cid}: {e}")
                     _enrich_progress[run_id]["failed"] += 1
