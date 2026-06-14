@@ -148,6 +148,7 @@ def _do_quick_run(run_id: int, pid: int | None, profile: dict | None) -> None:
 
         ep: dict = {"done": 0, "total": len(contact_ids), "failed": 0, "running": True, "current_name": None}
         state["enrich"] = ep
+        state["fresh_contact_ids"] = set(contact_ids)  # IDs new/unenriched at run start
 
         for i, cid in enumerate(contact_ids):
             ep["current_name"] = contact_names.get(cid, "")
@@ -1073,6 +1074,8 @@ def create_app() -> Flask:
                     db.query(ContactStatus).filter(ContactStatus.company_id.in_(company_ids)).all()
                 }
 
+                fresh_ids = state.get("fresh_contact_ids")  # None if old run / state lost after restart
+
                 for opp, co in opps_cos:
                     draft = email_drafts.get(co.name, {})
                     desc = (co.description or "").strip()
@@ -1080,6 +1083,9 @@ def create_app() -> Flask:
                         desc = desc[:90] + "…"
                     cs = contact_statuses.get(co.id)
                     for ct in ctcs_by_co.get(co.id, []):
+                        # Skip contacts from previous runs (only show new ones from this run)
+                        if fresh_ids is not None and ct.id not in fresh_ids:
+                            continue
                         contacts_data.append({
                             "company_name": co.name,
                             "company_id": co.id,
