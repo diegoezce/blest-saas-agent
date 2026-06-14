@@ -146,12 +146,33 @@ def persist_run_node(state: AgentState) -> AgentState:
                 if not cid:
                     continue
                 for c in contacts_data.get("contacts", []):
+                    name = c.get("name") or ""
+                    linkedin = c.get("linkedin_url") or ""
+                    # Dedup: match by LinkedIn URL (most reliable) or name within company
+                    existing = None
+                    if linkedin:
+                        existing = session.query(Contact).filter_by(
+                            company_id=cid, linkedin_url=linkedin
+                        ).first()
+                    if not existing and name:
+                        existing = session.query(Contact).filter_by(
+                            company_id=cid, name=name
+                        ).first()
+                    if existing:
+                        # Update fields that may have improved since last run
+                        if c.get("role") and not existing.role:
+                            existing.role = c["role"]
+                        if linkedin and not existing.linkedin_url:
+                            existing.linkedin_url = linkedin
+                        if c.get("email") and not existing.email:
+                            existing.email = c["email"]
+                        continue
                     contact = Contact(
                         company_id=cid,
-                        name=c.get("name"),
+                        name=name,
                         role=c.get("role"),
                         role_category=c.get("role_category"),
-                        linkedin_url=c.get("linkedin_url"),
+                        linkedin_url=linkedin or None,
                         email=c.get("email"),
                         confidence_score={"high": 0.9, "medium": 0.6, "low": 0.3}.get(
                             c.get("confidence", "low"), 0.3
