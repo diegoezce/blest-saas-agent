@@ -136,6 +136,7 @@ def enrich_contact(contact_id: int) -> EnrichmentResult:
                 logger.info(f"{label} — checking {len(candidates)} candidates: {', '.join(candidates)}")
 
                 verifier = MillionVerifierProvider()
+                unknown_fallback: str | None = None
                 for candidate in candidates:
                     time.sleep(1)  # global rate limit
                     vr = verifier.verify(candidate)
@@ -158,6 +159,17 @@ def enrich_contact(contact_id: int) -> EnrichmentResult:
                             result.email_status = "probable"
                             result.email_source = "pattern_verified"
                         # don't break — continue looking for something valid
+                    elif vr.status == "unknown" and unknown_fallback is None:
+                        unknown_fallback = candidate  # SMTP unreachable; save best guess
+
+                # If every candidate was unverifiable (SMTP timeout / no response),
+                # store the top-ranked candidate as probable rather than returning nothing
+                if not result.email and unknown_fallback:
+                    result.email = unknown_fallback
+                    result.email_status = "probable"
+                    result.email_source = "pattern_unverified"
+                    layer2["unknown_fallback"] = unknown_fallback
+                    logger.info(f"{label} — 🟡 unverifiable, storing best guess: {unknown_fallback}")
             except Exception as e:
                 layer2["exception"] = str(e)
                 logger.warning(f"Layer 2 failed for contact {contact_id}: {e}")
