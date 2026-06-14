@@ -121,6 +121,10 @@
     {{ with_email|length }} con email ·
     {{ with_draft|length }} con draft
   </span>
+  <button id="filter-email-btn" onclick="toggleEmailFilter()"
+    style="background:var(--surface-hover);border:1px solid var(--border);padding:0.35rem 0.9rem;border-radius:6px;cursor:pointer;font-size:0.82rem;color:var(--muted);font-weight:600">
+    ✉ Solo con email
+  </button>
   {% if zoho_configured and with_email|length > 0 %}
   <button id="push-all-btn" onclick="pushAllZoho()"
     style="background:#0ea5e9;color:#fff;border:none;padding:0.45rem 1.1rem;border-radius:6px;cursor:pointer;font-size:0.85rem;font-weight:600">
@@ -149,7 +153,7 @@
     {% for item in contacts_data %}
       {% set first_of_company = (item.company_id != ns.last_co) %}
       {% set ns.last_co = item.company_id %}
-      <tr>
+      <tr data-has-email="{{ 'yes' if item.email else 'no' }}">
         <td>
           <div style="font-weight:600;font-size:0.9rem">{{ item.company_name }}</div>
           {% if item.location %}<div style="font-size:0.75rem;color:var(--muted)">📍 {{ item.location }}</div>{% endif %}
@@ -258,6 +262,22 @@
 
 <script>
 const QR_RUN_ID = {{ run_id }};
+
+var _emailFilterOn = false;
+function toggleEmailFilter() {
+  _emailFilterOn = !_emailFilterOn;
+  const btn = document.getElementById('filter-email-btn');
+  btn.style.background = _emailFilterOn ? 'rgba(56,189,248,0.15)' : 'var(--surface-hover)';
+  btn.style.color = _emailFilterOn ? 'var(--accent)' : 'var(--muted)';
+  btn.style.borderColor = _emailFilterOn ? 'var(--accent)' : 'var(--border)';
+  document.querySelectorAll('.qr-table tbody tr').forEach(function(row) {
+    if (_emailFilterOn && row.dataset.hasEmail !== 'yes') {
+      row.style.display = 'none';
+    } else {
+      row.style.display = '';
+    }
+  });
+}
 
 function showDraft(btn) {
   document.getElementById('draft-modal-title').textContent = btn.dataset.company;
