@@ -811,12 +811,17 @@ def create_app() -> Flask:
             return jsonify({"error": "already_running", "progress": existing}), 409
 
         with get_session() as db:
+            from src.database.models import Company
             opp_company_ids = [
                 o.company_id for o in
                 db.query(Opportunity).filter_by(run_id=run_id).all()
             ]
             if not opp_company_ids:
                 return jsonify({"error": "no opportunities for this run"}), 404
+            company_names = {
+                c.id: c.name for c in
+                db.query(Company).filter(Company.id.in_(opp_company_ids)).all()
+            }
             # Only enrich contacts that haven't been enriched yet
             contacts = (
                 db.query(Contact)
@@ -825,7 +830,10 @@ def create_app() -> Flask:
                 .all()
             )
             contact_ids = [c.id for c in contacts]
-            contact_names = {c.id: c.name or f"#{c.id}" for c in contacts}
+            contact_names = {
+                c.id: c.name or company_names.get(c.company_id, f"#{c.id}")
+                for c in contacts
+            }
 
         if not contact_ids:
             return jsonify({"error": "no unenriched contacts found"}), 404
