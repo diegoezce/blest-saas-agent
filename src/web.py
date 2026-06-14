@@ -967,11 +967,31 @@ def create_app() -> Flask:
 
         if request.method == "GET":
             with get_session() as db:
+                from src.database.models import Profile as _Prof
                 profs = db.query(Profile).filter_by(active=True).order_by(Profile.id).all()
                 profiles_data = [{"id": p.id, "name": p.name} for p in profs]
+                # Recent runs (last 15, completed or running) for the history list
+                recent_runs_q = (
+                    db.query(DiscoveryRun, Profile)
+                    .outerjoin(Profile, DiscoveryRun.profile_id == Profile.id)
+                    .order_by(DiscoveryRun.id.desc())
+                    .limit(15)
+                    .all()
+                )
+                recent_runs = [
+                    {
+                        "run_id": r.id,
+                        "run_date": r.run_date.isoformat() if r.run_date else "",
+                        "status": r.status,
+                        "profile_name": p.name if p else "Default",
+                        "companies_found": r.companies_found or 0,
+                    }
+                    for r, p in recent_runs_q
+                ]
             return render_template("quick_run.html", profiles=profiles_data, run_id=None,
                                    phase=None, enrich={}, contacts_data=[], error="",
-                                   zoho_configured=_zoho_ok(), profile_name="")
+                                   zoho_configured=_zoho_ok(), profile_name="",
+                                   recent_runs=recent_runs)
 
         profile_id_str = request.form.get("profile_id", "")
         profile_id = int(profile_id_str) if profile_id_str.isdigit() else None
@@ -1078,6 +1098,7 @@ def create_app() -> Flask:
             zoho_configured=_zoho_ok(),
             error=state.get("error", ""),
             profiles=[],
+            recent_runs=[],
         )
 
     @app.route("/quick-run/<int:run_id>/status")

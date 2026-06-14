@@ -51,6 +51,31 @@
     4. Genera un email de outreach por empresa<br>
     5. Permite hacer push directo a Zoho Mail con un click
   </div>
+
+  {% if recent_runs %}
+  <div style="margin-top:2rem">
+    <div style="font-size:0.78rem;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.6rem">Runs anteriores</div>
+    <div class="card" style="padding:0;overflow:hidden">
+      {% for r in recent_runs %}
+      <a href="/quick-run/{{ r.run_id }}"
+        style="display:flex;align-items:center;justify-content:space-between;padding:0.65rem 1rem;{% if not loop.last %}border-bottom:1px solid var(--border);{% endif %}text-decoration:none;color:var(--text)">
+        <div style="display:flex;align-items:center;gap:0.75rem">
+          {% if r.status == "completed" %}<span style="color:#4ade80;font-size:0.8rem">✓</span>
+          {% elif r.status == "running" %}<span style="color:var(--accent);font-size:0.8rem">⟳</span>
+          {% elif r.status == "failed" %}<span style="color:#f87171;font-size:0.8rem">✕</span>
+          {% else %}<span style="color:var(--muted);font-size:0.8rem">·</span>{% endif %}
+          <span style="font-size:0.87rem">{{ r.run_date }}</span>
+          <span style="font-size:0.8rem;color:var(--muted)">{{ r.profile_name }}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:1rem">
+          {% if r.companies_found %}<span style="font-size:0.78rem;color:var(--muted)">{{ r.companies_found }} empresas</span>{% endif %}
+          <span style="color:var(--muted);font-size:0.75rem">#{{ r.run_id }} →</span>
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
 </div>
 
 {% else %}
