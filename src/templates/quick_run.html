@@ -13,7 +13,8 @@
 .phase-bar.error  { background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.25);color:#f87171 }
 .enrich-spinner { display:inline-block;animation:spin 0.7s linear infinite }
 @keyframes spin { to { transform:rotate(360deg) } }
-.qr-action-bar { display:flex;align-items:center;gap:1rem;margin-bottom:1rem;flex-wrap:wrap }
+.qr-table tr.company-first td { border-top: 2px solid var(--border); }
+.qr-table tr.company-first:first-child td { border-top: none; }
 </style>
 
 {% if not run_id %}
@@ -153,8 +154,10 @@
     {% for item in contacts_data %}
       {% set first_of_company = (item.company_id != ns.last_co) %}
       {% set ns.last_co = item.company_id %}
-      <tr data-has-email="{{ 'yes' if item.email else 'no' }}">
+      <tr data-has-email="{{ 'yes' if item.email else 'no' }}" data-company-id="{{ item.company_id }}"
+          class="{{ 'company-first' if first_of_company else '' }}">
         <td>
+          {% if first_of_company %}
           <div style="font-weight:600;font-size:0.9rem">{{ item.company_name }}</div>
           {% if item.location %}<div style="font-size:0.75rem;color:var(--muted)">📍 {{ item.location }}</div>{% endif %}
           {% if item.score %}
@@ -162,6 +165,9 @@
             {% elif item.score >= 50 %}<span class="score score-mid" style="font-size:0.7rem;padding:0.1rem 0.35rem">{{ item.score }}</span>
             {% else %}<span class="score score-low" style="font-size:0.7rem;padding:0.1rem 0.35rem">{{ item.score }}</span>
             {% endif %}
+          {% endif %}
+          {% else %}
+          <span style="color:var(--border);padding-left:0.75rem;font-size:0.8rem">↳</span>
           {% endif %}
         </td>
         <td>
@@ -183,9 +189,11 @@
             <span style="color:var(--muted);font-size:0.78rem">🔴 no encontrado</span>
           {% endif %}
         </td>
-        <td style="color:var(--muted);font-size:0.8rem;max-width:180px;word-break:break-word">{{ item.description or "—" }}</td>
+        <td style="color:var(--muted);font-size:0.8rem;max-width:180px;word-break:break-word">
+          {% if first_of_company %}{{ item.description or "—" }}{% endif %}
+        </td>
         <td style="text-align:center">
-          {% if item.body %}
+          {% if first_of_company and item.body %}
           <button onclick="showDraft(this)"
             data-company="{{ item.company_name|e }}"
             data-subject="{{ item.subject|e }}"
@@ -193,6 +201,7 @@
             style="font-size:0.78rem;padding:0.2rem 0.6rem;background:var(--surface-hover);border:1px solid var(--border);border-radius:4px;color:var(--muted);cursor:pointer">
             ver
           </button>
+          {% elif not first_of_company %}
           {% else %}<span style="color:var(--muted)">—</span>{% endif %}
         </td>
         {% if zoho_configured %}
@@ -270,12 +279,18 @@ function toggleEmailFilter() {
   btn.style.background = _emailFilterOn ? 'rgba(56,189,248,0.15)' : 'var(--surface-hover)';
   btn.style.color = _emailFilterOn ? 'var(--accent)' : 'var(--muted)';
   btn.style.borderColor = _emailFilterOn ? 'var(--accent)' : 'var(--border)';
-  document.querySelectorAll('.qr-table tbody tr').forEach(function(row) {
-    if (_emailFilterOn && row.dataset.hasEmail !== 'yes') {
-      row.style.display = 'none';
-    } else {
-      row.style.display = '';
-    }
+  // Group rows by company; hide entire group if no contact in group has email
+  const rows = Array.from(document.querySelectorAll('.qr-table tbody tr'));
+  const byCompany = {};
+  rows.forEach(function(row) {
+    var cid = row.dataset.companyId;
+    if (!byCompany[cid]) byCompany[cid] = { rows: [], hasEmail: false };
+    byCompany[cid].rows.push(row);
+    if (row.dataset.hasEmail === 'yes') byCompany[cid].hasEmail = true;
+  });
+  Object.values(byCompany).forEach(function(group) {
+    var hide = _emailFilterOn && !group.hasEmail;
+    group.rows.forEach(function(row) { row.style.display = hide ? 'none' : ''; });
   });
 }
 
