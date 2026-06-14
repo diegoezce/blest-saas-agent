@@ -332,7 +332,7 @@ details.lead[open] .lead-chevron { transform:rotate(90deg); }
           <button onclick="event.stopPropagation();openEnrichDetail(this)"
             data-email="{{ first.get('contact_email','') }}"
             data-contact-id="{{ first.get('contact_id','') }}"
-            data-elog="{{ elog|tojson|e }}"
+            data-elog='{{ elog|tojson }}'
             style="font-size:0.7rem;padding:0.05rem 0.35rem;background:rgba(251,191,36,0.15);border:1px solid rgba(251,191,36,0.4);border-radius:4px;color:#fbbf24;cursor:pointer">ver</button>
           {% endif %}
         {% elif estatus == 'not_found' %}
@@ -341,7 +341,7 @@ details.lead[open] .lead-chevron { transform:rotate(90deg); }
           <button onclick="event.stopPropagation();openEnrichDetail(this)"
             data-email=""
             data-contact-id="{{ first.get('contact_id','') }}"
-            data-elog="{{ elog|tojson|e }}"
+            data-elog='{{ elog|tojson }}'
             style="font-size:0.7rem;padding:0.05rem 0.35rem;background:var(--surface-hover);border:1px solid var(--border);border-radius:4px;color:var(--muted);cursor:pointer">ver</button>
           {% endif %}
         {% elif first.get('contact_linkedin_url') %}
