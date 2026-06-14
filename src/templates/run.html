@@ -272,12 +272,13 @@ details.lead[open] .lead-chevron { transform:rotate(90deg); }
       style="background:var(--surface-hover);border:1px solid var(--border);color:var(--muted);padding:0.25rem 0.65rem;border-radius:6px;cursor:pointer;font-size:0.8rem">
       Colapsar todos
     </button>
-    <button id="enrich-all-btn" data-run-id="{{ run.id }}" onclick="enrichAll(this);event.stopPropagation()"
+    <button id="enrich-all-btn" data-run-id="{{ run.id }}" onclick="event.stopPropagation();enrichAll(this)"
       style="background:var(--surface-hover);border:1px solid var(--border);color:var(--accent);padding:0.25rem 0.65rem;border-radius:6px;cursor:pointer;font-size:0.8rem">
       ⚡ Enrich All
     </button>
     <span id="enrich-progress" style="font-size:0.78rem;color:var(--muted);display:none"></span>
   </div>
+  <div id="enrich-current" style="font-size:0.75rem;color:var(--muted);display:none;padding:0.15rem 0.1rem 0 0.1rem"></div>
 
   {% for company_name in companies_seen %}
     {% set company_drafts = drafts | selectattr('company_name', 'equalto', company_name) | list %}
@@ -328,7 +329,7 @@ details.lead[open] .lead-chevron { transform:rotate(90deg); }
         {% elif estatus == 'probable' %}
           <span title="🟡 Email probable — no verificado por SMTP" style="font-size:0.82rem;cursor:help">🟡</span>
           {% if elog %}
-          <button onclick="openEnrichDetail(this);event.stopPropagation()"
+          <button onclick="event.stopPropagation();openEnrichDetail(this)"
             data-email="{{ first.get('contact_email','') }}"
             data-contact-id="{{ first.get('contact_id','') }}"
             data-elog="{{ elog|tojson|e }}"
@@ -337,7 +338,7 @@ details.lead[open] .lead-chevron { transform:rotate(90deg); }
         {% elif estatus == 'not_found' %}
           <span title="🔴 No se encontró email" style="font-size:0.82rem;color:var(--muted);cursor:help">🔴</span>
           {% if elog %}
-          <button onclick="openEnrichDetail(this);event.stopPropagation()"
+          <button onclick="event.stopPropagation();openEnrichDetail(this)"
             data-email=""
             data-contact-id="{{ first.get('contact_id','') }}"
             data-elog="{{ elog|tojson|e }}"
@@ -688,7 +689,7 @@ function enrichContact(btn) {
             : 'background:var(--surface-hover);border:1px solid var(--border);color:var(--muted)');
         verBtn.dataset.email = data.email || '';
         verBtn.dataset.elog = JSON.stringify(elog);
-        verBtn.onclick = e => { openEnrichDetail(verBtn); e.stopPropagation(); };
+        verBtn.onclick = e => { e.stopPropagation(); openEnrichDetail(verBtn); };
         btn.parentNode.insertBefore(verBtn, btn);
       }
 
@@ -846,36 +847,84 @@ function createDraftFromModal(btn) {
     });
 }
 
+let _enrichPollId = null;
+
+function _startEnrichPolling(runId, total) {
+  if (_enrichPollId) clearInterval(_enrichPollId);
+  const btn = document.getElementById('enrich-all-btn');
+  const progress = document.getElementById('enrich-progress');
+  const current = document.getElementById('enrich-current');
+  if (btn) { btn.disabled = true; }
+  if (progress) progress.style.display = 'inline';
+
+  _enrichPollId = setInterval(() => {
+    fetch('/run/' + runId + '/enrich-status')
+      .then(r => r.json())
+      .then(s => {
+        const done = s.done || 0;
+        const failed = s.failed || 0;
+        const ok = done - failed;
+        const tot = s.total || total;
+        if (btn) btn.textContent = '⟳ ' + done + '/' + tot;
+        if (progress) progress.textContent = ok + ' OK' + (failed ? ' · ' + failed + ' error' : '');
+        if (current) {
+          if (s.running && s.current_name) {
+            current.style.display = 'block';
+            current.textContent = '⟳ Procesando: ' + s.current_name;
+          } else {
+            current.style.display = 'none';
+          }
+        }
+        if (!s.running && done >= tot) {
+          clearInterval(_enrichPollId);
+          _enrichPollId = null;
+          if (btn) { btn.textContent = '✓ Listo'; btn.disabled = false; }
+          if (current) current.style.display = 'none';
+          if (progress) progress.textContent = ok + ' enriquecidos' + (failed ? ' · ' + failed + ' fallaron' : '') + ' — recargá para ver';
+        }
+      })
+      .catch(() => {});
+  }, 2000);
+}
+
 function enrichAll(btn) {
   const runId = btn.dataset.runId;
   btn.disabled = true;
-  btn.textContent = '⟳ Enriching…';
-  const progress = document.getElementById('enrich-progress');
-  progress.style.display = 'inline';
+  btn.textContent = '⟳ Iniciando…';
 
   fetch('/run/' + runId + '/enrich-all', { method: 'POST' })
-    .then(r => r.json())
-    .then(data => {
-      if (data.error) { btn.textContent = 'Error: ' + data.error; return; }
-      const total = data.total;
-      const poll = setInterval(() => {
-        fetch('/run/' + runId + '/enrich-status')
-          .then(r => r.json())
-          .then(s => {
-            const done = s.done || 0;
-            const failed = s.failed || 0;
-            const ok = done - failed;
-            btn.textContent = '⟳ ' + done + '/' + total;
-            progress.textContent = ok + ' OK' + (failed ? ' · ' + failed + ' error' : '');
-            if (done >= total) {
-              clearInterval(poll);
-              btn.textContent = '✓ Listo';
-              progress.textContent = ok + ' enriquecidos' + (failed ? ' · ' + failed + ' fallaron' : '') + ' — recargá para ver';
-            }
-          });
-      }, 2000);
+    .then(r => {
+      if (r.status === 409) {
+        return r.json().then(d => {
+          const p = d.progress || {};
+          btn.textContent = '⟳ Ya corriendo';
+          _startEnrichPolling(runId, p.total || 0);
+        });
+      }
+      return r.json().then(data => {
+        if (data.error) {
+          btn.textContent = '⚡ Enrich All';
+          btn.disabled = false;
+          const progress = document.getElementById('enrich-progress');
+          if (progress) { progress.style.display = 'inline'; progress.textContent = '⚠ ' + data.error; }
+          return;
+        }
+        _startEnrichPolling(runId, data.total);
+      });
     })
     .catch(() => { btn.textContent = '⚡ Enrich All'; btn.disabled = false; });
 }
+
+// Auto-resume if enrichment was running before page load
+document.addEventListener('DOMContentLoaded', function() {
+  fetch('/run/' + RUN_ID + '/enrich-status')
+    .then(r => r.json())
+    .then(s => {
+      if (s.running || (s.total > 0 && (s.done || 0) < s.total)) {
+        _startEnrichPolling(RUN_ID, s.total);
+      }
+    })
+    .catch(() => {});
+});
 </script>
 {% endblock %}

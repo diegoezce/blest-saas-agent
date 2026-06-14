@@ -805,6 +805,11 @@ def create_app() -> Flask:
         from src.database.models import Contact, Opportunity
         from src.enrichment.pipeline import enrich_contact
 
+        # Block double-runs: return current progress if already active
+        existing = _enrich_progress.get(run_id, {})
+        if existing.get("running"):
+            return jsonify({"error": "already_running", "progress": existing}), 409
+
         with get_session() as db:
             opp_company_ids = [
                 o.company_id for o in
@@ -813,32 +818,38 @@ def create_app() -> Flask:
             if not opp_company_ids:
                 return jsonify({"error": "no opportunities for this run"}), 404
             # Only enrich contacts that haven't been enriched yet
-            contact_ids = [
-                c.id for c in
+            contacts = (
                 db.query(Contact)
                 .filter(Contact.company_id.in_(opp_company_ids))
                 .filter(Contact.enriched_at.is_(None))
                 .all()
-            ]
+            )
+            contact_ids = [c.id for c in contacts]
+            contact_names = {c.id: c.name or f"#{c.id}" for c in contacts}
 
         if not contact_ids:
             return jsonify({"error": "no unenriched contacts found"}), 404
 
-        _enrich_progress[run_id] = {"done": 0, "total": len(contact_ids), "failed": 0}
+        _enrich_progress[run_id] = {
+            "done": 0, "total": len(contact_ids), "failed": 0,
+            "running": True, "current_name": None,
+        }
 
-        def _bulk(ids: list[int]) -> None:
+        def _bulk(ids: list[int], names: dict) -> None:
             for i, cid in enumerate(ids):
+                _enrich_progress[run_id]["current_name"] = names.get(cid, "")
                 try:
                     enrich_contact(cid)
                 except Exception as e:
                     logger.warning(f"Bulk enrich failed for contact {cid}: {e}")
                     _enrich_progress[run_id]["failed"] += 1
                 _enrich_progress[run_id]["done"] += 1
-                # Small delay between contacts to avoid rate-limiting upstream APIs
                 if i < len(ids) - 1:
                     time.sleep(2)
+            _enrich_progress[run_id]["running"] = False
+            _enrich_progress[run_id]["current_name"] = None
 
-        threading.Thread(target=_bulk, args=(contact_ids,), daemon=True).start()
+        threading.Thread(target=_bulk, args=(contact_ids, contact_names), daemon=True).start()
         return jsonify({"started": True, "total": len(contact_ids)}), 202
 
     @app.route("/run/<int:run_id>/enrich-status")
