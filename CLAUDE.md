@@ -141,7 +141,8 @@ After a discovery run, contacts can be enriched to find verified emails via a 3-
 
 ### Layer 1 — Site scraping (`src/enrichment/scraper.py`)
 - Downloads up to 6 pages per domain (`/`, `/contacto`, `/contact`, `/nosotros`, `/equipo`, `/about`)
-- Respects `robots.txt`, 10s timeout, 1 req/s rate limit, `User-Agent: BlestLeadAgent/1.0`
+- Fetches `robots.txt` via `requests` with **5s timeout** (cached per domain to avoid 6× refetch); 8s page timeout, no retry
+- http fallback only attempted on the root path `/`
 - Extracts emails (regex) and Argentine phone/WhatsApp numbers
 - All found emails are used to infer the corporate pattern for Layer 2
 
@@ -172,9 +173,13 @@ After a discovery run, contacts can be enriched to find verified emails via a 3-
 ### Bulk enrichment ("⚡ Enrich All")
 - Route `POST /run/<id>/enrich-all` queues contacts and processes them **sequentially** in a daemon thread.
 - **Skips already-enriched contacts** (`enriched_at IS NOT NULL`) so re-runs only fill gaps.
+- **Blocks double-runs**: returns 409 if already active for that run_id.
+- **Hard 3-minute cap per contact** via `ThreadPoolExecutor.result(timeout=180)` — a hung contact is marked failed and the queue moves on.
 - Inserts a **2s delay between contacts** to avoid rate-limiting MillionVerifier/Hunter.
-- Progress dict `_enrich_progress[run_id] = {done, total, failed}`; the JS polls
-  `/run/<id>/enrich-status` every 2s and shows `N OK · M error`.
+- Progress dict `_enrich_progress[run_id] = {done, total, failed, running, current_name}`:
+  - `current_name` updates before each contact so the UI can show "⟳ Procesando: John Smith"
+  - JS polls `/run/<id>/enrich-status` every 2s; **auto-resumes on page reload** (DOMContentLoaded check)
+  - Displays `N OK · M error` inline
 - Each contact takes ~15-70s (scrape + SMTP checks + Hunter fallback), so a full
   run of 30 contacts can take several minutes — this is expected.
 
@@ -214,9 +219,15 @@ Key functions: `is_configured()`, `exchange_grant_token()`, `create_draft()`, `_
 | `/run/<id>/professional-report` | GET/POST | Generate/view AI professional report |
 | `/run/<id>/zoho-drafts` | POST | Push outreach drafts to Zoho Mail |
 | `/run/<id>/enrich-all` | POST | Bulk enrich all **un-enriched** contacts (async, queued) |
-| `/run/<id>/enrich-status` | GET | Enrichment progress `{done, total, failed}` |
+| `/run/<id>/enrich-status` | GET | Enrichment progress `{done, total, failed, running, current_name}` |
 | `/contact/<id>/enrich` | POST | Enrich a single contact |
 | `/contacts-report` | GET | Contacted companies grouped by profile (dedup, follow-up tracking) |
+| `/quick-run` | GET | Quick Run form + history list (last 15 runs) |
+| `/quick-run` | POST | Start a Quick Run (creates DiscoveryRun, spawns background thread) |
+| `/quick-run/<run_id>` | GET | Quick Run results page |
+| `/quick-run/<run_id>/status` | GET | Polling endpoint `{phase, done, total, error}` |
+| `/quick-run/<run_id>/push-all-zoho` | POST | Push all email drafts in a Quick Run to Zoho Mail |
+| `/quick-run/<run_id>/push-one-zoho` | POST | Push a single company's draft to Zoho Mail |
 | `/trigger` | POST | Manual discovery run (requires TRIGGER_PASSWORD) |
 | `/schedule/update` | POST | Update cron schedule + profile |
 | `/toggle-scheduler` | POST | Pause/resume scheduler |
@@ -235,6 +246,30 @@ Key functions: `is_configured()`, `exchange_grant_token()`, `create_draft()`, `_
 - "📧 Zoho Drafts" button (visible only if Zoho configured)
 - Responsive: table → stacked cards on mobile (`data-label` attributes)
 - Insights section was removed (insights are no longer generated).
+
+### Quick Run (`/quick-run`)
+
+Fast email-hunting workflow designed to maximize contact coverage in a single pass.
+
+**What it does:**
+1. Runs the full discovery pipeline (same LangGraph DAG as a regular run) for the chosen profile.
+2. Immediately auto-enriches all contacts from that run (3-layer pipeline: scrape → pattern + SMTP → Hunter).
+3. Results page shows a flat table: Empresa | Contacto | Email badge | Descripción | Draft | Zoho | Seguimiento.
+
+**Implementation (`src/web.py` — `_do_quick_run`):**
+- Creates a `DiscoveryRun` row before spawning the thread (so the redirect to `/quick-run/<run_id>` is immediate).
+- Invokes `graph.invoke(initial_state)` directly; does NOT call `run_workflow_once` (avoids scheduler coupling).
+- After graph completes, queries all contacts for the run and enriches them sequentially with a 180s hard cap and 2s delay between contacts.
+- Progress state stored in module-level `_quick_run_state[run_id]`: `{phase, done, total, error}`.
+  - Phases: `running` (graph) → `enriching` (contacts) → `done` / `error`.
+
+**Results page (`src/templates/quick_run.html`):**
+- JS polls `/quick-run/<run_id>/status` every 3s during active phases; reloads when `phase == "done"`.
+- "Push all to Zoho" button → `POST /quick-run/<run_id>/push-all-zoho` (bulk, returns count).
+- Per-row "Zoho" button → `POST /quick-run/<run_id>/push-one-zoho` (single company).
+- "Seguimiento" column: one toggle-contact button per company (using Jinja2 `namespace` to track `last_co` across rows).
+- Draft preview modal with copy-to-clipboard.
+- History list on the form page (`GET /quick-run`) shows last 15 DiscoveryRuns for navigation.
 
 ### Contacted Companies Report (`/contacts-report`)
 Cross-run view of every company with a `ContactStatus` record, for follow-up tracking.
@@ -267,6 +302,10 @@ Key models: `Profile`, `DiscoveryRun`, `Company`, `Contact` (with enrichment fie
 `ContactStatus`, `DailyReport`.
 
 - **`Company`** — deduplicated by domain/normalized name (one row per real business).
+- **`Contact`** — deduplicated within a company at insert time in `persist_run_node`:
+  match by `linkedin_url` first (most reliable), then by `name` within the same `company_id`.
+  On match, missing fields (`role`, `linkedin_url`, `email`) are backfilled from the new run;
+  no duplicate row is created. This means the same person found across multiple runs stays as one row.
 - **`ContactStatus`** — feedback per company (PK = `company_id`, so exactly one per company):
   `contacted_at`, `comment`, `contact_method`, `response_received`, `follow_up_date`,
   `icp_feedback` (JSONB). Drives the `/contacts-report` page.
@@ -314,5 +353,5 @@ Key models: `Profile`, `DiscoveryRun`, `Company`, `Contact` (with enrichment fie
 | `src/integrations/zoho_mail.py` | Zoho Mail OAuth2 + draft creation |
 | `src/dashboard.py` | Rich terminal dashboard, `_enrich_drafts_from_db()` |
 | `src/export.py` | CSV + Markdown export |
-| `src/templates/` | Jinja2 templates (base, runs, run, profile_form, profiles, contacts_report) |
+| `src/templates/` | Jinja2 templates (base, runs, run, profile_form, profiles, contacts_report, quick_run) |
 | `tests/` | Unit tests for enrichment module (41 tests) |
