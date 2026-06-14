@@ -16,6 +16,7 @@ _trigger_running = False
 _scheduler_paused = False
 _scheduler = None  # set by start_web_server
 _schedule_profile_name = ""  # runtime override for which profile the scheduler uses
+_quick_run_state: dict[int, dict] = {}  # run_id → {phase, enrich, error}
 
 
 class _LogCollector(logging.Handler):
@@ -90,6 +91,87 @@ def _require_auth(f):
             return f(*args, **kwargs)
         return redirect(url_for("login", next=request.path))
     return decorated
+
+
+def _do_quick_run(run_id: int, pid: int | None, profile: dict | None) -> None:
+    """Background: run discovery workflow then auto-enrich all contacts."""
+    import datetime as _dt
+    from src.database.session import get_session
+    from src.database.models import Contact, Opportunity
+    from src.graph.workflow import build_workflow
+    from src.graph.state import AgentState
+    from src.enrichment.pipeline import enrich_contact
+
+    state = _quick_run_state[run_id]
+    graph = build_workflow()
+
+    initial_state: AgentState = {
+        "run_id": run_id,
+        "run_date": _dt.date.today().isoformat(),
+        "profile_id": pid,
+        "profile": profile,
+        "search_queries": [],
+        "raw_search_results": [],
+        "companies": [],
+        "scored_opportunities": [],
+        "contacts": [],
+        "insights": [],
+        "outreach_drafts": [],
+        "report": {},
+        "errors": [],
+        "completed": False,
+    }
+
+    try:
+        graph.invoke(initial_state)
+    except Exception as e:
+        logger.error(f"Quick run {run_id} workflow failed: {e}", exc_info=True)
+        state["phase"] = "error"
+        state["error"] = str(e)
+        return
+
+    # Phase 2: auto-enrich all contacts found in this run
+    state["phase"] = "enriching"
+    try:
+        with get_session() as db:
+            opp_company_ids = [
+                o.company_id for o in db.query(Opportunity).filter_by(run_id=run_id).all()
+            ]
+            contacts = (
+                db.query(Contact)
+                .filter(Contact.company_id.in_(opp_company_ids))
+                .filter(Contact.enriched_at.is_(None))
+                .all()
+            ) if opp_company_ids else []
+            contact_ids = [c.id for c in contacts]
+            contact_names = {c.id: c.name or "" for c in contacts}
+
+        ep: dict = {"done": 0, "total": len(contact_ids), "failed": 0, "running": True, "current_name": None}
+        state["enrich"] = ep
+
+        for i, cid in enumerate(contact_ids):
+            ep["current_name"] = contact_names.get(cid, "")
+            try:
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                    pool.submit(enrich_contact, cid).result(timeout=180)
+            except concurrent.futures.TimeoutError:
+                logger.warning(f"Quick run enrich timeout contact {cid}")
+                ep["failed"] += 1
+            except Exception as exc:
+                logger.warning(f"Quick run enrich failed contact {cid}: {exc}")
+                ep["failed"] += 1
+            ep["done"] += 1
+            if i < len(contact_ids) - 1:
+                time.sleep(2)
+
+        ep["running"] = False
+        ep["current_name"] = None
+    except Exception as e:
+        logger.error(f"Quick run {run_id} enrichment failed: {e}", exc_info=True)
+        if "enrich" in state:
+            state["enrich"]["running"] = False
+
+    state["phase"] = "done"
 
 
 def create_app() -> Flask:
@@ -871,6 +953,214 @@ def create_app() -> Flask:
     def enrich_status(run_id):
         progress = _enrich_progress.get(run_id, {})
         return jsonify(progress)
+
+    # ── Quick Run ─────────────────────────────────────────────────────────────
+
+    @app.route("/quick-run", methods=["GET", "POST"])
+    @_require_auth
+    def quick_run_page():
+        import datetime as _dt
+        from src.database.session import get_session
+        from src.database.models import Profile, DiscoveryRun
+        from src.scheduler import load_profile
+        from src.integrations.zoho_mail import is_configured as _zoho_ok
+
+        if request.method == "GET":
+            with get_session() as db:
+                profs = db.query(Profile).filter_by(active=True).order_by(Profile.id).all()
+                profiles_data = [{"id": p.id, "name": p.name} for p in profs]
+            return render_template("quick_run.html", profiles=profiles_data, run_id=None,
+                                   phase=None, enrich={}, contacts_data=[], error="",
+                                   zoho_configured=_zoho_ok(), profile_name="")
+
+        profile_id_str = request.form.get("profile_id", "")
+        profile_id = int(profile_id_str) if profile_id_str.isdigit() else None
+        pid, profile = load_profile(profile_id)
+
+        with get_session() as db:
+            run = DiscoveryRun(
+                run_date=_dt.date.today(),
+                started_at=_dt.datetime.utcnow(),
+                status="running",
+                profile_id=pid,
+            )
+            db.add(run)
+            db.flush()
+            run_id = run.id
+
+        _quick_run_state[run_id] = {"phase": "discovering", "enrich": {}, "error": ""}
+        threading.Thread(target=_do_quick_run, args=(run_id, pid, profile), daemon=True).start()
+        return redirect(f"/quick-run/{run_id}")
+
+    @app.route("/quick-run/<int:run_id>")
+    @_require_auth
+    def quick_run_results(run_id):
+        from src.database.session import get_session
+        from src.database.models import DiscoveryRun, Company, Contact, Opportunity, DailyReport, Profile as ProfileModel
+        from src.integrations.zoho_mail import is_configured as _zoho_ok
+
+        state = _quick_run_state.get(run_id, {})
+        phase = state.get("phase", "")
+        enrich = state.get("enrich", {})
+
+        if not phase:
+            with get_session() as db:
+                run = db.get(DiscoveryRun, run_id)
+                if not run:
+                    abort(404)
+                phase = {"completed": "done", "failed": "error"}.get(run.status, "discovering")
+
+        contacts_data = []
+        profile_name = ""
+
+        if phase in ("enriching", "done"):
+            with get_session() as db:
+                run = db.get(DiscoveryRun, run_id)
+                if run and run.profile_id:
+                    p = db.get(ProfileModel, run.profile_id)
+                    profile_name = p.name if p else ""
+
+                opps_cos = (
+                    db.query(Opportunity, Company)
+                    .join(Company, Opportunity.company_id == Company.id)
+                    .filter(Opportunity.run_id == run_id)
+                    .order_by(Opportunity.score.desc())
+                    .all()
+                )
+                company_ids = [co.id for _, co in opps_cos]
+                all_contacts = (
+                    db.query(Contact)
+                    .filter(Contact.company_id.in_(company_ids))
+                    .order_by(Contact.confidence_score.desc())
+                    .all()
+                ) if company_ids else []
+                ctcs_by_co: dict[int, list] = {}
+                for c in all_contacts:
+                    ctcs_by_co.setdefault(c.company_id, []).append(c)
+
+                report = db.query(DailyReport).filter_by(run_id=run_id).first()
+                drafts_raw = (report.report_json or {}).get("outreach_drafts", []) if report else []
+                email_drafts: dict[str, dict] = {}
+                for d in drafts_raw:
+                    cn = d.get("company_name", "")
+                    if cn and d.get("channel") == "email" and cn not in email_drafts:
+                        email_drafts[cn] = d
+
+                for opp, co in opps_cos:
+                    draft = email_drafts.get(co.name, {})
+                    desc = (co.description or "").strip()
+                    if len(desc) > 90:
+                        desc = desc[:90] + "…"
+                    for ct in ctcs_by_co.get(co.id, []):
+                        contacts_data.append({
+                            "company_name": co.name,
+                            "location": co.location or "",
+                            "description": desc,
+                            "score": opp.score or 0,
+                            "contact_id": ct.id,
+                            "contact_name": ct.name or "",
+                            "contact_role": ct.role or "",
+                            "email": ct.email or "",
+                            "email_status": ct.email_status or "",
+                            "linkedin_url": ct.linkedin_url or "",
+                            "enriched": ct.enriched_at is not None,
+                            "subject": draft.get("subject_line", ""),
+                            "body": draft.get("body", ""),
+                        })
+
+        return render_template(
+            "quick_run.html",
+            run_id=run_id,
+            phase=phase,
+            enrich=enrich,
+            contacts_data=contacts_data,
+            profile_name=profile_name,
+            zoho_configured=_zoho_ok(),
+            error=state.get("error", ""),
+            profiles=[],
+        )
+
+    @app.route("/quick-run/<int:run_id>/status")
+    @_require_auth
+    def quick_run_status(run_id):
+        state = _quick_run_state.get(run_id, {})
+        if not state:
+            from src.database.session import get_session
+            from src.database.models import DiscoveryRun
+            with get_session() as db:
+                run = db.get(DiscoveryRun, run_id)
+                if run:
+                    phase = {"completed": "done", "failed": "error"}.get(run.status, "discovering")
+                    return jsonify({"phase": phase})
+        return jsonify(state)
+
+    @app.route("/quick-run/<int:run_id>/push-all-zoho", methods=["POST"])
+    @_require_auth
+    def quick_run_push_all_zoho(run_id):
+        from src.database.session import get_session
+        from src.database.models import Company, Contact, Opportunity, DailyReport
+        from src.integrations.zoho_mail import create_draft, is_configured
+
+        if not is_configured():
+            return jsonify({"error": "Zoho no configurado"}), 503
+
+        with get_session() as db:
+            opp_co_ids = [o.company_id for o in db.query(Opportunity).filter_by(run_id=run_id).all()]
+            if not opp_co_ids:
+                return jsonify({"error": "sin oportunidades"}), 404
+            ctcs_cos = (
+                db.query(Contact, Company)
+                .join(Company, Contact.company_id == Company.id)
+                .filter(Contact.company_id.in_(opp_co_ids), Contact.email.isnot(None))
+                .all()
+            )
+            report = db.query(DailyReport).filter_by(run_id=run_id).first()
+            drafts_raw = (report.report_json or {}).get("outreach_drafts", []) if report else []
+            email_drafts: dict[str, dict] = {}
+            for d in drafts_raw:
+                cn = d.get("company_name", "")
+                if cn and d.get("channel") == "email" and cn not in email_drafts:
+                    email_drafts[cn] = d
+            to_push = [{
+                "email": ct.email,
+                "company_name": co.name,
+                "subject": email_drafts.get(co.name, {}).get("subject_line") or f"Outreach — {co.name}",
+                "body": email_drafts.get(co.name, {}).get("body", ""),
+            } for ct, co in ctcs_cos]
+
+        created, skipped, errors = 0, 0, []
+        seen: set[str] = set()
+        for item in to_push:
+            if not item["body"] or item["email"] in seen:
+                skipped += 1
+                continue
+            seen.add(item["email"])
+            try:
+                create_draft(to_address=item["email"], subject=item["subject"], content=item["body"])
+                created += 1
+            except Exception as e:
+                errors.append(f"{item['company_name']}: {e}")
+        return jsonify({"created": created, "skipped": skipped, "errors": errors})
+
+    @app.route("/quick-run/<int:run_id>/push-one-zoho", methods=["POST"])
+    @_require_auth
+    def quick_run_push_one_zoho(run_id):
+        from src.integrations.zoho_mail import create_draft, is_configured
+        if not is_configured():
+            return jsonify({"error": "Zoho no configurado"}), 503
+        data = request.get_json(silent=True) or {}
+        email = data.get("email", "").strip()
+        if not email:
+            return jsonify({"error": "email requerido"}), 400
+        try:
+            create_draft(
+                to_address=email,
+                subject=data.get("subject", "").strip() or "Outreach",
+                content=data.get("body", "").strip(),
+            )
+            return jsonify({"ok": True})
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
 
     # ── Contacted Companies Report ───────────────────────────────────────────
 

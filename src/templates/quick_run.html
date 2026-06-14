@@ -1,0 +1,295 @@
+{% extends "base.html" %}
+{% block title %}⚡ Quick Run — Blest{% endblock %}
+{% block content %}
+<style>
+.qr-table { width:100%;border-collapse:collapse;font-size:0.87rem }
+.qr-table th { padding:0.6rem 0.75rem;text-align:left;font-size:0.78rem;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border);background:var(--surface-hover) }
+.qr-table td { padding:0.6rem 0.75rem;border-bottom:1px solid rgba(255,255,255,0.05);vertical-align:top }
+.qr-table tr:last-child td { border-bottom:none }
+.qr-table tr:hover td { background:rgba(255,255,255,0.02) }
+.phase-bar { display:flex;align-items:center;gap:0.75rem;padding:0.9rem 1.1rem;border-radius:8px;font-size:0.9rem;margin-bottom:1.25rem }
+.phase-bar.running { background:rgba(56,189,248,0.08);border:1px solid rgba(56,189,248,0.25);color:var(--accent) }
+.phase-bar.done   { background:rgba(74,222,128,0.07);border:1px solid rgba(74,222,128,0.25);color:#4ade80 }
+.phase-bar.error  { background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.25);color:#f87171 }
+.enrich-spinner { display:inline-block;animation:spin 0.7s linear infinite }
+@keyframes spin { to { transform:rotate(360deg) } }
+.qr-action-bar { display:flex;align-items:center;gap:1rem;margin-bottom:1rem;flex-wrap:wrap }
+</style>
+
+{% if not run_id %}
+<!-- ── Form page ─────────────────────────────────────────────────────────── -->
+<div style="max-width:560px;margin:0 auto">
+  <h1 style="font-size:1.4rem;font-weight:700;margin-bottom:0.35rem">⚡ Quick Run</h1>
+  <p style="color:var(--muted);margin-bottom:1.5rem;font-size:0.9rem">
+    Descubre empresas, enriquece todos los contactos automáticamente y genera drafts de email listos para Zoho.
+  </p>
+
+  <div class="card" style="padding:1.5rem">
+    <form method="POST" action="/quick-run">
+      <div style="margin-bottom:1rem">
+        <label style="display:block;font-size:0.82rem;color:var(--muted);margin-bottom:0.4rem">Perfil</label>
+        <select name="profile_id"
+          style="width:100%;padding:0.55rem 0.75rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.9rem">
+          <option value="">Perfil por defecto</option>
+          {% for p in profiles %}
+          <option value="{{ p.id }}">{{ p.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button type="submit"
+        style="width:100%;background:var(--accent);color:#0f172a;border:none;padding:0.7rem;border-radius:6px;font-size:0.95rem;font-weight:700;cursor:pointer">
+        ▶ Iniciar Quick Run
+      </button>
+    </form>
+  </div>
+
+  <div style="margin-top:1.25rem;font-size:0.82rem;color:var(--muted);line-height:1.7">
+    <strong style="color:var(--text)">Qué hace:</strong><br>
+    1. Descubre hasta 50 empresas target con Tavily<br>
+    2. Encuentra contactos internos (HR, L&D, directivos)<br>
+    3. Enriquece todos los contactos automáticamente (scraping + SMTP + Hunter)<br>
+    4. Genera un email de outreach por empresa<br>
+    5. Permite hacer push directo a Zoho Mail con un click
+  </div>
+</div>
+
+{% else %}
+<!-- ── Results page ──────────────────────────────────────────────────────── -->
+<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:0.5rem">
+  <h1 style="font-size:1.3rem;font-weight:700">
+    ⚡ Quick Run
+    {% if profile_name %}<span style="color:var(--muted);font-size:0.9rem;font-weight:400"> · {{ profile_name }}</span>{% endif %}
+    <span style="color:var(--muted);font-size:0.82rem;font-weight:400"> #{{ run_id }}</span>
+  </h1>
+  <a href="/quick-run" style="font-size:0.82rem;color:var(--muted);text-decoration:none;background:var(--surface-hover);border:1px solid var(--border);padding:0.3rem 0.75rem;border-radius:6px">+ Nuevo run</a>
+</div>
+
+<!-- Phase status bar -->
+<div id="phase-bar" class="phase-bar {% if phase == 'done' %}done{% elif phase == 'error' %}error{% else %}running{% endif %}">
+  {% if phase == "discovering" %}
+    <span class="enrich-spinner">⟳</span>
+    <span id="phase-text">Buscando empresas y contactos…</span>
+  {% elif phase == "enriching" %}
+    <span class="enrich-spinner">⟳</span>
+    <span id="phase-text">Enriqueciendo contactos
+      {{ enrich.get("done", 0) }}/{{ enrich.get("total", "?") }}
+      {% if enrich.get("current_name") %} · {{ enrich.get("current_name") }}{% endif %}
+    </span>
+  {% elif phase == "done" %}
+    ✅ <span id="phase-text">Completado — {{ contacts_data|length }} contactos</span>
+  {% elif phase == "error" %}
+    ❌ <span id="phase-text">Error: {{ error or "desconocido" }}</span>
+  {% else %}
+    <span class="enrich-spinner">⟳</span>
+    <span id="phase-text">Iniciando…</span>
+  {% endif %}
+</div>
+
+{% set with_email = contacts_data | selectattr("email") | list %}
+{% set with_draft = contacts_data | selectattr("body") | list %}
+
+{% if contacts_data %}
+<!-- Action bar -->
+<div class="qr-action-bar">
+  <span style="font-size:0.85rem;color:var(--muted)">
+    {{ contacts_data|length }} contactos ·
+    {{ with_email|length }} con email ·
+    {{ with_draft|length }} con draft
+  </span>
+  {% if zoho_configured and with_email|length > 0 %}
+  <button id="push-all-btn" onclick="pushAllZoho()"
+    style="background:#0ea5e9;color:#fff;border:none;padding:0.45rem 1.1rem;border-radius:6px;cursor:pointer;font-size:0.85rem;font-weight:600">
+    📧 Push all to Zoho ({{ with_email|length }})
+  </button>
+  <span id="push-all-result" style="font-size:0.82rem;color:var(--muted)"></span>
+  {% endif %}
+</div>
+
+<!-- Results table -->
+<div class="card" style="padding:0;overflow-x:auto">
+  <table class="qr-table">
+    <thead>
+      <tr>
+        <th>Empresa</th>
+        <th>Contacto</th>
+        <th>Email</th>
+        <th>Descripción</th>
+        <th style="text-align:center">Draft</th>
+        {% if zoho_configured %}<th style="text-align:center">Zoho</th>{% endif %}
+      </tr>
+    </thead>
+    <tbody>
+    {% for item in contacts_data %}
+      <tr>
+        <td>
+          <div style="font-weight:600;font-size:0.9rem">{{ item.company_name }}</div>
+          {% if item.location %}<div style="font-size:0.75rem;color:var(--muted)">📍 {{ item.location }}</div>{% endif %}
+          {% if item.score %}
+            {% if item.score >= 70 %}<span class="score score-high" style="font-size:0.7rem;padding:0.1rem 0.35rem">{{ item.score }}</span>
+            {% elif item.score >= 50 %}<span class="score score-mid" style="font-size:0.7rem;padding:0.1rem 0.35rem">{{ item.score }}</span>
+            {% else %}<span class="score score-low" style="font-size:0.7rem;padding:0.1rem 0.35rem">{{ item.score }}</span>
+            {% endif %}
+          {% endif %}
+        </td>
+        <td>
+          <div style="font-size:0.87rem">{{ item.contact_name or "—" }}</div>
+          {% if item.contact_role %}<div style="font-size:0.75rem;color:var(--muted)">{{ item.contact_role }}</div>{% endif %}
+        </td>
+        <td style="white-space:nowrap">
+          {% if item.email %}
+            {% if item.email_status == "verified" %}<span title="verificado">✅</span>
+            {% elif item.email_status in ("probable", "catch_all") %}<span title="probable">🟡</span>
+            {% else %}<span title="sin verificar">🔵</span>{% endif %}
+            <a href="mailto:{{ item.email }}" style="color:var(--accent);text-decoration:none;font-size:0.83rem">{{ item.email }}</a>
+          {% elif item.linkedin_url %}
+            <a href="{{ item.linkedin_url }}" target="_blank" rel="noopener"
+               style="color:var(--muted);font-size:0.8rem;text-decoration:none">🔵 LinkedIn ↗</a>
+          {% elif not item.enriched %}
+            <span style="color:var(--muted);font-size:0.78rem">⟳ enriqueciendo…</span>
+          {% else %}
+            <span style="color:var(--muted);font-size:0.78rem">🔴 no encontrado</span>
+          {% endif %}
+        </td>
+        <td style="color:var(--muted);font-size:0.8rem;max-width:180px;word-break:break-word">{{ item.description or "—" }}</td>
+        <td style="text-align:center">
+          {% if item.body %}
+          <button onclick="showDraft(this)"
+            data-company="{{ item.company_name|e }}"
+            data-subject="{{ item.subject|e }}"
+            data-body="{{ item.body|e }}"
+            style="font-size:0.78rem;padding:0.2rem 0.6rem;background:var(--surface-hover);border:1px solid var(--border);border-radius:4px;color:var(--muted);cursor:pointer">
+            ver
+          </button>
+          {% else %}<span style="color:var(--muted)">—</span>{% endif %}
+        </td>
+        {% if zoho_configured %}
+        <td style="text-align:center">
+          {% if item.email and item.body %}
+          <button onclick="pushOneZoho(this)"
+            data-email="{{ item.email|e }}"
+            data-subject="{{ item.subject|e }}"
+            data-body="{{ item.body|e }}"
+            style="font-size:0.78rem;padding:0.2rem 0.6rem;background:var(--surface-hover);border:1px solid var(--border);border-radius:4px;color:var(--accent);cursor:pointer">
+            📧
+          </button>
+          {% else %}<span style="color:var(--muted)">—</span>{% endif %}
+        </td>
+        {% endif %}
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% else %}
+<!-- Empty state -->
+<div class="card" style="text-align:center;padding:3rem 2rem;color:var(--muted)">
+  {% if phase in ("done", "error") %}
+    <div style="font-size:1.5rem;margin-bottom:0.75rem">🔍</div>
+    <div>No se encontraron contactos en este run.</div>
+  {% else %}
+    <div style="font-size:1.5rem;margin-bottom:0.75rem"><span class="enrich-spinner">⟳</span></div>
+    <div>Los resultados aparecerán aquí al finalizar la búsqueda…</div>
+  {% endif %}
+</div>
+{% endif %}
+
+<!-- Draft preview modal -->
+<div id="draft-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:300;align-items:center;justify-content:center">
+  <div class="card" style="width:100%;max-width:560px;padding:1.75rem;max-height:85vh;overflow-y:auto;position:relative">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+      <h2 id="draft-modal-title" style="font-size:1.05rem;font-weight:700"></h2>
+      <button onclick="document.getElementById('draft-modal').style.display='none'"
+        style="background:none;border:none;color:var(--muted);font-size:1.3rem;cursor:pointer;padding:0.25rem">&times;</button>
+    </div>
+    <div id="draft-modal-subject" style="font-size:0.82rem;color:var(--muted);margin-bottom:0.75rem;font-style:italic"></div>
+    <pre id="draft-modal-body" style="white-space:pre-wrap;font-family:inherit;font-size:0.87rem;color:var(--muted);line-height:1.7;background:rgba(0,0,0,0.2);padding:0.85rem;border-radius:6px;border:1px solid var(--border);margin:0"></pre>
+    <button onclick="navigator.clipboard.writeText(document.getElementById('draft-modal-body').textContent).then(()=>{this.textContent='✓ Copiado';setTimeout(()=>this.textContent='Copiar',1500)})"
+      style="margin-top:0.85rem;font-size:0.82rem;padding:0.3rem 0.75rem;background:var(--surface-hover);border:1px solid var(--border);border-radius:5px;color:var(--muted);cursor:pointer">
+      Copiar
+    </button>
+  </div>
+</div>
+
+<script>
+const QR_RUN_ID = {{ run_id }};
+
+function showDraft(btn) {
+  document.getElementById('draft-modal-title').textContent = btn.dataset.company;
+  const s = btn.dataset.subject;
+  document.getElementById('draft-modal-subject').textContent = s ? 'Asunto: ' + s : '';
+  document.getElementById('draft-modal-body').textContent = btn.dataset.body;
+  const m = document.getElementById('draft-modal');
+  m.style.display = 'flex';
+  m.onclick = e => { if (e.target === m) m.style.display = 'none'; };
+}
+
+function pushAllZoho() {
+  const btn = document.getElementById('push-all-btn');
+  const res = document.getElementById('push-all-result');
+  btn.disabled = true;
+  btn.textContent = '⟳ Enviando…';
+  fetch('/quick-run/' + QR_RUN_ID + '/push-all-zoho', { method: 'POST' })
+    .then(r => r.json())
+    .then(d => {
+      if (d.error) {
+        res.textContent = '❌ ' + d.error;
+        btn.disabled = false;
+        btn.textContent = '📧 Push all to Zoho';
+      } else {
+        btn.textContent = '✓ ' + d.created + ' draft' + (d.created !== 1 ? 's' : '') + ' creados';
+        btn.style.background = '#16a34a';
+        res.textContent = d.skipped ? '(' + d.skipped + ' sin draft)' : '';
+      }
+    })
+    .catch(() => { res.textContent = '❌ Error de red'; btn.disabled = false; });
+}
+
+function pushOneZoho(btn) {
+  btn.disabled = true;
+  const orig = btn.textContent;
+  btn.textContent = '⟳';
+  fetch('/quick-run/' + QR_RUN_ID + '/push-one-zoho', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ email: btn.dataset.email, subject: btn.dataset.subject, body: btn.dataset.body }),
+  })
+    .then(r => r.json())
+    .then(d => {
+      if (d.error) { btn.textContent = '❌'; btn.title = d.error; btn.disabled = false; }
+      else { btn.textContent = '✓'; btn.style.color = '#4ade80'; }
+    })
+    .catch(() => { btn.textContent = '❌'; btn.disabled = false; });
+}
+
+{% if phase not in ("done", "error") %}
+// Poll every 3s until done, then reload to show final results
+const _qrPoll = setInterval(function() {
+  fetch('/quick-run/' + QR_RUN_ID + '/status')
+    .then(r => r.json())
+    .then(s => {
+      const bar = document.getElementById('phase-bar');
+      const txt = document.getElementById('phase-text');
+      if (s.phase === 'discovering') {
+        if (txt) txt.textContent = 'Buscando empresas y contactos…';
+      } else if (s.phase === 'enriching') {
+        bar.className = 'phase-bar running';
+        const e = s.enrich || {};
+        if (txt) txt.textContent = 'Enriqueciendo contactos ' + (e.done||0) + '/' + (e.total||'?')
+          + (e.current_name ? ' · ' + e.current_name : '');
+      } else if (s.phase === 'done') {
+        clearInterval(_qrPoll);
+        location.reload();
+      } else if (s.phase === 'error') {
+        clearInterval(_qrPoll);
+        bar.className = 'phase-bar error';
+        if (txt) txt.textContent = 'Error: ' + (s.error || 'desconocido');
+      }
+    })
+    .catch(() => {});
+}, 3000);
+{% endif %}
+</script>
+
+{% endif %}
+{% endblock %}
