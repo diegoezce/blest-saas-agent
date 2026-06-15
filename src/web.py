@@ -175,6 +175,108 @@ def _do_quick_run(run_id: int, pid: int | None, profile: dict | None) -> None:
     state["phase"] = "done"
 
 
+def _search_companies_data(db, q: str, limit: int | None = None, offset: int = 0,
+                           desc_len: int = 120) -> tuple[list[dict], int]:
+    """Company listing for the /search page.
+
+    With a query, filters by name/domain/industry/location; without one, returns
+    the full catalogue. Returns (rows, total_count). Pass limit=None to fetch all
+    matching rows (used by the CSV/MD export).
+    """
+    from src.database.models import Company, Opportunity, ContactStatus
+    from sqlalchemy import or_
+
+    base = db.query(Company)
+    if q:
+        like = f"%{q}%"
+        base = base.filter(or_(
+            Company.name.ilike(like),
+            Company.domain.ilike(like),
+            Company.industry.ilike(like),
+            Company.location.ilike(like),
+        ))
+
+    total = base.count()
+    rows_q = base.order_by(Company.name)
+    if offset:
+        rows_q = rows_q.offset(offset)
+    if limit is not None:
+        rows_q = rows_q.limit(limit)
+    co_rows = rows_q.all()
+    co_ids = [c.id for c in co_rows]
+
+    best_scores: dict = {}
+    best_run_id: dict = {}
+    if co_ids:
+        for cid, score, run_id in (
+            db.query(Opportunity.company_id, Opportunity.score, Opportunity.run_id)
+            .filter(Opportunity.company_id.in_(co_ids))
+            .order_by(Opportunity.score.desc())
+            .all()
+        ):
+            if cid not in best_scores:
+                best_scores[cid] = score
+                best_run_id[cid] = run_id
+
+    contacted_ids: set = set()
+    if co_ids:
+        contacted_ids = {
+            r[0] for r in
+            db.query(ContactStatus.company_id).filter(ContactStatus.company_id.in_(co_ids)).all()
+        }
+
+    companies = []
+    for c in co_rows:
+        companies.append({
+            "id": c.id,
+            "name": c.name,
+            "domain": c.domain or "",
+            "industry": c.industry or "",
+            "location": c.location or "",
+            "description": (c.description or "")[:desc_len],
+            "website_url": c.website_url or "",
+            "score": best_scores.get(c.id),
+            "run_id": best_run_id.get(c.id),
+            "contacted": c.id in contacted_ids,
+        })
+    return companies, total
+
+
+def _search_contacts_data(db, q: str, limit: int = 40) -> list[dict]:
+    """Contact search for the /search page (only used when a query is present)."""
+    from src.database.models import Contact, Company
+    from sqlalchemy import or_
+
+    like = f"%{q}%"
+    ct_rows = (
+        db.query(Contact, Company)
+        .join(Company, Contact.company_id == Company.id)
+        .filter(or_(
+            Contact.name.ilike(like),
+            Contact.email.ilike(like),
+            Contact.role.ilike(like),
+        ))
+        .order_by(Contact.name)
+        .limit(limit)
+        .all()
+    )
+    contacts = []
+    for ct, co in ct_rows:
+        contacts.append({
+            "id": ct.id,
+            "name": ct.name or "",
+            "role": ct.role or "",
+            "email": ct.email or "",
+            "email_status": ct.email_status or "",
+            "linkedin_url": ct.linkedin_url or "",
+            "phone_whatsapp": ct.phone_whatsapp or "",
+            "company_id": co.id,
+            "company_name": co.name,
+            "company_domain": co.domain or "",
+        })
+    return contacts
+
+
 def create_app() -> Flask:
     app = Flask(__name__, template_folder="templates")
     app.secret_key = os.environ.get("SECRET_KEY", "blest-web-secret")
@@ -1396,91 +1498,75 @@ def create_app() -> Flask:
     @app.route("/search")
     @_require_auth
     def search():
+        import math
         from src.database.session import get_session
-        from src.database.models import Company, Contact, Opportunity, DiscoveryRun, ContactStatus
-        from sqlalchemy import or_
+
+        PAGE_SIZE = 25
+        q = request.args.get("q", "").strip()
+        try:
+            page = max(1, int(request.args.get("page", 1)))
+        except (TypeError, ValueError):
+            page = 1
+
+        contacts = []
+        with get_session() as db:
+            companies, total_companies = _search_companies_data(
+                db, q, limit=PAGE_SIZE, offset=(page - 1) * PAGE_SIZE
+            )
+            total_pages = max(1, math.ceil(total_companies / PAGE_SIZE)) if total_companies else 1
+            if page > total_pages:
+                page = total_pages
+                companies, total_companies = _search_companies_data(
+                    db, q, limit=PAGE_SIZE, offset=(page - 1) * PAGE_SIZE
+                )
+            if q:
+                contacts = _search_contacts_data(db, q)
+
+        return render_template(
+            "search.html",
+            q=q,
+            companies=companies,
+            contacts=contacts,
+            page=page,
+            total_pages=total_pages,
+            total_companies=total_companies,
+            page_size=PAGE_SIZE,
+        )
+
+    @app.route("/search/export/<fmt>")
+    @_require_auth
+    def export_search(fmt):
+        import os
+        import tempfile
+        from src.database.session import get_session
+        from src.export import export_companies_csv, export_companies_markdown
+
+        if fmt not in ("csv", "md"):
+            abort(404)
 
         q = request.args.get("q", "").strip()
-        companies = []
-        contacts = []
+        with get_session() as db:
+            companies, _ = _search_companies_data(db, q, limit=5000, offset=0, desc_len=1000)
 
-        if q:
-            like = f"%{q}%"
-            with get_session() as db:
-                co_rows = (
-                    db.query(Company)
-                    .filter(or_(
-                        Company.name.ilike(like),
-                        Company.domain.ilike(like),
-                        Company.industry.ilike(like),
-                        Company.location.ilike(like),
-                    ))
-                    .order_by(Company.name)
-                    .limit(40)
-                    .all()
-                )
-                co_ids = [c.id for c in co_rows]
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=f".{fmt}")
+        tmp.close()
+        try:
+            if fmt == "csv":
+                export_companies_csv(companies, tmp.name)
+                mimetype, filename = "text/csv", "blest-empresas.csv"
+            else:
+                export_companies_markdown(companies, tmp.name, query=q)
+                mimetype, filename = "text/markdown", "blest-empresas.md"
+            with open(tmp.name, "rb") as f:
+                content = f.read()
+        finally:
+            os.unlink(tmp.name)
 
-                best_scores: dict = {}
-                best_run_id: dict = {}
-                if co_ids:
-                    opp_rows = (
-                        db.query(Opportunity.company_id, Opportunity.score, Opportunity.run_id)
-                        .filter(Opportunity.company_id.in_(co_ids))
-                        .order_by(Opportunity.score.desc())
-                        .all()
-                    )
-                    for cid, score, run_id in opp_rows:
-                        if cid not in best_scores:
-                            best_scores[cid] = score
-                            best_run_id[cid] = run_id
-
-                contacted_ids: set = set()
-                if co_ids:
-                    cs_rows = db.query(ContactStatus.company_id).filter(ContactStatus.company_id.in_(co_ids)).all()
-                    contacted_ids = {r[0] for r in cs_rows}
-
-                for c in co_rows:
-                    companies.append({
-                        "id": c.id,
-                        "name": c.name,
-                        "domain": c.domain or "",
-                        "industry": c.industry or "",
-                        "location": c.location or "",
-                        "description": (c.description or "")[:120],
-                        "website_url": c.website_url or "",
-                        "score": best_scores.get(c.id),
-                        "run_id": best_run_id.get(c.id),
-                        "contacted": c.id in contacted_ids,
-                    })
-
-                ct_rows = (
-                    db.query(Contact, Company)
-                    .join(Company, Contact.company_id == Company.id)
-                    .filter(or_(
-                        Contact.name.ilike(like),
-                        Contact.email.ilike(like),
-                        Contact.role.ilike(like),
-                    ))
-                    .order_by(Contact.name)
-                    .limit(40)
-                    .all()
-                )
-                for ct, co in ct_rows:
-                    contacts.append({
-                        "id": ct.id,
-                        "name": ct.name or "",
-                        "role": ct.role or "",
-                        "email": ct.email or "",
-                        "email_status": ct.email_status or "",
-                        "linkedin_url": ct.linkedin_url or "",
-                        "phone_whatsapp": ct.phone_whatsapp or "",
-                        "company_id": co.id,
-                        "company_name": co.name,
-                        "company_domain": co.domain or "",
-                    })
-
-        return render_template("search.html", q=q, companies=companies, contacts=contacts)
+        return Response(
+            content,
+            mimetype=mimetype,
+            headers={"Content-Disposition": f"attachment; filename={filename}"},
+        )
 
     return app
 

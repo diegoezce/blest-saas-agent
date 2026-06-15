@@ -4,6 +4,53 @@ import csv
 _CHANNEL_EMOJI = {"email": "📧", "linkedin": "💼", "phone": "📞", "whatsapp": "💬"}
 
 
+def export_companies_csv(companies: list[dict], path: str) -> None:
+    """Export a flat company listing (from the /search page) to CSV."""
+    fieldnames = [
+        "name", "domain", "industry", "location",
+        "score", "contacted", "website_url", "description",
+    ]
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
+        writer.writeheader()
+        for c in companies:
+            score = c.get("score")
+            writer.writerow({
+                "name": c.get("name", ""),
+                "domain": c.get("domain", ""),
+                "industry": c.get("industry", ""),
+                "location": c.get("location", ""),
+                "score": score if score is not None else "",
+                "contacted": "yes" if c.get("contacted") else "no",
+                "website_url": c.get("website_url", ""),
+                "description": c.get("description", ""),
+            })
+
+
+def export_companies_markdown(companies: list[dict], path: str, query: str = "") -> None:
+    """Export a flat company listing (from the /search page) to a Markdown table."""
+    def _cell(val) -> str:
+        return str(val if val not in (None, "") else "—").replace("|", "\\|").replace("\n", " ")
+
+    lines: list[str] = ["# Empresas — Blest Lead Discovery"]
+    if query:
+        lines.append(f"Búsqueda: **{query}**")
+    lines.append(f"**{len(companies)} empresas**")
+    lines.append("")
+    lines.append("| Empresa | Score | Industria | Ubicación | Dominio | Contactado |")
+    lines.append("|---|---|---|---|---|---|")
+    for c in companies:
+        score = c.get("score")
+        lines.append(
+            f"| {_cell(c.get('name'))} | {_cell(score)} | {_cell(c.get('industry'))} "
+            f"| {_cell(c.get('location'))} | {_cell(c.get('domain'))} "
+            f"| {'✓' if c.get('contacted') else ''} |"
+        )
+    lines.append("")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines))
+
+
 def export_csv(report: dict, path: str) -> None:
     drafts = report.get("outreach_drafts", [])
     run_date = report.get("run_date", "")

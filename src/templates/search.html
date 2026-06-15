@@ -156,6 +156,37 @@
     margin-top: 1rem;
     font-size: 0.9rem;
   }
+
+  .section-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+  }
+  .section-head h2 { margin-bottom: 0; }
+  .dl-actions { display: flex; gap: 0.4rem; }
+
+  .results-single { max-width: 820px; margin: 0 auto; }
+
+  .pagination {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    margin-top: 1.25rem;
+  }
+  .page-link {
+    font-size: 0.82rem;
+    color: var(--accent);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.3rem 0.7rem;
+    text-decoration: none;
+  }
+  .page-link:hover { border-color: var(--accent); text-decoration: none; }
+  .page-link.disabled { color: var(--muted); opacity: 0.5; pointer-events: none; }
+  .page-info { font-size: 0.8rem; color: var(--muted); }
 </style>
 
 <div class="search-hero">
@@ -173,24 +204,37 @@
   </form>
 </div>
 
-{% if not q %}
-  <p class="no-query">Ingresá un término para buscar en todas las empresas y contactos.</p>
-
-{% elif not companies and not contacts %}
+{% if not companies and not contacts %}
   <div class="empty-state">
     <div style="font-size:2rem;margin-bottom:0.5rem">🔎</div>
-    Sin resultados para <strong>"{{ q }}"</strong>
+    {% if q %}
+      Sin resultados para <strong>"{{ q }}"</strong>
+    {% else %}
+      No hay empresas cargadas todavía.
+    {% endif %}
   </div>
 
 {% else %}
-<div class="results-grid">
+<div class="{% if q %}results-grid{% else %}results-single{% endif %}">
 
   <!-- EMPRESAS -->
   <div class="result-section">
-    <h2>
-      Empresas
-      <span class="result-count">{{ companies|length }}</span>
-    </h2>
+    <div class="section-head">
+      <h2>
+        Empresas
+        <span class="result-count">{{ total_companies }}</span>
+      </h2>
+      <div class="dl-actions">
+        <a class="rc-link" href="/search/export/csv{% if q %}?q={{ q | urlencode }}{% endif %}" title="Descargar CSV">⬇ CSV</a>
+        <a class="rc-link" href="/search/export/md{% if q %}?q={{ q | urlencode }}{% endif %}" title="Descargar Markdown">⬇ MD</a>
+      </div>
+    </div>
+
+    {% if not q %}
+      <p class="no-query" style="margin:0 0 1rem;text-align:left">
+        Mostrando todas las empresas. Usá el buscador para filtrar.
+      </p>
+    {% endif %}
 
     {% if not companies %}
       <div class="empty-state" style="padding:1rem 0">Sin resultados</div>
@@ -231,9 +275,26 @@
       </div>
     </div>
     {% endfor %}
+
+    {% if total_pages > 1 %}
+    <div class="pagination">
+      {% if page > 1 %}
+        <a class="page-link" href="/search?page={{ page - 1 }}{% if q %}&q={{ q | urlencode }}{% endif %}">← Anterior</a>
+      {% else %}
+        <span class="page-link disabled">← Anterior</span>
+      {% endif %}
+      <span class="page-info">Página {{ page }} de {{ total_pages }}</span>
+      {% if page < total_pages %}
+        <a class="page-link" href="/search?page={{ page + 1 }}{% if q %}&q={{ q | urlencode }}{% endif %}">Siguiente →</a>
+      {% else %}
+        <span class="page-link disabled">Siguiente →</span>
+      {% endif %}
+    </div>
+    {% endif %}
   </div>
 
   <!-- CONTACTOS -->
+  {% if q %}
   <div class="result-section">
     <h2>
       Contactos
@@ -276,6 +337,7 @@
     </div>
     {% endfor %}
   </div>
+  {% endif %}
 
 </div>
 {% endif %}
