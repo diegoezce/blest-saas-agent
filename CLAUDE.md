@@ -405,9 +405,10 @@ Key models: `Profile`, `DiscoveryRun`, `Company`, `Contact` (with enrichment fie
 
 ## Windows Worker (`worker/`)
 
-Standalone script that runs on a local Windows mini PC every 2 days via Task Scheduler.
-Connects directly to the Railway PostgreSQL DB — Railway remains the single source of truth.
-No data is stored locally; the worker only reads and writes to the shared DB.
+Standalone script that runs on a local Windows mini PC on a schedule (daily or every 2 days)
+via Task Scheduler. Connects directly to the Railway PostgreSQL DB — Railway remains the single
+source of truth. No data is stored locally; the worker only reads and writes to the shared DB.
+Full operational runbook: **`worker/README.md`**.
 
 ### What it does (two phases per run)
 1. **Enrichment** — picks up to `WORKER_ENRICH_BATCH` contacts where `enriched_at IS NULL`
@@ -429,15 +430,20 @@ No data is stored locally; the worker only reads and writes to the shared DB.
 3. Create a Zoho self-client at [api-console.zoho.com](https://api-console.zoho.com),
    scope: `ZohoMail.messages.CREATE,ZohoMail.accounts.READ`.
 4. `python run.py --zoho-auth <grant_token>` — stores `.zoho_tokens.json` in project root.
-5. Add a Task Scheduler task: `python worker/worker.py` from the project root, every 2 days.
+5. Schedule `worker/run_worker.bat` in Task Scheduler. Daily example (run in an admin shell):
+   `schtasks /Create /TN "BlestWorker" /TR "C:\Projects\BlestLeadsAgent\worker\run_worker.bat" /SC DAILY /ST 09:00 /F`
 
-Logs to `worker/worker.log` (gitignored). `init_db()` is called at startup so the worker
-automatically applies any pending DB migrations when it first connects.
+`run_worker.bat` cd's to the project root and runs the worker via the `py -3.11` launcher,
+appending stdout/stderr to `worker/worker_task.log`. The worker also logs to `worker/worker.log`
+(both gitignored). `init_db()` runs at startup, so the worker applies any pending DB migrations
+when it first connects. See `worker/README.md` for the full runbook.
 
 ### Key files
 | File | Purpose |
 |---|---|
 | `worker/worker.py` | Main worker script (two-phase: enrich + push) |
+| `worker/run_worker.bat` | Task Scheduler launcher (cd to root, runs via `py -3.11`, logs to `worker_task.log`) |
+| `worker/README.md` | Worker setup + daily scheduling runbook |
 | `worker/.env.example` | Config template for the Windows machine |
 
 ## Key Source Files
