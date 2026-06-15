@@ -1393,6 +1393,95 @@ def create_app() -> Flask:
             overdue=overdue,
         )
 
+    @app.route("/search")
+    @_require_auth
+    def search():
+        from src.database.session import get_session
+        from src.database.models import Company, Contact, Opportunity, DiscoveryRun, ContactStatus
+        from sqlalchemy import or_
+
+        q = request.args.get("q", "").strip()
+        companies = []
+        contacts = []
+
+        if q:
+            like = f"%{q}%"
+            with get_session() as db:
+                co_rows = (
+                    db.query(Company)
+                    .filter(or_(
+                        Company.name.ilike(like),
+                        Company.domain.ilike(like),
+                        Company.industry.ilike(like),
+                        Company.location.ilike(like),
+                    ))
+                    .order_by(Company.name)
+                    .limit(40)
+                    .all()
+                )
+                co_ids = [c.id for c in co_rows]
+
+                best_scores: dict = {}
+                best_run_id: dict = {}
+                if co_ids:
+                    opp_rows = (
+                        db.query(Opportunity.company_id, Opportunity.score, Opportunity.run_id)
+                        .filter(Opportunity.company_id.in_(co_ids))
+                        .order_by(Opportunity.score.desc())
+                        .all()
+                    )
+                    for cid, score, run_id in opp_rows:
+                        if cid not in best_scores:
+                            best_scores[cid] = score
+                            best_run_id[cid] = run_id
+
+                contacted_ids: set = set()
+                if co_ids:
+                    cs_rows = db.query(ContactStatus.company_id).filter(ContactStatus.company_id.in_(co_ids)).all()
+                    contacted_ids = {r[0] for r in cs_rows}
+
+                for c in co_rows:
+                    companies.append({
+                        "id": c.id,
+                        "name": c.name,
+                        "domain": c.domain or "",
+                        "industry": c.industry or "",
+                        "location": c.location or "",
+                        "description": (c.description or "")[:120],
+                        "website_url": c.website_url or "",
+                        "score": best_scores.get(c.id),
+                        "run_id": best_run_id.get(c.id),
+                        "contacted": c.id in contacted_ids,
+                    })
+
+                ct_rows = (
+                    db.query(Contact, Company)
+                    .join(Company, Contact.company_id == Company.id)
+                    .filter(or_(
+                        Contact.name.ilike(like),
+                        Contact.email.ilike(like),
+                        Contact.role.ilike(like),
+                    ))
+                    .order_by(Contact.name)
+                    .limit(40)
+                    .all()
+                )
+                for ct, co in ct_rows:
+                    contacts.append({
+                        "id": ct.id,
+                        "name": ct.name or "",
+                        "role": ct.role or "",
+                        "email": ct.email or "",
+                        "email_status": ct.email_status or "",
+                        "linkedin_url": ct.linkedin_url or "",
+                        "phone_whatsapp": ct.phone_whatsapp or "",
+                        "company_id": co.id,
+                        "company_name": co.name,
+                        "company_domain": co.domain or "",
+                    })
+
+        return render_template("search.html", q=q, companies=companies, contacts=contacts)
+
     return app
 
 

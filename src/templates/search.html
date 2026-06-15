@@ -1,0 +1,282 @@
+{% extends "base.html" %}
+{% block title %}Buscar — Blest Lead Discovery{% endblock %}
+{% block content %}
+<style>
+  .search-hero {
+    max-width: 640px;
+    margin: 0 auto 2.5rem;
+    text-align: center;
+  }
+  .search-hero h1 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-bottom: 1.25rem;
+    color: var(--text);
+  }
+  .search-form {
+    display: flex;
+    gap: 0.5rem;
+  }
+  .search-input {
+    flex: 1;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.65rem 1rem;
+    color: var(--text);
+    font-size: 1rem;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .search-input:focus { border-color: var(--accent); }
+  .search-btn {
+    background: var(--accent);
+    color: #0f172a;
+    border: none;
+    border-radius: 8px;
+    padding: 0.65rem 1.25rem;
+    font-size: 0.95rem;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .search-btn:hover { opacity: 0.9; }
+
+  .results-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+    align-items: start;
+  }
+  @media (max-width: 760px) { .results-grid { grid-template-columns: 1fr; } }
+
+  .result-section h2 {
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    margin-bottom: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .result-count {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 0.05rem 0.5rem;
+    font-size: 0.7rem;
+    color: var(--muted);
+    font-weight: 600;
+  }
+
+  .result-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.9rem 1rem;
+    margin-bottom: 0.5rem;
+    transition: border-color 0.15s;
+  }
+  .result-card:hover { border-color: var(--accent); }
+  .result-card:last-child { margin-bottom: 0; }
+
+  .rc-name {
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: var(--text);
+    margin-bottom: 0.2rem;
+  }
+  .rc-name a { color: var(--text); }
+  .rc-name a:hover { color: var(--accent); text-decoration: none; }
+  .rc-meta {
+    font-size: 0.8rem;
+    color: var(--muted);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 0.75rem;
+    margin-bottom: 0.35rem;
+  }
+  .rc-desc {
+    font-size: 0.82rem;
+    color: var(--muted);
+    line-height: 1.45;
+  }
+  .rc-actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.6rem;
+    flex-wrap: wrap;
+  }
+  .rc-link {
+    font-size: 0.78rem;
+    color: var(--accent);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 0.15rem 0.5rem;
+    text-decoration: none;
+  }
+  .rc-link:hover { border-color: var(--accent); text-decoration: none; }
+  .rc-link.contacted { color: var(--green); border-color: #14532d; background: #14532d22; }
+
+  .score-pill {
+    display: inline-block;
+    min-width: 32px;
+    text-align: center;
+    padding: 0.1rem 0.4rem;
+    border-radius: 5px;
+    font-weight: 700;
+    font-size: 0.75rem;
+  }
+  .score-high { background: #14532d; color: var(--green); }
+  .score-mid  { background: #451a03; color: var(--amber); }
+  .score-low  { background: #450a0a; color: var(--red); }
+
+  .email-badge {
+    font-size: 0.72rem;
+    padding: 0.05rem 0.4rem;
+    border-radius: 4px;
+    font-weight: 600;
+  }
+  .eb-verified  { background:#14532d; color:var(--green); }
+  .eb-probable  { background:#451a03; color:var(--amber); }
+  .eb-catch_all { background:#1e3a5f; color:#93c5fd; }
+  .eb-not_found { background:#450a0a; color:var(--red); }
+
+  .empty-state {
+    text-align: center;
+    color: var(--muted);
+    padding: 2.5rem 0;
+    font-size: 0.9rem;
+  }
+  .no-query {
+    text-align: center;
+    color: var(--muted);
+    margin-top: 1rem;
+    font-size: 0.9rem;
+  }
+</style>
+
+<div class="search-hero">
+  <h1>🔍 Buscar</h1>
+  <form class="search-form" method="get" action="/search">
+    <input
+      class="search-input"
+      type="text"
+      name="q"
+      value="{{ q }}"
+      placeholder="Empresa, contacto, email, industria…"
+      autofocus
+    >
+    <button class="search-btn" type="submit">Buscar</button>
+  </form>
+</div>
+
+{% if not q %}
+  <p class="no-query">Ingresá un término para buscar en todas las empresas y contactos.</p>
+
+{% elif not companies and not contacts %}
+  <div class="empty-state">
+    <div style="font-size:2rem;margin-bottom:0.5rem">🔎</div>
+    Sin resultados para <strong>"{{ q }}"</strong>
+  </div>
+
+{% else %}
+<div class="results-grid">
+
+  <!-- EMPRESAS -->
+  <div class="result-section">
+    <h2>
+      Empresas
+      <span class="result-count">{{ companies|length }}</span>
+    </h2>
+
+    {% if not companies %}
+      <div class="empty-state" style="padding:1rem 0">Sin resultados</div>
+    {% endif %}
+
+    {% for c in companies %}
+    <div class="result-card">
+      <div class="rc-name">
+        {% if c.run_id %}
+          <a href="/run/{{ c.run_id }}">{{ c.name }}</a>
+        {% else %}
+          {{ c.name }}
+        {% endif %}
+      </div>
+      <div class="rc-meta">
+        {% if c.score is not none %}
+          <span class="score-pill {% if c.score >= 70 %}score-high{% elif c.score >= 40 %}score-mid{% else %}score-low{% endif %}">
+            {{ c.score }}
+          </span>
+        {% endif %}
+        {% if c.industry %}<span>{{ c.industry }}</span>{% endif %}
+        {% if c.location %}<span>📍 {{ c.location }}</span>{% endif %}
+        {% if c.domain %}<span>🌐 {{ c.domain }}</span>{% endif %}
+      </div>
+      {% if c.description %}
+        <div class="rc-desc">{{ c.description }}</div>
+      {% endif %}
+      <div class="rc-actions">
+        {% if c.website_url %}
+          <a class="rc-link" href="{{ c.website_url }}" target="_blank" rel="noopener">Web ↗</a>
+        {% endif %}
+        {% if c.run_id %}
+          <a class="rc-link" href="/run/{{ c.run_id }}">Ver run</a>
+        {% endif %}
+        {% if c.contacted %}
+          <a class="rc-link contacted" href="/contacts-report">✓ Contactado</a>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- CONTACTOS -->
+  <div class="result-section">
+    <h2>
+      Contactos
+      <span class="result-count">{{ contacts|length }}</span>
+    </h2>
+
+    {% if not contacts %}
+      <div class="empty-state" style="padding:1rem 0">Sin resultados</div>
+    {% endif %}
+
+    {% for ct in contacts %}
+    <div class="result-card">
+      <div class="rc-name">{{ ct.name or "Sin nombre" }}</div>
+      <div class="rc-meta">
+        {% if ct.role %}<span>{{ ct.role }}</span>{% endif %}
+        <span>
+          <a href="/search?q={{ ct.company_name | urlencode }}" style="color:var(--muted)">
+            🏢 {{ ct.company_name }}
+          </a>
+        </span>
+        {% if ct.company_domain %}<span>{{ ct.company_domain }}</span>{% endif %}
+      </div>
+      {% if ct.email %}
+        <div class="rc-meta" style="margin-top:0.15rem">
+          <span>✉ {{ ct.email }}</span>
+          {% if ct.email_status %}
+            <span class="email-badge eb-{{ ct.email_status }}">{{ ct.email_status }}</span>
+          {% endif %}
+        </div>
+      {% endif %}
+      {% if ct.phone_whatsapp %}
+        <div class="rc-meta"><span>📱 {{ ct.phone_whatsapp }}</span></div>
+      {% endif %}
+      <div class="rc-actions">
+        {% if ct.linkedin_url %}
+          <a class="rc-link" href="{{ ct.linkedin_url }}" target="_blank" rel="noopener">LinkedIn ↗</a>
+        {% endif %}
+        <a class="rc-link" href="/search?q={{ ct.company_name | urlencode }}">Ver empresa</a>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+</div>
+{% endif %}
+{% endblock %}
