@@ -286,8 +286,10 @@ Visual separators between search/actions and the logout link.
 Browse or search companies. With **no query** it lists **all companies** (25/page, prev/next
 pagination); with a query it filters companies (name, domain, industry, location) and shows
 matching contacts (name, email, role) in a second column. Cards have score pills, email status
-badges, a link to the run where each company was found, and a "✓ Contactado" badge if the
-company has a `ContactStatus`. **⬇ CSV / ⬇ MD** buttons export the company listing (respecting
+badges, a link to the run where each company was found, and per-card actions: **💬 Feedback**
+(same modal/route as `/contacts-report`) and a **Marcar contactado / ✓ Contactado** toggle
+(`/company/<id>/toggle-contact`) — both redirect back to the current search via referrer, so you
+can triage without opening the Run. **⬇ CSV / ⬇ MD** buttons export the company listing (respecting
 the active `?q=` filter) via `/search/export/<fmt>` (`export_companies_csv` /
 `export_companies_markdown` in `src/export.py`). Template: `src/templates/search.html`.
 

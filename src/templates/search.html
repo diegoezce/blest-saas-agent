@@ -119,6 +119,7 @@
   }
   .rc-link:hover { border-color: var(--accent); text-decoration: none; }
   .rc-link.contacted { color: var(--green); border-color: #14532d; background: #14532d22; }
+  button.rc-link { background: none; cursor: pointer; font-family: inherit; line-height: 1.45; }
 
   .score-pill {
     display: inline-block;
@@ -269,9 +270,16 @@
         {% if c.run_id %}
           <a class="rc-link" href="/run/{{ c.run_id }}">Ver run</a>
         {% endif %}
-        {% if c.contacted %}
-          <a class="rc-link contacted" href="/contacts-report">✓ Contactado</a>
-        {% endif %}
+        <button type="button" class="rc-link"
+          onclick="openFeedbackModal({{ c.id }}, '{{ c.name|replace("'", "\\'")|e }}')">💬 Feedback</button>
+        <form method="POST" action="/company/{{ c.id }}/toggle-contact" style="display:contents">
+          {% if c.contacted %}
+            <button type="submit" class="rc-link contacted"
+              onclick="return confirm('¿Desmarcar {{ c.name|replace("'", "\\'")|e }} como contactada?')">✓ Contactado</button>
+          {% else %}
+            <button type="submit" class="rc-link">Marcar contactado</button>
+          {% endif %}
+        </form>
       </div>
     </div>
     {% endfor %}
@@ -341,4 +349,115 @@
 
 </div>
 {% endif %}
+
+<!-- ── Feedback Modal (same as /contacts-report) ─────────────────────── -->
+<div id="feedback-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:300;align-items:center;justify-content:center">
+  <div id="feedback-modal-inner" class="card" style="width:100%;max-width:520px;padding:1.75rem;max-height:90vh;overflow-y:auto">
+    <div class="flex items-center justify-between" style="margin-bottom:1.25rem">
+      <h2 style="font-size:1.15rem;font-weight:700" id="feedback-company-name">Company</h2>
+      <button onclick="closeFeedbackModal()" style="background:none;border:none;color:var(--muted);font-size:1.3rem;cursor:pointer;padding:0.25rem">&times;</button>
+    </div>
+    <form id="feedback-form" method="POST" action="">
+      <label style="font-size:0.85rem;color:var(--muted);display:block;margin-bottom:0.35rem;font-weight:600">Notas</label>
+      <textarea name="comment" rows="3" placeholder="¿Qué pasó al contactarlos? Notas..."
+        style="width:100%;padding:0.6rem 0.75rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.9rem;resize:vertical;margin-bottom:1rem;font-family:inherit"></textarea>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;margin-bottom:1rem">
+        <div>
+          <label style="font-size:0.85rem;color:var(--muted);display:block;margin-bottom:0.35rem;font-weight:600">Método</label>
+          <select name="contact_method"
+            style="width:100%;padding:0.5rem 0.6rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.85rem">
+            <option value="">— Seleccionar —</option>
+            <option value="email">Email</option>
+            <option value="linkedin">LinkedIn</option>
+            <option value="phone">Teléfono</option>
+            <option value="whatsapp">WhatsApp</option>
+            <option value="in_person">Presencial</option>
+            <option value="other">Otro</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:0.85rem;color:var(--muted);display:block;margin-bottom:0.35rem;font-weight:600">Respuesta</label>
+          <select name="response_received"
+            style="width:100%;padding:0.5rem 0.6rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.85rem">
+            <option value="">— Seleccionar —</option>
+            <option value="interested">Interesado</option>
+            <option value="not_interested">No interesado</option>
+            <option value="no_reply">Sin respuesta</option>
+            <option value="call_back">Llamar después</option>
+            <option value="meeting_scheduled">Reunión pactada</option>
+            <option value="already_training">Ya tiene proveedor</option>
+            <option value="wrong_contact">Persona equivocada</option>
+          </select>
+        </div>
+      </div>
+
+      <div style="margin-bottom:1.25rem">
+        <label style="font-size:0.85rem;color:var(--muted);display:block;margin-bottom:0.35rem;font-weight:600">Fecha de seguimiento</label>
+        <input type="date" name="follow_up_date"
+          style="width:100%;padding:0.5rem 0.6rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.85rem">
+      </div>
+
+      <div style="margin-bottom:1.25rem">
+        <div style="font-size:0.85rem;color:var(--muted);margin-bottom:0.5rem;font-weight:600">🔍 ¿Qué mejorar en la búsqueda?</div>
+        <div style="display:flex;flex-direction:column;gap:0.4rem;font-size:0.87rem">
+          <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer"><input type="checkbox" name="icp_wrong_industry" value="yes" style="accent-color:var(--accent)"> Industria incorrecta</label>
+          <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer"><input type="checkbox" name="icp_wrong_size" value="yes" style="accent-color:var(--accent)"> Empresa muy chica/grande</label>
+          <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer"><input type="checkbox" name="icp_wrong_contact" value="yes" style="accent-color:var(--accent)"> Contacto equivocado</label>
+          <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer"><input type="checkbox" name="icp_no_english_need" value="yes" style="accent-color:var(--accent)"> Inglés no es prioridad</label>
+          <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer"><input type="checkbox" name="icp_already_training" value="yes" style="accent-color:var(--accent)"> Ya tiene proveedor</label>
+          <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer"><input type="checkbox" name="icp_wrong_location" value="yes" style="accent-color:var(--accent)"> Ubicación incorrecta</label>
+          <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer"><input type="checkbox" name="icp_no_budget" value="yes" style="accent-color:var(--accent)"> Sin presupuesto</label>
+        </div>
+        <div style="margin-top:0.5rem">
+          <input type="text" name="icp_other_text" placeholder="Otro feedback..."
+            style="width:100%;padding:0.5rem 0.6rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.84rem">
+        </div>
+      </div>
+
+      <div style="display:flex;gap:0.75rem;border-top:1px solid var(--border);padding-top:1rem">
+        <button type="submit"
+          style="flex:1;background:#38bdf8;color:#0f172a;font-weight:700;border:none;padding:0.6rem;border-radius:6px;cursor:pointer;font-size:0.9rem">
+          Guardar
+        </button>
+        <button type="button" onclick="closeFeedbackModal()"
+          style="flex:1;background:var(--surface-hover);color:var(--text);border:1px solid var(--border);padding:0.6rem;border-radius:6px;cursor:pointer;font-size:0.9rem">
+          Cancelar
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function openFeedbackModal(companyId, companyName) {
+  const modal = document.getElementById('feedback-modal');
+  const form  = document.getElementById('feedback-form');
+  document.getElementById('feedback-company-name').textContent = '💬 ' + companyName;
+  form.action = '/company/' + companyId + '/feedback';
+  form.reset();
+  fetch('/company/' + companyId + '/feedback')
+    .then(r => r.json())
+    .then(data => {
+      if (!data.exists) return;
+      if (data.comment)          form.comment.value = data.comment;
+      if (data.contact_method)   form.contact_method.value = data.contact_method;
+      if (data.response_received) form.response_received.value = data.response_received;
+      if (data.follow_up_date)   form.follow_up_date.value = data.follow_up_date;
+      const icp = data.icp_feedback || {};
+      document.querySelectorAll('[name^="icp_"]').forEach(el => {
+        if (el.type === 'checkbox' && icp[el.name] === 'yes') el.checked = true;
+        if (el.type === 'text'     && icp[el.name])           el.value   = icp[el.name];
+      });
+    })
+    .catch(() => {});
+  modal.style.display = 'flex';
+}
+function closeFeedbackModal() {
+  document.getElementById('feedback-modal').style.display = 'none';
+}
+document.getElementById('feedback-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeFeedbackModal();
+});
+</script>
 {% endblock %}
