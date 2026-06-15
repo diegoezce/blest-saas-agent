@@ -144,7 +144,7 @@
   .eb-probable  { background:#451a03; color:var(--amber); }
   .eb-catch_all { background:#1e3a5f; color:#93c5fd; }
   .eb-not_found { background:#450a0a; color:var(--red); }
-  .eb-bounced   { background:#450a0a; color:#fca5a5; text-decoration:line-through; }
+  .eb-bounced   { background:#7f1d1d; color:#fecaca; font-weight:700; }
 
   .empty-state {
     text-align: center;
@@ -330,7 +330,7 @@
         <div class="rc-meta" style="margin-top:0.15rem">
           <span>✉ {{ ct.email }}</span>
           {% if ct.email_status %}
-            <span class="email-badge eb-{{ ct.email_status }}">{{ ct.email_status }}</span>
+            <span class="email-badge eb-{{ ct.email_status }}">{% if ct.email_status == 'bounced' %}📭 rebotó{% else %}{{ ct.email_status }}{% endif %}</span>
           {% endif %}
         </div>
       {% endif %}

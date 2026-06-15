@@ -432,6 +432,7 @@ Key models: `Profile`, `DiscoveryRun`, `Company`, `Contact` (with enrichment fie
 | `WORKER_PUSH_DELAY` | — | Seconds between Zoho API calls (default: 1) |
 | `WORKER_RETRY_FAILED` | — | Retry previously-failed named contacts (default: true) |
 | `WORKER_MAX_ATTEMPTS` | — | Max enrichment passes per contact incl. first (default: 3) |
+| `WORKER_CHECK_BOUNCES` | — | Phase 3: scan Zoho inbox + mark bounced contacts (default: true; needs READ scope) |
 
 ## Windows Worker (`worker/`)
 
@@ -440,7 +441,7 @@ via Task Scheduler. Connects directly to the Railway PostgreSQL DB — Railway r
 source of truth. No data is stored locally; the worker only reads and writes to the shared DB.
 Full operational runbook: **`worker/README.md`**.
 
-### What it does (two phases per run)
+### What it does (per run)
 1. **Enrichment** — picks up to `WORKER_ENRICH_BATCH` contacts where `enriched_at IS NULL`
    and runs the full pipeline (Layer 0 domain resolution → scrape → SMTP verify → Hunter).
    When `WORKER_RETRY_FAILED` is on and the batch isn't full, it also **retries** previously
@@ -453,6 +454,9 @@ Full operational runbook: **`worker/README.md`**.
    never duplicated across runs. Uses the stored `outreach_draft` + `outreach_subject`;
    generates a fresh draft with Claude Haiku if the opportunity has none. Sets `zoho_pushed_at`
    after a successful push (idempotency).
+3. **Bounce check** — scans the Zoho inbox for bounce notifications and marks matched contacts
+   `email_status="bounced"` (see "Bounce detection"). Toggle with `WORKER_CHECK_BOUNCES`
+   (default on); non-fatal if the token lacks the READ scope.
 
 ### Setup on Windows
 1. Clone the repo; copy `worker/.env.example` → `worker/.env` and fill in credentials.

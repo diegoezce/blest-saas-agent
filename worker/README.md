@@ -12,7 +12,7 @@ No data is stored locally (only logs).
 
 ---
 
-## What it does (two phases per run)
+## What it does (per run)
 
 1. **Enrichment** — takes up to `WORKER_ENRICH_BATCH` contacts that have no email yet
    (`enriched_at IS NULL`) and runs the enrichment pipeline:
@@ -27,6 +27,12 @@ No data is stored locally (only logs).
    skips any company already contacted or pushed in a prior run, so the same company never gets
    duplicate outreach. If the opportunity has no draft yet, one is generated on the fly with Claude
    Haiku (in the profile's `outreach_language`). `zoho_pushed_at` is set after a successful push.
+
+3. **Bounce check** — scans the Zoho inbox for bounce notifications (mailer-daemon/postmaster,
+   "Undelivered"/"Undeliverable"; "delay" notices ignored), matches the failed addresses to
+   contacts, and marks them `email_status="bounced"` (which also drops them from push
+   eligibility). Toggle with `WORKER_CHECK_BOUNCES` (default on); non-fatal if the token lacks
+   the READ scope. Same logic as the `📭 Chequear rebotes` button and `python run.py --check-bounces`.
 
 ---
 
@@ -85,6 +91,7 @@ If step 4 prints "Worker finished." you're ready to schedule it.
 | `WORKER_PUSH_DELAY` | — | Seconds between Zoho calls (default 1) |
 | `WORKER_RETRY_FAILED` | — | Retry previously-failed named contacts (default `true`) |
 | `WORKER_MAX_ATTEMPTS` | — | Max enrichment passes per contact incl. first (default 3) |
+| `WORKER_CHECK_BOUNCES` | — | Phase 3: scan Zoho inbox + mark bounced contacts (default true; needs READ scope) |
 
 > The enrichment providers read API keys from `os.environ`, which is why the worker calls
 > `load_dotenv(worker/.env)` at startup. If you run enrichment outside the worker, the keys must

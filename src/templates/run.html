@@ -314,16 +314,16 @@ details.lead[open] .lead-chevron { transform:rotate(90deg); }
             {{ first.get('contact_name') }}{% if first.get('contact_role') %} · <em>{{ first.get('contact_role') }}</em>{% endif %}
           </span>
         {% endif %}
+        {% set estatus = first.get('email_status') %}
+        {% set esource = first.get('email_source') %}
+        {% set elog = first.get('enrichment_log') %}
         {% if first.get('contact_email') %}
           <a href="mailto:{{ first.get('contact_email') }}"
-             style="font-size:0.82rem;color:var(--accent);text-decoration:none"
+             style="font-size:0.82rem;text-decoration:none;{% if estatus == 'bounced' %}color:var(--muted);text-decoration:line-through{% else %}color:var(--accent){% endif %}"
              onclick="event.stopPropagation()">
             {{ first.get('contact_email') }}
           </a>
         {% endif %}
-        {% set estatus = first.get('email_status') %}
-        {% set esource = first.get('email_source') %}
-        {% set elog = first.get('enrichment_log') %}
         {% if estatus == 'verified' %}
           <span title="✅ Email verificado{% if esource %} vía {{ esource }}{% endif %}{% if elog and elog.get('layer2') and elog['layer2'].get('inferred_pattern') %} (patrón: {{ elog['layer2']['inferred_pattern'] }}){% endif %}" style="font-size:0.82rem;cursor:help">✅</span>
         {% elif estatus == 'probable' %}
@@ -344,6 +344,8 @@ details.lead[open] .lead-chevron { transform:rotate(90deg); }
             data-elog='{{ elog|tojson }}'
             style="font-size:0.7rem;padding:0.05rem 0.35rem;background:var(--surface-hover);border:1px solid var(--border);border-radius:4px;color:var(--muted);cursor:pointer">ver</button>
           {% endif %}
+        {% elif estatus == 'bounced' %}
+          <span title="El email rebotó / es inválido" style="font-size:0.7rem;font-weight:700;padding:0.05rem 0.4rem;border-radius:4px;background:#7f1d1d;color:#fecaca;letter-spacing:0.03em">REBOTÓ</span>
         {% elif first.get('contact_linkedin_url') %}
           <span title="🔵 Solo LinkedIn — click Enrich para buscar email" style="font-size:0.82rem;cursor:help">🔵</span>
         {% endif %}

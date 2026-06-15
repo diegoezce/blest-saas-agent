@@ -129,45 +129,61 @@ def render_report_from_data(report_data: dict, run: DiscoveryRun | None = None) 
 
 
 def _enrich_drafts_from_db(session, report_json: dict) -> dict:
+    """Overlay LIVE contact data onto the cached report drafts.
+
+    Always refreshes `email_status`/`email_source`/etc. from the DB so changes made
+    after the run (enrichment, bounce marking) show up — matching each draft to a
+    contact by its email first (precise), falling back to the best contact for the
+    company. Also fills missing contact info for drafts that have none.
+    """
     drafts = report_json.get("outreach_drafts", [])
     if not drafts:
         return report_json
-    needs_enrichment = any(
-        not d.get("contact_email") and not d.get("contact_linkedin_url")
-        for d in drafts
+
+    # email -> live Contact (to overlay current status precisely, incl. "bounced")
+    email_map: dict[str, Contact] = {
+        (c.email or "").lower(): c
+        for c in session.query(Contact).filter(Contact.email.isnot(None)).all()
+    }
+
+    # Best contact per company — only needed to fill drafts that lack contact info
+    need_best = any(
+        not d.get("contact_email") and not d.get("contact_linkedin_url") for d in drafts
     )
-    if not needs_enrichment:
-        return report_json
-    companies = session.query(Company).all()
-    contact_map: dict[str, Contact] = {}
-    for company in companies:
-        best = (
-            session.query(Contact)
-            .filter_by(company_id=company.id)
-            .order_by(Contact.confidence_score.desc())
-            .first()
-        )
-        if best:
-            contact_map[company.name] = best
+    best_by_company: dict[str, Contact] = {}
+    if need_best:
+        for company in session.query(Company).all():
+            best = (
+                session.query(Contact)
+                .filter_by(company_id=company.id)
+                .order_by(Contact.confidence_score.desc())
+                .first()
+            )
+            if best:
+                best_by_company[company.name] = best
+
     enriched_drafts = []
     for d in drafts:
-        contact = contact_map.get(d.get("company_name", ""))
-        if contact and not d.get("contact_email") and not d.get("contact_linkedin_url"):
+        if not d.get("contact_email") and not d.get("contact_linkedin_url"):
+            contact = best_by_company.get(d.get("company_name", ""))
+            if contact:
+                d = {
+                    **d,
+                    "contact_name": d.get("contact_name") or contact.name,
+                    "contact_role": d.get("contact_role") or contact.role,
+                    "contact_email": contact.email,
+                    "contact_linkedin_url": contact.linkedin_url,
+                }
+        live = email_map.get((d.get("contact_email") or "").lower()) \
+            or best_by_company.get(d.get("company_name", ""))
+        if live:
             d = {
                 **d,
-                "contact_name": d.get("contact_name") or contact.name,
-                "contact_role": d.get("contact_role") or contact.role,
-                "contact_email": contact.email,
-                "contact_linkedin_url": contact.linkedin_url,
-            }
-        if contact:
-            d = {
-                **d,
-                "contact_id": contact.id,
-                "email_status": contact.email_status,
-                "email_source": contact.email_source,
-                "phone_whatsapp": contact.phone_whatsapp,
-                "enrichment_log": contact.enrichment_log,
+                "contact_id": live.id,
+                "email_status": live.email_status,
+                "email_source": live.email_source,
+                "phone_whatsapp": live.phone_whatsapp,
+                "enrichment_log": live.enrichment_log,
             }
         enriched_drafts.append(d)
     return {**report_json, "outreach_drafts": enriched_drafts}

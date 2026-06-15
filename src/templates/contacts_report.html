@@ -139,7 +139,7 @@
       <a href="mailto:{{ ct.email }}" style="color:var(--accent);font-size:0.77rem">{{ ct.email }}</a>
       {% if ct.email_status == 'verified' %}<span title="verificado{% if ct.email_source %} vía {{ ct.email_source }}{% endif %}">✅</span>
       {% elif ct.email_status == 'probable' %}<span title="probable">🟡</span>
-      {% elif ct.email_status == 'bounced' %}<span title="rebotó / inválido">📭</span>
+      {% elif ct.email_status == 'bounced' %}<span title="El email rebotó / es inválido" style="font-size:0.62rem;font-weight:700;padding:0.02rem 0.3rem;border-radius:3px;background:#7f1d1d;color:#fecaca;letter-spacing:0.02em">REBOTÓ</span>
       {% else %}<span title="sin verificar">🔴</span>{% endif %}
       {% elif ct.linkedin_url %}
       <a href="{{ ct.linkedin_url }}" target="_blank" rel="noopener" style="color:var(--accent);font-size:0.77rem">🔵 LinkedIn</a>

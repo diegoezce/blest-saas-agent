@@ -48,6 +48,7 @@ ENRICH_DELAY_S = float(os.getenv("WORKER_ENRICH_DELAY", "3"))   # between contac
 PUSH_DELAY_S   = float(os.getenv("WORKER_PUSH_DELAY", "1"))     # between Zoho calls
 RETRY_FAILED   = os.getenv("WORKER_RETRY_FAILED", "true").lower() in ("1", "true", "yes")
 MAX_ATTEMPTS   = int(os.getenv("WORKER_MAX_ATTEMPTS", "3"))     # incl. first pass
+CHECK_BOUNCES  = os.getenv("WORKER_CHECK_BOUNCES", "true").lower() in ("1", "true", "yes")
 
 
 # ── Draft generation (only called when Opportunity.outreach_draft is NULL) ──
@@ -312,6 +313,27 @@ def _run_push_phase(db) -> int:
     return pushed
 
 
+# ── Phase 3: Bounce check ────────────────────────────────────────────────────
+
+def _run_bounce_phase() -> int:
+    """Scan the Zoho inbox for bounces and mark matched contacts (email_status='bounced').
+    Self-contained (own DB session). Failures are non-fatal (e.g. missing read scope)."""
+    if not CHECK_BOUNCES:
+        logger.info("Bounce check: disabled (WORKER_CHECK_BOUNCES=false)")
+        return 0
+    try:
+        from src.tools.bounces import apply_bounces
+        res = apply_bounces()
+        logger.info(
+            f"Bounce check: {res['bounce_messages']} bounce msg(s) in inbox, "
+            f"{res['marked']} contact(s) newly marked as bounced"
+        )
+        return res["marked"]
+    except Exception as exc:
+        logger.warning(f"Bounce check skipped/failed (missing messages.READ/folders.READ scope?): {exc}")
+        return 0
+
+
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 def main():
@@ -334,6 +356,8 @@ def main():
     with get_session() as db:
         _run_enrichment_phase(db)
         _run_push_phase(db)
+
+    _run_bounce_phase()  # Phase 3 — mark bounced emails (reads Zoho inbox)
 
     logger.info("Worker finished.")
 
