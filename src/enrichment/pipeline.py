@@ -11,7 +11,7 @@ from src.enrichment.patterns import (
     infer_pattern_from_emails,
     prioritize_candidates,
 )
-from src.enrichment.providers.million_verifier import MillionVerifierProvider
+from src.enrichment.providers import get_verifier
 from src.enrichment.providers.hunter import HunterProvider
 
 logger = logging.getLogger(__name__)
@@ -163,7 +163,8 @@ def enrich_contact(contact_id: int) -> EnrichmentResult:
                 layer2["candidates"] = candidates
                 logger.info(f"{label} — checking {len(candidates)} candidates: {', '.join(candidates)}")
 
-                verifier = MillionVerifierProvider()
+                verifier = get_verifier()
+                layer2["verifier"] = type(verifier).__name__
                 unknown_fallback: str | None = None
                 for candidate in candidates:
                     time.sleep(1)  # global rate limit

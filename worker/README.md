@@ -73,7 +73,9 @@ If step 4 prints "Worker finished." you're ready to schedule it.
 | `ANTHROPIC_API_KEY` | ✅ | Claude API key (Haiku for drafts) |
 | `ZOHO_CLIENT_ID` | ✅ | OAuth2 client ID (self-client app) |
 | `ZOHO_CLIENT_SECRET` | ✅ | OAuth2 client secret |
+| `EMAIL_VERIFIER_PROVIDER` | — | Layer 2 verifier: `millionverifier` (default) or `neverbounce` |
 | `EMAIL_VERIFIER_API_KEY` | — | MillionVerifier key (~$0.003/check). **Needs credits** — at 0 credits every candidate comes back `unknown` and emails are stored as unverified guesses (`probable`/`pattern_unverified`) |
+| `NEVERBOUNCE_API_KEY` | — | NeverBounce key (used when `EMAIL_VERIFIER_PROVIDER=neverbounce`; 1,000 free/month) |
 | `HUNTER_API_KEY` | — | Hunter.io key (25 free/month) |
 | `FAST_MODEL` | — | Model override (default `claude-haiku-4-5-20251001`) |
 | `WORKER_ENRICH_BATCH` | — | Contacts to enrich per run (default 15) |
@@ -162,6 +164,11 @@ Both are gitignored.
   run is never pushed again (see CLAUDE.md → "Cross-run dedup").
 - **MillionVerifier credits**: with 0 credits, emails can't be SMTP-verified and are stored as
   `probable`/unverified guesses. Top up if you need verified-quality emails.
+- **Switching the verifier (MillionVerifier ↔ NeverBounce)**: set `EMAIL_VERIFIER_PROVIDER=neverbounce`
+  and `NEVERBOUNCE_API_KEY=...` in `worker/.env` (and in Railway env vars for the web/Quick-Run path).
+  No code change or redeploy logic needed — the provider is picked at runtime by
+  `get_verifier()`. Set it back to `millionverifier` to revert. NeverBounce gives 1,000 free
+  checks/month, so it's a cheaper starting point than MillionVerifier's paid credits.
 
 ---
 

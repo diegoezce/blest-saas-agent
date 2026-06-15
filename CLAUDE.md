@@ -177,10 +177,13 @@ or looked up), so they no longer dilute the email ratio.
 - Extracts emails (regex) and Argentine phone/WhatsApp numbers
 - All found emails are used to infer the corporate pattern for Layer 2
 
-### Layer 2 — Pattern generation + SMTP verification (`src/enrichment/patterns.py` + `providers/million_verifier.py`)
+### Layer 2 — Pattern generation + SMTP verification (`src/enrichment/patterns.py` + `providers/`)
 - Generates 6 email permutations: `first.last@`, `flast@`, `first@`, `firstlast@`, `f.last@`, `last@`
 - If Layer 1 found domain emails, infers the corporate pattern and prioritizes it
-- Verifies candidates via MillionVerifier API (`EMAIL_VERIFIER_API_KEY`)
+- Verifies candidates via the configured provider — `EMAIL_VERIFIER_PROVIDER`: `millionverifier`
+  (default, uses `EMAIL_VERIFIER_API_KEY`) or `neverbounce` (uses `NEVERBOUNCE_API_KEY`). The
+  provider is chosen by `get_verifier()` in `src/enrichment/providers/__init__.py`; both map their
+  results to the same `valid / catch_all / invalid / unknown` statuses.
 - Stops on first `valid` result; `catch_all` → stored as `probable`, never `verified`
 
 ### Layer 3 — Hunter.io fallback (`src/enrichment/providers/hunter.py`)
@@ -382,7 +385,9 @@ Key models: `Profile`, `DiscoveryRun`, `Company`, `Contact` (with enrichment fie
 | `ZOHO_REFRESH_TOKEN` | Zoho/Railway | Long-lived refresh token (from `--zoho-auth`) |
 | `ZOHO_ACCOUNT_ID` | Zoho/Railway | Zoho Mail account ID |
 | `ZOHO_FROM_ADDRESS` | Zoho/Railway | Sender email address |
+| `EMAIL_VERIFIER_PROVIDER` | Enrichment | Layer 2 verifier: `millionverifier` (default) or `neverbounce` |
 | `EMAIL_VERIFIER_API_KEY` | Enrichment | MillionVerifier API key (~$0.003/check). Needs a credit balance — at 0 credits the API returns `unknown` for every candidate and emails degrade to unverified guesses (`probable`/`pattern_unverified`) |
+| `NEVERBOUNCE_API_KEY` | Enrichment | NeverBounce API key (used when provider=neverbounce; 1,000 free/month) |
 | `HUNTER_API_KEY` | Enrichment | Hunter.io API key (25 free/month) |
 
 ### Worker-only (Windows mini PC — `worker/.env`)
@@ -393,7 +398,9 @@ Key models: `Profile`, `DiscoveryRun`, `Company`, `Contact` (with enrichment fie
 | `ANTHROPIC_API_KEY` | ✅ | Claude API key (Haiku for drafts, ~$2-4/month) |
 | `ZOHO_CLIENT_ID` | ✅ | OAuth2 client ID (same self-client app) |
 | `ZOHO_CLIENT_SECRET` | ✅ | OAuth2 client secret |
-| `EMAIL_VERIFIER_API_KEY` | Enrichment | MillionVerifier key |
+| `EMAIL_VERIFIER_PROVIDER` | Enrichment | Layer 2 verifier: `millionverifier` (default) or `neverbounce` |
+| `EMAIL_VERIFIER_API_KEY` | Enrichment | MillionVerifier key (provider=millionverifier) |
+| `NEVERBOUNCE_API_KEY` | Enrichment | NeverBounce key (provider=neverbounce) |
 | `HUNTER_API_KEY` | Enrichment | Hunter.io key |
 | `FAST_MODEL` | — | Override model (default: claude-haiku-4-5-20251001) |
 | `WORKER_ENRICH_BATCH` | — | Contacts to enrich per run (default: 15) |
@@ -464,7 +471,7 @@ when it first connects. See `worker/README.md` for the full runbook.
 | `src/enrichment/pipeline.py` | Enrichment orchestrator (Layer 0 domain resolution + 3 layers + attempt counter) |
 | `src/enrichment/scraper.py` | Site scraper (Layer 1) |
 | `src/enrichment/patterns.py` | Email pattern generation (Layer 2) |
-| `src/enrichment/providers/` | `base.py`, `million_verifier.py`, `hunter.py` |
+| `src/enrichment/providers/` | `base.py`, `million_verifier.py`, `neverbounce.py`, `hunter.py`; `__init__.py` → `get_verifier()` factory |
 | `src/integrations/zoho_mail.py` | Zoho Mail OAuth2 + draft creation |
 | `src/dashboard.py` | Rich terminal dashboard, `_enrich_drafts_from_db()` |
 | `src/export.py` | CSV + Markdown export |
