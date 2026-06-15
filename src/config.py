@@ -33,6 +33,13 @@ class Settings(BaseSettings):
     max_companies_for_insights: int = 0
     max_companies_for_outreach: int = 20
 
+    # Dedup across runs: skip companies already discovered in previous runs so
+    # each run focuses on net-new leads (stops reports/outreach from repeating).
+    exclude_known_companies: bool = True
+    # 0 = a known company is never re-surfaced. >0 = a never-contacted company
+    # may be re-discovered once it hasn't been seen for this many days.
+    rediscover_after_days: int = 0
+
     # Business targeting (defaults — overridable by Profile)
     target_cities: str = "Buenos Aires,Córdoba,Rosario,Mendoza,Neuquén"
     target_industries: str = "technology,consulting,fintech,legaltech,accounting,professional_services,oil_gas,energy"

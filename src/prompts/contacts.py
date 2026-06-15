@@ -11,17 +11,21 @@ COMPANY CONTEXT AND SEARCH RESULTS:
 {company_context}
 
 For each decision maker found, provide:
-- name: Full name if found (null if not identifiable)
+- name: Full name of the ACTUAL person (REQUIRED — only include people whose real \
+name you can identify; never invent or guess a name)
 - role: Exact role title as found
-- role_category: One of: hr, talent_ld, operations, founder, other
+- role_category: One of: founder, director, academic, admin, other
+  (use "director" for HR / People / L&D managers and heads; "founder" for \
+CEO / owner / managing director; "admin" for operations or administrative staff; \
+"other" if unsure)
 - linkedin_url: LinkedIn profile URL if found (null otherwise)
 - email: Email address if found (null otherwise)
 - confidence: "high" (directly confirmed by a reliable source), "medium" (inferred from context), "low" (likely role but not confirmed)
-- notes: Brief explanation of where/how this person was found, or what was searched if not found
+- notes: Brief explanation of where/how this person was found
 
-Return 1–2 contacts maximum. If no specific individual is found, include one entry with \
-name=null and the most likely role at this type/size of company, with notes explaining \
-what was searched.
+Return up to 2 NAMED decision makers, best first. Only include a person if you can \
+identify their real name. If you cannot find any named individual, return an EMPTY \
+contacts list — do NOT fabricate a placeholder or a name=null entry.
 """
 
 

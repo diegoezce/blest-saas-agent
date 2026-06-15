@@ -147,7 +147,11 @@ def persist_run_node(state: AgentState) -> AgentState:
                 if not cid:
                     continue
                 for c in contacts_data.get("contacts", []):
-                    name = c.get("name") or ""
+                    name = (c.get("name") or "").strip()
+                    # Skip nameless / role-only contacts: they can't be emailed
+                    # (enrichment needs a name) and only dilute the email ratio.
+                    if not name:
+                        continue
                     linkedin = c.get("linkedin_url") or ""
                     # Dedup: match by LinkedIn URL (most reliable) or name within company
                     existing = None

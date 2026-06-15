@@ -46,8 +46,36 @@ def enrich_contact(contact_id: int) -> EnrichmentResult:
             result.log["error"] = "contact not found"
             return result
 
+        # Carry forward an attempt counter so the worker can bound retries.
+        prev_log = contact.enrichment_log if isinstance(contact.enrichment_log, dict) else {}
+        result.log["attempts"] = prev_log.get("attempts", 0) + 1
+
         company = session.get(Company, contact.company_id)
         domain = company.domain if company else None
+
+        # If discovery never captured a domain, try to resolve one before
+        # giving up — otherwise every contact at this company instant-fails.
+        if not domain and company:
+            from src.enrichment.domain_resolver import resolve_company_domain
+            existing_emails = [
+                e for (e,) in session.query(Contact.email)
+                .filter(Contact.company_id == company.id, Contact.email.isnot(None))
+                .all()
+            ]
+            resolved = resolve_company_domain(company.name, company.location, existing_emails)
+            if resolved:
+                domain = resolved
+                result.log["domain_resolved"] = resolved
+                logger.info(f"[Enrich #{contact_id}] resolved missing domain → {resolved}")
+                # Persist back only if no other company already owns this domain
+                # (domain column is unique).
+                clash = (
+                    session.query(Company.id)
+                    .filter(Company.domain == resolved, Company.id != company.id)
+                    .first()
+                )
+                if not clash:
+                    company.domain = resolved
 
         if not domain:
             result.log["error"] = "no domain for company"

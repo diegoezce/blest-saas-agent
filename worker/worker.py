@@ -46,6 +46,8 @@ ENRICH_BATCH   = int(os.getenv("WORKER_ENRICH_BATCH", "15"))
 PUSH_BATCH     = int(os.getenv("WORKER_PUSH_BATCH", "15"))
 ENRICH_DELAY_S = float(os.getenv("WORKER_ENRICH_DELAY", "3"))   # between contacts
 PUSH_DELAY_S   = float(os.getenv("WORKER_PUSH_DELAY", "1"))     # between Zoho calls
+RETRY_FAILED   = os.getenv("WORKER_RETRY_FAILED", "true").lower() in ("1", "true", "yes")
+MAX_ATTEMPTS   = int(os.getenv("WORKER_MAX_ATTEMPTS", "3"))     # incl. first pass
 
 
 # ── Draft generation (only called when Opportunity.outreach_draft is NULL) ──
@@ -121,7 +123,13 @@ def _generate_draft(company, contact, opportunity, profile) -> tuple[str, str]:
 # ── Phase 1: Enrichment ──────────────────────────────────────────────────────
 
 def _run_enrichment_phase(db) -> list[int]:
-    """Enrich up to ENRICH_BATCH contacts that have no email yet."""
+    """Enrich up to ENRICH_BATCH contacts that have no email yet.
+
+    Picks never-enriched contacts first; if room remains and WORKER_RETRY_FAILED
+    is on, also retries previously-failed *named* contacts (no email yet) up to
+    MAX_ATTEMPTS — these can now succeed because the pipeline resolves missing
+    company domains.
+    """
     from src.database.models import Contact
 
     unenriched = (
@@ -133,14 +141,37 @@ def _run_enrichment_phase(db) -> list[int]:
         .all()
     )
 
-    if not unenriched:
+    batch = list(unenriched)
+
+    if RETRY_FAILED and len(batch) < ENRICH_BATCH:
+        remaining = ENRICH_BATCH - len(batch)
+        retry_candidates = (
+            db.query(Contact)
+            .filter(Contact.enriched_at.isnot(None))
+            .filter(Contact.company_id.isnot(None))
+            .filter(Contact.email.is_(None))
+            .filter(Contact.name.isnot(None))
+            .filter(Contact.name != "")
+            .order_by(Contact.enriched_at.asc())
+            .limit(remaining * 5)  # over-fetch; filter by attempts below
+            .all()
+        )
+        for ct in retry_candidates:
+            attempts = ct.enrichment_log.get("attempts", 1) if isinstance(ct.enrichment_log, dict) else 1
+            if attempts < MAX_ATTEMPTS:
+                batch.append(ct)
+            if len(batch) >= ENRICH_BATCH:
+                break
+
+    if not batch:
         logger.info("Enrichment: nothing to do (all contacts already enriched)")
         return []
 
-    logger.info(f"Enrichment: processing {len(unenriched)} contacts")
+    n_retry = len(batch) - len(unenriched)
+    logger.info(f"Enrichment: processing {len(batch)} contacts ({len(unenriched)} new, {n_retry} retried)")
     ok_ids = []
 
-    for contact in unenriched:
+    for contact in batch:
         label = f"{contact.name or '?'} @ company #{contact.company_id}"
         try:
             from src.enrichment.pipeline import enrich_contact
@@ -167,7 +198,17 @@ def _run_push_phase(db) -> int:
     Picks the best opportunity (highest score) per company.
     """
     from sqlalchemy import func, and_
-    from src.database.models import Contact, Company, Opportunity, DiscoveryRun, Profile
+    from src.database.models import Contact, Company, Opportunity, DiscoveryRun, Profile, ContactStatus
+
+    # Companies already engaged in ANY prior run — never push to them again.
+    # (a) already recorded as contacted, or (b) already pushed to Zoho before.
+    # Without this, each new run creates a fresh Opportunity with
+    # zoho_pushed_at=NULL, so a company contacted before would get re-pushed.
+    contacted_sq = db.query(ContactStatus.company_id)
+    pushed_sq = (
+        db.query(Opportunity.company_id)
+        .filter(Opportunity.zoho_pushed_at.isnot(None))
+    )
 
     # Best opportunity per company (highest score, not yet pushed)
     best_score_sq = (
@@ -176,6 +217,8 @@ def _run_push_phase(db) -> int:
             func.max(Opportunity.score).label("max_score"),
         )
         .filter(Opportunity.zoho_pushed_at.is_(None))
+        .filter(~Opportunity.company_id.in_(contacted_sq))
+        .filter(~Opportunity.company_id.in_(pushed_sq))
         .group_by(Opportunity.company_id)
         .subquery()
     )
@@ -190,6 +233,8 @@ def _run_push_phase(db) -> int:
         .join(DiscoveryRun, Opportunity.run_id == DiscoveryRun.id)
         .outerjoin(Profile, DiscoveryRun.profile_id == Profile.id)
         .filter(Opportunity.zoho_pushed_at.is_(None))
+        .filter(~Opportunity.company_id.in_(contacted_sq))
+        .filter(~Opportunity.company_id.in_(pushed_sq))
         .order_by(Opportunity.score.desc())
         .limit(PUSH_BATCH)
         .all()

@@ -47,8 +47,13 @@ Signals of need:
 
 For each qualifying company extract:
 - name: Company name (string)
-- website_url: Full URL (or null)
+- website_url: Full URL of the company's OWN official site (or null)
 - domain: Domain only, e.g. "acme.com" (or null)
+  IMPORTANT: Always extract the company's official website domain when it
+  appears anywhere in the results. Never use social media, job boards, news
+  sites or directory links (linkedin.com, facebook.com, bumeran, computrabajo,
+  paginasamarillas, crunchbase, etc.) as the domain — leave null if only those
+  are present.
 - linkedin_url: LinkedIn company page URL (or null)
 - industry: One of: technology, consulting, accounting, fintech, legaltech, professional_services, oil_gas, energy, other
 - size_estimate: e.g. "50-100" or "unknown"

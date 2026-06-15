@@ -137,9 +137,9 @@ def main() -> None:
         from src.integrations.zoho_mail import exchange_grant_token
         try:
             exchange_grant_token(args.zoho_auth)
-            print("✅ Zoho Mail configured. Token stored in .zoho_tokens.json")
+            print("OK: Zoho Mail configured. Token stored in .zoho_tokens.json")
         except Exception as e:
-            print(f"❌ Zoho auth failed: {e}")
+            print(f"ERROR: Zoho auth failed: {e}")
             sys.exit(1)
         return
 
