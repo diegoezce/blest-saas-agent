@@ -142,6 +142,26 @@ def _run_migrations() -> None:
     except Exception as e:
         logger.info(f"Migration note (non-fatal): {e}")
 
+    # Opportunity tracking columns (zoho push + subject)
+    try:
+        engine = get_engine()
+        inspector = inspect(engine)
+        opp_cols = {c["name"] for c in inspector.get_columns("opportunities")}
+        new_opp_cols = [
+            ("outreach_subject", "TEXT"),
+            ("zoho_pushed_at",   "TIMESTAMP"),
+        ]
+        with engine.connect() as conn:
+            for col_name, col_type in new_opp_cols:
+                if col_name not in opp_cols:
+                    conn.execute(text(
+                        f"ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS {col_name} {col_type}"
+                    ))
+                    conn.commit()
+                    logger.info(f"Migration: added opportunities.{col_name}")
+    except Exception as e:
+        logger.info(f"Migration note (non-fatal): {e}")
+
     # Contact enrichment columns
     try:
         engine = get_engine()

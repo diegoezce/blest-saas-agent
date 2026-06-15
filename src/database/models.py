@@ -120,6 +120,8 @@ class Opportunity(Base):
     suggested_approach = Column(Text, nullable=True)
     conversation_angle = Column(Text, nullable=True)
     outreach_draft = Column(Text, nullable=True)
+    outreach_subject = Column(Text, nullable=True)
+    zoho_pushed_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
 
     run = relationship("DiscoveryRun", back_populates="opportunities")

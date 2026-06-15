@@ -134,6 +134,7 @@ def persist_run_node(state: AgentState) -> AgentState:
                     suggested_approach=insight.get("suggested_approach"),
                     conversation_angle=insight.get("conversation_starter"),
                     outreach_draft=drafts[0]["body"] if drafts else None,
+                    outreach_subject=drafts[0].get("subject_line") if drafts else None,
                 )
                 try:
                     with session.begin_nested():
