@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 import time
 from pathlib import Path
 
@@ -171,3 +172,91 @@ def create_draft(to_address: str, subject: str, content: str) -> dict:
     )
     resp.raise_for_status()
     return resp.json()
+
+
+# ── Bounce detection (requires ZohoMail.messages.READ + folders.READ scope) ──
+
+_EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
+_BOUNCE_SENDERS = ("mailer-daemon", "mailerdaemon", "postmaster")
+_BOUNCE_SUBJECTS = (
+    "undeliver", "returned to sender", "failure notice", "mail delivery failed",
+    "could not be delivered", "delivery has failed", "returned mail", "delivery failure",
+)
+# Domains/markers that are never the bounced lead (our own mailbox, the bounce daemon, Zoho).
+_ADDR_NOISE = ("mailer-daemon", "postmaster", "@zoho.com", "noreply", "no-reply")
+
+
+def _is_bounce(msg: dict) -> bool:
+    """True if a message looks like a hard bounce (excludes 'delay' notifications)."""
+    frm = (msg.get("fromAddress") or msg.get("sender") or "").lower()
+    subj = (msg.get("subject") or "").lower()
+    if "delay" in subj:  # delivery delay ≠ bounce; mail may still arrive
+        return False
+    return any(s in frm for s in _BOUNCE_SENDERS) or any(s in subj for s in _BOUNCE_SUBJECTS)
+
+
+def scan_bounced_addresses(max_messages: int = 200) -> dict:
+    """Scan the Zoho inbox for bounce notifications and extract the addresses that bounced.
+
+    Returns {checked, bounce_messages, addresses: [..]} where `addresses` are candidate
+    recipient emails pulled from the bounce bodies (lowercased, noise filtered). Callers
+    intersect these with known contacts to decide what to mark.
+
+    Requires the OAuth token to include ZohoMail.messages.READ + ZohoMail.folders.READ.
+    """
+    access = _get_access_token()
+    tokens = _load_tokens()
+    account_id = tokens.get("account_id")
+    if not account_id:
+        raise RuntimeError("No account_id stored. Re-run --zoho-auth.")
+    base = f"{_ACCOUNTS_URL}/{account_id}"
+    headers = {"Authorization": f"Zoho-oauthtoken {access}"}
+    own_domain = (tokens.get("from_address", "").split("@")[-1] or "").lower()
+
+    fr = requests.get(f"{base}/folders", headers=headers, timeout=15)
+    fr.raise_for_status()
+    folders = fr.json().get("data", [])
+    inbox = next((f for f in folders if (f.get("folderName") or "").lower() == "inbox"), None)
+    if not inbox:
+        return {"checked": 0, "bounce_messages": 0, "addresses": []}
+    folder_id = inbox["folderId"]
+
+    addresses: set[str] = set()
+    bounce_messages = 0
+    checked = 0
+    start = 1
+    page = 50
+    while checked < max_messages:
+        mr = requests.get(
+            f"{base}/messages/view", headers=headers,
+            params={"folderId": folder_id, "limit": min(page, max_messages - checked), "start": start},
+            timeout=20,
+        )
+        if mr.status_code != 200:
+            break
+        batch = mr.json().get("data", [])
+        if not batch:
+            break
+        for m in batch:
+            checked += 1
+            if not _is_bounce(m):
+                continue
+            bounce_messages += 1
+            mid = m.get("messageId")
+            cr = requests.get(f"{base}/folders/{folder_id}/messages/{mid}/content",
+                              headers=headers, timeout=20)
+            if cr.status_code != 200:
+                continue
+            body = (cr.json().get("data", {}) or {}).get("content", "") or ""
+            for raw in _EMAIL_RE.findall(body):
+                em = raw.lower()
+                if own_domain and own_domain in em:
+                    continue
+                if any(n in em for n in _ADDR_NOISE):
+                    continue
+                addresses.add(em)
+        start += len(batch)
+        if len(batch) < page:
+            break
+
+    return {"checked": checked, "bounce_messages": bounce_messages, "addresses": sorted(addresses)}

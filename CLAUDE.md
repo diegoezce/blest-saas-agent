@@ -194,7 +194,7 @@ or looked up), so they no longer dilute the email ratio.
 ### Enrichment result fields on `Contact` model
 | Field | Values |
 |---|---|
-| `email_status` | `verified`, `probable`, `not_found` (final values). `catch_all` is an intermediate verifier result, stored as `probable` |
+| `email_status` | `verified`, `probable`, `not_found` (final values); `bounced` = set by the Zoho bounce check (`/bounces/apply`). `catch_all` is an intermediate verifier result, stored as `probable` |
 | `email_source` | `site_scrape`, `pattern_verified`, `pattern_unverified`, `hunter` |
 | `phone_whatsapp` | nullable text |
 | `enriched_at` | datetime |
@@ -225,7 +225,7 @@ Pushes outreach drafts directly into the Zoho Mail drafts folder.
 ### One-time setup
 1. Go to [api-console.zoho.com](https://api-console.zoho.com) → create a **Self-Client** app
 2. Add `ZOHO_CLIENT_ID` and `ZOHO_CLIENT_SECRET` to `.env`
-3. Generate a grant token (scope: `ZohoMail.messages.CREATE,ZohoMail.accounts.READ`, 10 min duration)
+3. Generate a grant token (scope: `ZohoMail.messages.READ,ZohoMail.folders.READ,ZohoMail.messages.CREATE,ZohoMail.accounts.READ`, 10 min duration). `CREATE`+`accounts.READ` alone is enough to push drafts; the two READ scopes additionally enable bounce detection (below).
 4. Run `python run.py --zoho-auth <grant_token>` — stores tokens in `.zoho_tokens.json`
 
 ### Token storage
@@ -240,7 +240,19 @@ Pushes outreach drafts directly into the Zoho Mail drafts folder.
 - Shows inline result: `✓ N drafts creados · M sin email`
 
 ### Module: `src/integrations/zoho_mail.py`
-Key functions: `is_configured()`, `exchange_grant_token()`, `create_draft()`, `_get_access_token()` (auto-refresh)
+Key functions: `is_configured()`, `exchange_grant_token()`, `create_draft()`, `_get_access_token()` (auto-refresh), `scan_bounced_addresses()`.
+
+### Bounce detection
+`scan_bounced_addresses()` reads the Zoho inbox, finds bounce notifications (from
+`mailer-daemon`/`postmaster`; subjects like "Undelivered Mail Returned to Sender" /
+"Undeliverable" — "delay" notices are ignored), and extracts the failed recipient addresses
+from the bodies. The matching strategy is robust across providers: pull every address out of
+the bounce body and intersect with `Contact.email`. `GET /bounces/scan` previews matches
+(read-only); `POST /bounces/apply` sets `Contact.email_status = "bounced"` on matches — which
+also drops them from the worker's push eligibility (push only selects verified/probable).
+UI: **📭 Chequear rebotes** button on `/contacts-report` (preview counts + confirm, then mark).
+Requires the `messages.READ` + `folders.READ` scopes — re-run `--zoho-auth` with the scope in
+the setup above if reads return `INVALID_OAUTHSCOPE`.
 
 ## Web UI Routes
 
@@ -260,6 +272,8 @@ Key functions: `is_configured()`, `exchange_grant_token()`, `create_draft()`, `_
 | `/contact/<id>/enrich` | POST | Enrich a single contact |
 | `/contact/<id>/zoho-draft` | POST | Push a single contact's draft to Zoho Mail |
 | `/contacts-report` | GET | Contacted companies grouped by profile (dedup, follow-up tracking) |
+| `/bounces/scan` | GET | Preview Zoho bounces matched to contacts (read-only) |
+| `/bounces/apply` | POST | Mark matched bounced contacts (`email_status="bounced"`) |
 | `/search` | GET | Browse/search companies — full paginated listing (25/page); contacts panel when `?q=` set |
 | `/search/export/<fmt>` | GET | Export the company listing (respects `?q=` filter) as `csv` or `md` |
 | `/quick-run` | GET | Quick Run form + history list (last 15 runs) |

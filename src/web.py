@@ -861,6 +861,79 @@ def create_app() -> Flask:
         flash("Comentario guardado correctamente.", "success")
         return redirect(request.referrer or url_for("index"))
 
+    # ── Email bounce detection (reads Zoho inbox) ────────────────────────────
+
+    @app.route("/bounces/scan")
+    @_require_auth
+    def bounces_scan():
+        """Preview: scan the Zoho inbox for bounces and match them to DB contacts.
+        Read-only — does not mark anything."""
+        from src.database.session import get_session
+        from src.database.models import Contact
+        from src.integrations.zoho_mail import scan_bounced_addresses, is_configured
+        from sqlalchemy import func
+
+        if not is_configured():
+            return jsonify({"error": "Zoho Mail no está configurado."}), 503
+        try:
+            res = scan_bounced_addresses()
+        except Exception as e:
+            logger.error(f"Bounce scan failed: {e}", exc_info=True)
+            return jsonify({"error": f"No se pudo leer Zoho (¿falta el scope de lectura?): {e}"}), 502
+
+        addrs = res["addresses"]
+        matched = []
+        if addrs:
+            with get_session() as session:
+                rows = (
+                    session.query(Contact.id, Contact.name, Contact.email, Contact.email_status)
+                    .filter(func.lower(Contact.email).in_(addrs))
+                    .all()
+                )
+                for cid, name, email, status in rows:
+                    matched.append({
+                        "contact_id": cid, "name": name or "", "email": email,
+                        "already": (status == "bounced"),
+                    })
+        new_count = sum(1 for m in matched if not m["already"])
+        return jsonify({
+            "checked": res["checked"],
+            "bounce_messages": res["bounce_messages"],
+            "addresses_found": len(addrs),
+            "matched": matched,
+            "matched_count": len(matched),
+            "new_count": new_count,
+            "already_count": len(matched) - new_count,
+        })
+
+    @app.route("/bounces/apply", methods=["POST"])
+    @_require_auth
+    def bounces_apply():
+        """Mark matched bounced contacts: sets Contact.email_status = 'bounced'."""
+        from src.database.session import get_session
+        from src.database.models import Contact
+        from src.integrations.zoho_mail import scan_bounced_addresses, is_configured
+        from sqlalchemy import func
+
+        if not is_configured():
+            return jsonify({"error": "Zoho Mail no está configurado."}), 503
+        try:
+            res = scan_bounced_addresses()
+        except Exception as e:
+            logger.error(f"Bounce apply failed: {e}", exc_info=True)
+            return jsonify({"error": f"No se pudo leer Zoho: {e}"}), 502
+
+        addrs = res["addresses"]
+        marked = 0
+        if addrs:
+            with get_session() as session:
+                contacts = session.query(Contact).filter(func.lower(Contact.email).in_(addrs)).all()
+                for c in contacts:
+                    if c.email_status != "bounced":
+                        c.email_status = "bounced"
+                        marked += 1
+        return jsonify({"marked": marked, "matched": len(addrs), "bounce_messages": res["bounce_messages"]})
+
     # ── Zoho Mail Drafts ─────────────────────────────────────────────────────
 
     @app.route("/run/<int:run_id>/zoho-drafts", methods=["POST"])

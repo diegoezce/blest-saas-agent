@@ -51,7 +51,8 @@ notepad worker\.env
 
 # 3. Authorize Zoho Mail (one time).
 #    Create a Self-Client at https://api-console.zoho.com
-#    scope: ZohoMail.messages.CREATE,ZohoMail.accounts.READ  (10-min grant token)
+#    scope: ZohoMail.messages.READ,ZohoMail.folders.READ,ZohoMail.messages.CREATE,ZohoMail.accounts.READ
+#    (READ scopes also enable bounce detection in the web UI; 10-min grant token)
 py -3.11 run.py --zoho-auth <grant_token>
 #    → stores .zoho_tokens.json in the project root
 

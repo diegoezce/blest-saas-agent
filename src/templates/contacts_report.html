@@ -139,6 +139,7 @@
       <a href="mailto:{{ ct.email }}" style="color:var(--accent);font-size:0.77rem">{{ ct.email }}</a>
       {% if ct.email_status == 'verified' %}<span title="verificado{% if ct.email_source %} vía {{ ct.email_source }}{% endif %}">✅</span>
       {% elif ct.email_status == 'probable' %}<span title="probable">🟡</span>
+      {% elif ct.email_status == 'bounced' %}<span title="rebotó / inválido">📭</span>
       {% else %}<span title="sin verificar">🔴</span>{% endif %}
       {% elif ct.linkedin_url %}
       <a href="{{ ct.linkedin_url }}" target="_blank" rel="noopener" style="color:var(--accent);font-size:0.77rem">🔵 LinkedIn</a>
@@ -176,8 +177,12 @@
   </div>
 {% endmacro %}
 
-<div style="margin-bottom:1.25rem">
+<div style="margin-bottom:1.25rem;display:flex;align-items:center;justify-content:space-between;gap:0.75rem;flex-wrap:wrap">
   <h1 style="font-size:1.2rem;font-weight:800">📋 Empresas Contactadas</h1>
+  <button id="bounce-btn" onclick="checkBounces(this)"
+    style="background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:0.5rem 0.9rem;cursor:pointer;font-size:0.85rem;font-weight:600">
+    📭 Chequear rebotes
+  </button>
 </div>
 
 <!-- Stats -->
@@ -360,6 +365,36 @@ function closeFeedbackModal() {
 document.getElementById('feedback-modal').addEventListener('click', function(e) {
   if (e.target === this) closeFeedbackModal();
 });
+
+async function checkBounces(btn) {
+  btn.disabled = true;
+  btn.textContent = '📭 Revisando Zoho…';
+  try {
+    const r = await fetch('/bounces/scan');
+    const d = await r.json();
+    if (d.error) { alert('Error: ' + d.error); return; }
+    let msg = `Revisé ${d.checked} mensajes del inbox.\n`
+            + `Rebotes detectados: ${d.bounce_messages}\n`
+            + `Coinciden con contactos: ${d.matched_count} (${d.new_count} nuevos, ${d.already_count} ya marcados)`;
+    if (d.matched.length) {
+      msg += '\n\n' + d.matched.slice(0, 40).map(m => '• ' + m.email + (m.already ? ' (ya)' : '')).join('\n');
+      if (d.matched.length > 40) msg += '\n…y ' + (d.matched.length - 40) + ' más';
+    }
+    if (d.new_count === 0) { alert(msg + '\n\nNo hay nuevos para marcar.'); return; }
+    if (!confirm(msg + '\n\n¿Marcar ' + d.new_count + ' contacto(s) como rebotados?')) return;
+    btn.textContent = '📭 Marcando…';
+    const r2 = await fetch('/bounces/apply', { method: 'POST' });
+    const d2 = await r2.json();
+    if (d2.error) { alert('Error: ' + d2.error); return; }
+    alert('Listo: ' + d2.marked + ' contacto(s) marcados como rebotados.');
+    location.reload();
+  } catch (e) {
+    alert('Error: ' + e);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '📭 Chequear rebotes';
+  }
+}
 </script>
 
 {% endblock %}
