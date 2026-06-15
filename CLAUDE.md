@@ -29,6 +29,7 @@ python run.py --report --date DATE   # Show report for DATE (YYYY-MM-DD)
 python run.py --setup                # Initialize/migrate database tables
 python run.py --enrich-run <ID>      # Enrich all contacts for a run
 python run.py --zoho-auth <TOKEN>    # Store Zoho Mail OAuth credentials
+python run.py --check-bounces        # Scan Zoho inbox for bounces, mark matched contacts
 ```
 
 ## Multi-Profile System
@@ -251,8 +252,10 @@ the bounce body and intersect with `Contact.email`. `GET /bounces/scan` previews
 (read-only); `POST /bounces/apply` sets `Contact.email_status = "bounced"` on matches — which
 also drops them from the worker's push eligibility (push only selects verified/probable).
 UI: **📭 Chequear rebotes** button on `/contacts-report` (preview counts + confirm, then mark).
-Requires the `messages.READ` + `folders.READ` scopes — re-run `--zoho-auth` with the scope in
-the setup above if reads return `INVALID_OAUTHSCOPE`.
+CLI / standalone (schedulable): `python run.py --check-bounces` (scans + marks in one shot).
+Shared logic lives in `src/tools/bounces.py` (`scan_and_match`, `mark_bounced`, `apply_bounces`)
+— used by both the routes and the CLI. Requires the `messages.READ` + `folders.READ` scopes —
+re-run `--zoho-auth` with the scope in the setup above if reads return `INVALID_OAUTHSCOPE`.
 
 ## Web UI Routes
 
@@ -487,6 +490,7 @@ when it first connects. See `worker/README.md` for the full runbook.
 | `src/graph/nodes/` | discovery, scoring (rule-based), contacts, insights (disabled), outreach (grounded), report nodes |
 | `src/prompts/outreach.py` | Grounded outreach prompt with `custom_instructions_block` |
 | `src/tools/db_tools.py` | `persist_run_node`, `_upsert_company` (dedup), `normalize_company_name` |
+| `src/tools/bounces.py` | Zoho bounce scan + match + mark (shared by `/bounces/*` routes and `--check-bounces`) |
 | `src/enrichment/domain_resolver.py` | Layer 0 — resolve a missing company domain (email derive + official-site web search) |
 | `src/enrichment/pipeline.py` | Enrichment orchestrator (Layer 0 domain resolution + 3 layers + attempt counter) |
 | `src/enrichment/scraper.py` | Site scraper (Layer 1) |

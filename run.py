@@ -11,6 +11,7 @@ Usage:
   python run.py --setup                Initialize database tables only
   python run.py --enrich-run <ID>      Enrich all contacts for a run
   python run.py --zoho-auth <TOKEN>    Store Zoho Mail OAuth credentials
+  python run.py --check-bounces        Scan Zoho inbox for bounces, mark matched contacts
 """
 import argparse
 import logging
@@ -63,6 +64,8 @@ def main() -> None:
                         help="Enrich all contacts for a given run ID")
     parser.add_argument("--zoho-auth", type=str, default=None, metavar="GRANT_TOKEN",
                         help="Exchange a Zoho self-client grant token for stored OAuth credentials")
+    parser.add_argument("--check-bounces", action="store_true",
+                        help="Scan the Zoho inbox for bounces and mark matched contacts as bounced")
     args = parser.parse_args()
 
     setup_logging()
@@ -141,6 +144,35 @@ def main() -> None:
         except Exception as e:
             print(f"ERROR: Zoho auth failed: {e}")
             sys.exit(1)
+        return
+
+    if args.check_bounces:
+        try:
+            sys.stdout.reconfigure(encoding="utf-8")
+        except Exception:
+            pass
+        from src.integrations.zoho_mail import is_configured
+        from src.tools.bounces import scan_and_match, mark_bounced
+
+        if not is_configured():
+            print("Zoho no configurado. Corre: python run.py --zoho-auth <grant_token>")
+            sys.exit(1)
+        try:
+            summary = scan_and_match()
+        except Exception as e:
+            print(f"ERROR: no se pudo leer Zoho (falta el scope de lectura?): {e}")
+            sys.exit(1)
+
+        print(f"Revisados {summary['checked']} mensajes | {summary['bounce_messages']} rebotes | "
+              f"{summary['matched_count']} matchean contactos "
+              f"({summary['new_count']} nuevos, {summary['already_count']} ya marcados)")
+        for m in summary["matched"]:
+            print(f"  - {m['email']} ({m['name']}){' [ya]' if m['already'] else ''}")
+        if summary["new_count"]:
+            marked = mark_bounced(summary["addresses"])
+            print(f"Marcados {marked} contactos como rebotados (email_status=bounced).")
+        else:
+            print("Nada nuevo para marcar.")
         return
 
     # Default: run once (optionally with a specific profile)
