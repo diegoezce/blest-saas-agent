@@ -222,6 +222,7 @@ Key functions: `is_configured()`, `exchange_grant_token()`, `create_draft()`, `_
 | `/run/<id>/enrich-status` | GET | Enrichment progress `{done, total, failed, running, current_name}` |
 | `/contact/<id>/enrich` | POST | Enrich a single contact |
 | `/contacts-report` | GET | Contacted companies grouped by profile (dedup, follow-up tracking) |
+| `/search` | GET | Global search across companies and contacts (`?q=term`) |
 | `/quick-run` | GET | Quick Run form + history list (last 15 runs) |
 | `/quick-run` | POST | Start a Quick Run (creates DiscoveryRun, spawns background thread) |
 | `/quick-run/<run_id>` | GET | Quick Run results page |
@@ -237,6 +238,16 @@ Key functions: `is_configured()`, `exchange_grant_token()`, `create_draft()`, `_
 | `/company/<id>/toggle-contact` | POST | Mark company as contacted |
 | `/company/<id>/feedback` | GET/POST | Get/save contact feedback |
 | `/logs` | GET | SSE log stream (JSON) |
+
+### Navigation (header)
+Inline search bar → `⚡ Quick Run` → `Runs` → `Contactados` → `Perfiles` → `Salir`.
+Visual separators between search/actions and the logout link.
+
+### Global Search (`/search`)
+Searches across all companies (name, domain, industry, location) and contacts (name, email, role)
+in a single query. Results rendered in two columns with score pills, email status badges,
+links to the run where each company was found, and a "✓ Contactado" badge if the company
+has a `ContactStatus` record. Template: `src/templates/search.html`.
 
 ### Run detail UI features
 - All sections (`Opportunities`, `Outreach`, `Follow-ups`) are **collapsed by default**.
@@ -295,8 +306,9 @@ Cross-run view of every company with a `ContactStatus` record, for follow-up tra
 
 SQLAlchemy models in `src/database/models.py`. Migration runs automatically on startup via
 `_run_migrations()` in `src/database/session.py` — uses `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`.
-Current migrations: `discovery_runs.profile_id`, `profiles.outreach_instructions`, and the
-five `contacts.*` enrichment columns.
+Current migrations: `discovery_runs.profile_id`, `profiles.outreach_instructions`,
+the five `contacts.*` enrichment columns, and `opportunities.outreach_subject` +
+`opportunities.zoho_pushed_at`.
 
 Key models: `Profile`, `DiscoveryRun`, `Company`, `Contact` (with enrichment fields), `Opportunity`,
 `ContactStatus`, `DailyReport`.
@@ -306,11 +318,17 @@ Key models: `Profile`, `DiscoveryRun`, `Company`, `Contact` (with enrichment fie
   match by `linkedin_url` first (most reliable), then by `name` within the same `company_id`.
   On match, missing fields (`role`, `linkedin_url`, `email`) are backfilled from the new run;
   no duplicate row is created. This means the same person found across multiple runs stays as one row.
+- **`Opportunity`** — one row per `(run_id, company_id)`. Key fields:
+  - `outreach_draft` — email body text (persisted by workflow + worker)
+  - `outreach_subject` — subject line (was previously only in `report_json`; now persisted here too)
+  - `zoho_pushed_at` — set when the worker or any push action sends the draft to Zoho; used for idempotency
 - **`ContactStatus`** — feedback per company (PK = `company_id`, so exactly one per company):
   `contacted_at`, `comment`, `contact_method`, `response_received`, `follow_up_date`,
   `icp_feedback` (JSONB). Drives the `/contacts-report` page.
 
 ## Environment Variables
+
+### Railway (production)
 
 | Variable | Required | Description |
 |---|---|---|
@@ -331,6 +349,54 @@ Key models: `Profile`, `DiscoveryRun`, `Company`, `Contact` (with enrichment fie
 | `ZOHO_FROM_ADDRESS` | Zoho/Railway | Sender email address |
 | `EMAIL_VERIFIER_API_KEY` | Enrichment | MillionVerifier API key (~$0.003/check) |
 | `HUNTER_API_KEY` | Enrichment | Hunter.io API key (25 free/month) |
+
+### Worker-only (Windows mini PC — `worker/.env`)
+
+| Variable | Required | Description |
+|---|---|---|
+| `DATABASE_URL` | ✅ | Railway public connection string |
+| `ANTHROPIC_API_KEY` | ✅ | Claude API key (Haiku for drafts, ~$2-4/month) |
+| `ZOHO_CLIENT_ID` | ✅ | OAuth2 client ID (same self-client app) |
+| `ZOHO_CLIENT_SECRET` | ✅ | OAuth2 client secret |
+| `EMAIL_VERIFIER_API_KEY` | Enrichment | MillionVerifier key |
+| `HUNTER_API_KEY` | Enrichment | Hunter.io key |
+| `FAST_MODEL` | — | Override model (default: claude-haiku-4-5-20251001) |
+| `WORKER_ENRICH_BATCH` | — | Contacts to enrich per run (default: 15) |
+| `WORKER_PUSH_BATCH` | — | Drafts to push per run (default: 15) |
+| `WORKER_ENRICH_DELAY` | — | Seconds between enrichment calls (default: 3) |
+| `WORKER_PUSH_DELAY` | — | Seconds between Zoho API calls (default: 1) |
+
+## Windows Worker (`worker/`)
+
+Standalone script that runs on a local Windows mini PC every 2 days via Task Scheduler.
+Connects directly to the Railway PostgreSQL DB — Railway remains the single source of truth.
+No data is stored locally; the worker only reads and writes to the shared DB.
+
+### What it does (two phases per run)
+1. **Enrichment** — picks up to `WORKER_ENRICH_BATCH` contacts where `enriched_at IS NULL`
+   and runs the full 3-layer pipeline (scrape → SMTP verify → Hunter).
+2. **Zoho push** — finds the best opportunity per company (highest score) where a contact
+   has a verified/probable email and `zoho_pushed_at IS NULL`. Uses the stored
+   `outreach_draft` + `outreach_subject` from the DB; generates a fresh draft with Claude
+   Haiku if the opportunity has none (companies that fell outside the workflow's top-20).
+   Sets `zoho_pushed_at` after a successful push (idempotency).
+
+### Setup on Windows
+1. Clone the repo; copy `worker/.env.example` → `worker/.env` and fill in credentials.
+2. `pip install -r requirements.txt`
+3. Create a Zoho self-client at [api-console.zoho.com](https://api-console.zoho.com),
+   scope: `ZohoMail.messages.CREATE,ZohoMail.accounts.READ`.
+4. `python run.py --zoho-auth <grant_token>` — stores `.zoho_tokens.json` in project root.
+5. Add a Task Scheduler task: `python worker/worker.py` from the project root, every 2 days.
+
+Logs to `worker/worker.log` (gitignored). `init_db()` is called at startup so the worker
+automatically applies any pending DB migrations when it first connects.
+
+### Key files
+| File | Purpose |
+|---|---|
+| `worker/worker.py` | Main worker script (two-phase: enrich + push) |
+| `worker/.env.example` | Config template for the Windows machine |
 
 ## Key Source Files
 
@@ -353,5 +419,6 @@ Key models: `Profile`, `DiscoveryRun`, `Company`, `Contact` (with enrichment fie
 | `src/integrations/zoho_mail.py` | Zoho Mail OAuth2 + draft creation |
 | `src/dashboard.py` | Rich terminal dashboard, `_enrich_drafts_from_db()` |
 | `src/export.py` | CSV + Markdown export |
-| `src/templates/` | Jinja2 templates (base, runs, run, profile_form, profiles, contacts_report, quick_run) |
+| `src/templates/` | Jinja2 templates (base, runs, run, profile_form, profiles, contacts_report, quick_run, search) |
+| `worker/worker.py` | Windows worker — enrichment + Zoho push (runs every 2 days) |
 | `tests/` | Unit tests for enrichment module (41 tests) |
