@@ -56,6 +56,7 @@ The app supports multiple profiles, each representing a different product/servic
 | `search_focus_terms` | Extra context for search query generation |
 | `scoring_rubric` | JSONB - custom scoring rubric; falls back to DEFAULT_SCORING_RUBRIC |
 | `outreach_tone` | One of: warm, direct, professional, referral |
+| `outreach_language` | Language for this profile's outreach emails/LinkedIn: `es` (default, Argentine voseo) or `en`. Set from the profile form. |
 | `outreach_instructions` | Free-text pitch/value-prop guidance injected into the outreach prompt (what the company offers, proof points, what to emphasize/avoid). Tunable from the profile form. |
 | `target_roles` | One per line, priority order — internal personnel to find at each company (e.g. HR Manager, L&D Director). Shown in profile form as "Target Internal Personnel" under "Search Criteria — Who to Find" |
 
@@ -123,6 +124,13 @@ to stop hallucination:
 A profile's `outreach_instructions` (pitch, value props, proof points, what to emphasize/
 avoid) is injected into the prompt as a `WHAT <AGENT> OFFERS` block — this is the main
 lever to improve message quality per product.
+
+The prompt enforces a tight first-touch **shape** (greeting → researched hook → one value
+bridge → optional true proof → one low-friction CTA → short sign-off), an "earn the reply,
+don't pitch" **approach**, and an expanded banned-phrase list. Message **language** is chosen
+per profile via `outreach_language` and applied by `build_outreach_prompt()` in
+`src/prompts/outreach.py` (Spanish = Argentine voseo; English = warm professional); both the
+workflow outreach node and the worker's draft generator call it, so they stay in sync.
 
 ### Company deduplication
 
@@ -334,8 +342,8 @@ Cross-run view of every company with a `ContactStatus` record, for follow-up tra
 SQLAlchemy models in `src/database/models.py`. Migration runs automatically on startup via
 `_run_migrations()` in `src/database/session.py` — uses `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`.
 Current migrations: `discovery_runs.profile_id`, `profiles.outreach_instructions`,
-the five `contacts.*` enrichment columns, and `opportunities.outreach_subject` +
-`opportunities.zoho_pushed_at`.
+`profiles.outreach_language`, the five `contacts.*` enrichment columns, and
+`opportunities.outreach_subject` + `opportunities.zoho_pushed_at`.
 
 Key models: `Profile`, `DiscoveryRun`, `Company`, `Contact` (with enrichment fields), `Opportunity`,
 `ContactStatus`, `DailyReport`.

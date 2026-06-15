@@ -59,13 +59,14 @@ def _generate_draft(company, contact, opportunity, profile) -> tuple[str, str]:
     """
     import anthropic
     import instructor
-    from src.prompts.outreach import OUTREACH_PROMPT
+    from src.prompts.outreach import build_outreach_prompt
     from src.schemas.outputs import CompanyOutreach
 
     po = {
         "agent_company_name":  (profile.agent_company_name if profile else "Blest"),
         "agent_description":   (profile.agent_description  if profile else "a corporate English training provider"),
         "outreach_tone":       (profile.outreach_tone       if profile else "warm"),
+        "outreach_language":   (getattr(profile, "outreach_language", None) if profile else None) or "es",
         "outreach_instructions": (profile.outreach_instructions if profile else "") or "",
         "search_focus_terms":  (profile.search_focus_terms  if profile else "") or "",
     }
@@ -96,7 +97,7 @@ def _generate_draft(company, contact, opportunity, profile) -> tuple[str, str]:
         max_tokens=800,
         messages=[{
             "role": "user",
-            "content": OUTREACH_PROMPT.format(
+            "content": build_outreach_prompt(
                 agent_name=po["agent_company_name"],
                 agent_description=po["agent_description"],
                 outreach_service_description=(
@@ -105,6 +106,7 @@ def _generate_draft(company, contact, opportunity, profile) -> tuple[str, str]:
                 outreach_tone=po["outreach_tone"],
                 company_and_insight_json=json.dumps(payload, ensure_ascii=False, indent=2),
                 custom_instructions_block=custom_block,
+                outreach_language=po["outreach_language"],
             ),
         }],
         response_model=CompanyOutreach,

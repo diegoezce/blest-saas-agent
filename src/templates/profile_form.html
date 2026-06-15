@@ -126,15 +126,26 @@ Training Coordinator / Coordinador de Capacitación"
   <!-- Scoring & Outreach -->
   <div class="card">
     <div class="section-title">Scoring & Outreach</div>
-    <div>
-      <label style="font-size:0.85rem;color:var(--muted);display:block;margin-bottom:0.35rem;font-weight:600">Outreach Tone</label>
-      <select name="outreach_tone"
-        style="width:100%;padding:0.6rem 0.75rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.95rem">
-        <option value="warm" {{ 'selected' if (profile and profile.outreach_tone == 'warm') or not profile else '' }}>Warm</option>
-        <option value="direct" {{ 'selected' if profile and profile.outreach_tone == 'direct' else '' }}>Direct</option>
-        <option value="professional" {{ 'selected' if profile and profile.outreach_tone == 'professional' else '' }}>Professional</option>
-        <option value="referral" {{ 'selected' if profile and profile.outreach_tone == 'referral' else '' }}>Referral-style</option>
-      </select>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+      <div>
+        <label style="font-size:0.85rem;color:var(--muted);display:block;margin-bottom:0.35rem;font-weight:600">Outreach Tone</label>
+        <select name="outreach_tone"
+          style="width:100%;padding:0.6rem 0.75rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.95rem">
+          <option value="warm" {{ 'selected' if (profile and profile.outreach_tone == 'warm') or not profile else '' }}>Warm</option>
+          <option value="direct" {{ 'selected' if profile and profile.outreach_tone == 'direct' else '' }}>Direct</option>
+          <option value="professional" {{ 'selected' if profile and profile.outreach_tone == 'professional' else '' }}>Professional</option>
+          <option value="referral" {{ 'selected' if profile and profile.outreach_tone == 'referral' else '' }}>Referral-style</option>
+        </select>
+      </div>
+      <div>
+        <label style="font-size:0.85rem;color:var(--muted);display:block;margin-bottom:0.35rem;font-weight:600">Outreach Language</label>
+        <select name="outreach_language"
+          style="width:100%;padding:0.6rem 0.75rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.95rem">
+          <option value="es" {{ 'selected' if (not profile) or (profile and (profile.outreach_language == 'es' or not profile.outreach_language)) else '' }}>Español</option>
+          <option value="en" {{ 'selected' if profile and profile.outreach_language == 'en' else '' }}>English</option>
+        </select>
+        <div style="font-size:0.75rem;color:var(--muted);margin-top:0.25rem">Idioma de los emails y mensajes de LinkedIn a los leads de este perfil.</div>
+      </div>
     </div>
 
     <div style="margin-top:1rem">

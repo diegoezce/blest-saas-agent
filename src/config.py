@@ -109,6 +109,7 @@ def get_profile_overrides(profile: dict | None) -> dict:
         "search_focus_terms": "",
         "scoring_rubric": None,
         "outreach_tone": "warm",
+        "outreach_language": "es",
         "outreach_instructions": "",
         "target_roles": "",
         "agent_company_name": "Blest",
@@ -132,6 +133,8 @@ def get_profile_overrides(profile: dict | None) -> dict:
         overrides["scoring_rubric"] = profile["scoring_rubric"]
     if profile.get("outreach_tone"):
         overrides["outreach_tone"] = profile["outreach_tone"]
+    if profile.get("outreach_language"):
+        overrides["outreach_language"] = profile["outreach_language"]
     if profile.get("outreach_instructions"):
         overrides["outreach_instructions"] = profile["outreach_instructions"]
     if profile.get("target_roles"):

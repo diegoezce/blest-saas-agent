@@ -74,6 +74,7 @@ def _seed_default_profiles() -> None:
                     max_employees=500,
                     search_focus_terms="improve their team's business English: written correspondence, client calls, presentations, async collaboration with international teams",
                     outreach_tone="warm",
+                    outreach_language="es",
                     target_roles="Learning & Development (L&D) Manager / Talent Development / Capacitación,\nHR Manager / Gerente de Recursos Humanos / People Manager,\nChief People Officer / VP People / Head of Talent,\nOperations Manager (for companies < 50 employees),\nFounder / CEO / Managing Director (for companies < 50 employees)",
                 ),
                 Profile(
@@ -88,6 +89,7 @@ def _seed_default_profiles() -> None:
                     max_employees=30,
                     search_focus_terms="help English academies and language institutes streamline their operations: manage student enrollment, scheduling, billing, teacher coordination, progress tracking, and multilevel group classes",
                     outreach_tone="professional",
+                    outreach_language="es",
                     target_roles="Director / Owner / Founder of English Academy or Language Institute,\nAcademic Director / Coordinador Académico de Instituto de Inglés,\nAdministrative Manager / Administrador de Instituto de Idiomas,\nHead of Studies / Jefe de Estudios de Academia de Inglés,\nOperations Manager / Gerente Operativo de Instituto de Idiomas",
                 ),
             ]
@@ -139,6 +141,13 @@ def _run_migrations() -> None:
                 ))
                 conn.commit()
                 logger.info("Migration: added profiles.outreach_instructions")
+        if "outreach_language" not in profile_cols:
+            with engine.connect() as conn:
+                conn.execute(text(
+                    "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS outreach_language TEXT"
+                ))
+                conn.commit()
+                logger.info("Migration: added profiles.outreach_language")
     except Exception as e:
         logger.info(f"Migration note (non-fatal): {e}")
 

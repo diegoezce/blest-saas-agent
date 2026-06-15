@@ -4,7 +4,7 @@ import anthropic
 import instructor
 
 from src.graph.state import AgentState
-from src.prompts.outreach import OUTREACH_PROMPT
+from src.prompts.outreach import build_outreach_prompt
 from src.schemas.outputs import CompanyOutreach
 from src.config import get_settings, get_profile_overrides
 
@@ -79,13 +79,14 @@ def run_outreach_node(state: AgentState) -> AgentState:
                 max_tokens=1024,
                 messages=[{
                     "role": "user",
-                    "content": OUTREACH_PROMPT.format(
+                    "content": build_outreach_prompt(
                         agent_name=po["agent_company_name"],
                         agent_description=po["agent_description"],
                         outreach_service_description=outreach_service_desc,
                         outreach_tone=po.get("outreach_tone", "warm"),
                         company_and_insight_json=json.dumps(payload, ensure_ascii=False, indent=2),
                         custom_instructions_block=custom_block,
+                        outreach_language=po.get("outreach_language", "es"),
                     ),
                 }],
                 response_model=CompanyOutreach,
