@@ -9,6 +9,7 @@ build/
 venv/
 env/
 logs/*.log
+worker/*.log
 reports/*.json
 reports/*.md
 data/

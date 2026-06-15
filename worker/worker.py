@@ -27,17 +27,19 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from dotenv import load_dotenv
 load_dotenv(Path(__file__).parent / ".env")
 
-# ── Logging setup ────────────────────────────────────────────────────────────
-LOG_FILE = Path(__file__).parent / "worker.log"
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler(LOG_FILE, encoding="utf-8"),
-    ],
-)
 logger = logging.getLogger(__name__)
+
+
+def _setup_logging() -> None:
+    log_file = Path(__file__).parent / "worker.log"
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        handlers=[
+            logging.StreamHandler(sys.stdout),
+            logging.FileHandler(log_file, encoding="utf-8"),
+        ],
+    )
 
 # ── Config ───────────────────────────────────────────────────────────────────
 ENRICH_BATCH   = int(os.getenv("WORKER_ENRICH_BATCH", "15"))
@@ -266,6 +268,7 @@ def _run_push_phase(db) -> int:
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 def main():
+    _setup_logging()
     logger.info("=" * 60)
     logger.info("Blest Worker starting")
     logger.info("=" * 60)
