@@ -83,7 +83,7 @@ strict minimum; text processing without AI wherever possible.
 |---|---|---|
 | `discover_companies` | ✅ Haiku ×2 | 1 query-generation call + 1 company-extraction call. Slices top 80 Tavily results, 500 chars each. |
 | `score_opportunities` | ❌ none | **Pure-Python rule-based scoring** (`src/graph/nodes/scoring.py`). No AI call. See "Scoring" below. |
-| `find_contacts` | ✅ Haiku | Finds internal personnel per `target_roles`. |
+| `find_contacts` | ✅ Haiku | Finds **named** decision-makers per `target_roles`. Nameless/role-only entries are dropped at persist time (can't be emailed). |
 | `generate_insights` | ⏸ disabled | `max_companies_for_insights=0` → node returns `[]` immediately, no AI call. Kept in the DAG but effectively a no-op. Old runs may still have stored insight data. |
 | `generate_outreach` | ✅ Haiku | One call per company (up to `max_companies_for_outreach`). Grounded prompt. See "Outreach" below. |
 | `generate_report` | ❌ none | Assembles the report dict. |
@@ -160,7 +160,8 @@ re-contact the **same** companies. Two guards prevent that:
 
 ## Contact Enrichment
 
-After a discovery run, contacts can be enriched to find verified emails via a 3-layer pipeline:
+After a discovery run, contacts can be enriched to find verified emails. The pipeline runs
+**Layer 0** (resolve a missing company domain) followed by three verification layers:
 
 ### Layer 0 — Domain resolution (`src/enrichment/domain_resolver.py`)
 The pipeline instant-fails if the company has no `domain` (~half of discovered companies).
@@ -193,8 +194,8 @@ or looked up), so they no longer dilute the email ratio.
 ### Enrichment result fields on `Contact` model
 | Field | Values |
 |---|---|
-| `email_status` | `verified`, `probable`, `catch_all`, `not_found` |
-| `email_source` | `site_scrape`, `pattern_verified`, `hunter` |
+| `email_status` | `verified`, `probable`, `not_found` (final values). `catch_all` is an intermediate verifier result, stored as `probable` |
+| `email_source` | `site_scrape`, `pattern_verified`, `pattern_unverified`, `hunter` |
 | `phone_whatsapp` | nullable text |
 | `enriched_at` | datetime |
 | `enrichment_log` | JSONB — full per-layer attempt log |
@@ -250,11 +251,14 @@ Key functions: `is_configured()`, `exchange_grant_token()`, `create_draft()`, `_
 | `/run/latest` | GET | Redirect to latest run |
 | `/run/<id>/delete` | POST | Delete a failed run and its report |
 | `/run/<id>/export/<fmt>` | GET | Export as `csv` or `md` |
-| `/run/<id>/professional-report` | GET/POST | Generate/view AI professional report |
+| `/run/<id>/professional-report` | GET | View the AI professional report |
+| `/run/<id>/professional-report/generate` | POST | Generate the AI professional report (async, reasoning model) |
+| `/run/<id>/professional-report/download` | GET | Download the professional report as Markdown |
 | `/run/<id>/zoho-drafts` | POST | Push outreach drafts to Zoho Mail |
 | `/run/<id>/enrich-all` | POST | Bulk enrich all **un-enriched** contacts (async, queued) |
 | `/run/<id>/enrich-status` | GET | Enrichment progress `{done, total, failed, running, current_name}` |
 | `/contact/<id>/enrich` | POST | Enrich a single contact |
+| `/contact/<id>/zoho-draft` | POST | Push a single contact's draft to Zoho Mail |
 | `/contacts-report` | GET | Contacted companies grouped by profile (dedup, follow-up tracking) |
 | `/search` | GET | Browse/search companies — full paginated listing (25/page); contacts panel when `?q=` set |
 | `/search/export/<fmt>` | GET | Export the company listing (respects `?q=` filter) as `csv` or `md` |
@@ -302,7 +306,7 @@ Fast email-hunting workflow designed to maximize contact coverage in a single pa
 
 **What it does:**
 1. Runs the full discovery pipeline (same LangGraph DAG as a regular run) for the chosen profile.
-2. Immediately auto-enriches all contacts from that run (3-layer pipeline: scrape → pattern + SMTP → Hunter).
+2. Immediately auto-enriches all contacts from that run (Layer 0 domain resolution → scrape → pattern + SMTP → Hunter).
 3. Results page shows a flat table: Empresa | Contacto | Email badge | Descripción | Draft | Zoho | Seguimiento.
 
 **Implementation (`src/web.py` — `_do_quick_run`):**
@@ -476,5 +480,6 @@ when it first connects. See `worker/README.md` for the full runbook.
 | `src/dashboard.py` | Rich terminal dashboard, `_enrich_drafts_from_db()` |
 | `src/export.py` | CSV + Markdown export |
 | `src/templates/` | Jinja2 templates (base, runs, run, profile_form, profiles, contacts_report, quick_run, search) |
-| `worker/worker.py` | Windows worker — enrichment + Zoho push (runs every 2 days) |
-| `tests/` | Unit tests for enrichment module (41 tests) |
+| `worker/worker.py` | Windows worker — enrichment + Zoho push (scheduled daily / every 2 days) |
+| `worker/run_worker.bat` | Task Scheduler launcher for the worker |
+| `tests/` | Unit tests for enrichment module |
