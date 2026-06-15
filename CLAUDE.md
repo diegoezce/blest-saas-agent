@@ -97,6 +97,8 @@ strict minimum; text processing without AI wherever possible.
 | `max_companies_for_contacts` | 30 | Companies to find contacts for |
 | `max_companies_for_insights` | 0 | **0 = insights disabled** (no AI) |
 | `max_companies_for_outreach` | 20 | Companies to draft outreach for |
+| `exclude_known_companies` | true | Skip companies already seen in prior runs → each run surfaces net-new leads |
+| `rediscover_after_days` | 0 | 0 = never re-surface a known company; >0 = re-allow a never-contacted company after N days |
 
 Net effect: ~15-20 concrete leads per run at roughly ~$0.12/run (vs the old AI-scoring
 + insights design at ~$0.48/run).
@@ -135,9 +137,30 @@ The `/contacts-report` page also de-dups at display time: rows sharing a domain 
 normalized name are merged into one card (contacts pooled), and the record with the
 richest feedback becomes canonical so the Feedback / Desmarcar buttons target a single row.
 
+### Cross-run dedup (net-new leads, no repeats)
+
+`_upsert_company` prevents duplicate *rows*, but separate runs would still re-surface and
+re-contact the **same** companies. Two guards prevent that:
+- **Discovery** (`run_discovery_node`) dedups within a run via `normalize_company_name`,
+  then drops any company already in the DB (matched by normalized name or domain).
+  Controlled by `exclude_known_companies` / `rediscover_after_days`; companies with a
+  `ContactStatus` are always excluded.
+- **Worker Zoho push** skips any company already contacted (`ContactStatus`) or already
+  pushed in a prior run — so a company never gets duplicate outreach across runs (the
+  per-`Opportunity` `zoho_pushed_at` flag alone wouldn't catch this, since each run creates
+  a fresh Opportunity).
+
 ## Contact Enrichment
 
 After a discovery run, contacts can be enriched to find verified emails via a 3-layer pipeline:
+
+### Layer 0 — Domain resolution (`src/enrichment/domain_resolver.py`)
+The pipeline instant-fails if the company has no `domain` (~half of discovered companies).
+`enrich_contact` first tries to resolve one: derive from an existing contact email, else
+web-search the official site (rejecting social / job-board / directory hosts). The resolved
+domain is persisted back to `Company` (unless another company already owns it — `domain` is
+unique). Contacts with **no name** are skipped at persist time (they can't be pattern-matched
+or looked up), so they no longer dilute the email ratio.
 
 ### Layer 1 — Site scraping (`src/enrichment/scraper.py`)
 - Downloads up to 6 pages per domain (`/`, `/contacto`, `/contact`, `/nosotros`, `/equipo`, `/about`)
@@ -222,7 +245,8 @@ Key functions: `is_configured()`, `exchange_grant_token()`, `create_draft()`, `_
 | `/run/<id>/enrich-status` | GET | Enrichment progress `{done, total, failed, running, current_name}` |
 | `/contact/<id>/enrich` | POST | Enrich a single contact |
 | `/contacts-report` | GET | Contacted companies grouped by profile (dedup, follow-up tracking) |
-| `/search` | GET | Global search across companies and contacts (`?q=term`) |
+| `/search` | GET | Browse/search companies — full paginated listing (25/page); contacts panel when `?q=` set |
+| `/search/export/<fmt>` | GET | Export the company listing (respects `?q=` filter) as `csv` or `md` |
 | `/quick-run` | GET | Quick Run form + history list (last 15 runs) |
 | `/quick-run` | POST | Start a Quick Run (creates DiscoveryRun, spawns background thread) |
 | `/quick-run/<run_id>` | GET | Quick Run results page |
@@ -244,10 +268,13 @@ Inline search bar → `⚡ Quick Run` → `Runs` → `Contactados` → `Perfiles
 Visual separators between search/actions and the logout link.
 
 ### Global Search (`/search`)
-Searches across all companies (name, domain, industry, location) and contacts (name, email, role)
-in a single query. Results rendered in two columns with score pills, email status badges,
-links to the run where each company was found, and a "✓ Contactado" badge if the company
-has a `ContactStatus` record. Template: `src/templates/search.html`.
+Browse or search companies. With **no query** it lists **all companies** (25/page, prev/next
+pagination); with a query it filters companies (name, domain, industry, location) and shows
+matching contacts (name, email, role) in a second column. Cards have score pills, email status
+badges, a link to the run where each company was found, and a "✓ Contactado" badge if the
+company has a `ContactStatus`. **⬇ CSV / ⬇ MD** buttons export the company listing (respecting
+the active `?q=` filter) via `/search/export/<fmt>` (`export_companies_csv` /
+`export_companies_markdown` in `src/export.py`). Template: `src/templates/search.html`.
 
 ### Run detail UI features
 - All sections (`Opportunities`, `Outreach`, `Follow-ups`) are **collapsed by default**.
@@ -347,7 +374,7 @@ Key models: `Profile`, `DiscoveryRun`, `Company`, `Contact` (with enrichment fie
 | `ZOHO_REFRESH_TOKEN` | Zoho/Railway | Long-lived refresh token (from `--zoho-auth`) |
 | `ZOHO_ACCOUNT_ID` | Zoho/Railway | Zoho Mail account ID |
 | `ZOHO_FROM_ADDRESS` | Zoho/Railway | Sender email address |
-| `EMAIL_VERIFIER_API_KEY` | Enrichment | MillionVerifier API key (~$0.003/check) |
+| `EMAIL_VERIFIER_API_KEY` | Enrichment | MillionVerifier API key (~$0.003/check). Needs a credit balance — at 0 credits the API returns `unknown` for every candidate and emails degrade to unverified guesses (`probable`/`pattern_unverified`) |
 | `HUNTER_API_KEY` | Enrichment | Hunter.io API key (25 free/month) |
 
 ### Worker-only (Windows mini PC — `worker/.env`)
@@ -365,6 +392,8 @@ Key models: `Profile`, `DiscoveryRun`, `Company`, `Contact` (with enrichment fie
 | `WORKER_PUSH_BATCH` | — | Drafts to push per run (default: 15) |
 | `WORKER_ENRICH_DELAY` | — | Seconds between enrichment calls (default: 3) |
 | `WORKER_PUSH_DELAY` | — | Seconds between Zoho API calls (default: 1) |
+| `WORKER_RETRY_FAILED` | — | Retry previously-failed named contacts (default: true) |
+| `WORKER_MAX_ATTEMPTS` | — | Max enrichment passes per contact incl. first (default: 3) |
 
 ## Windows Worker (`worker/`)
 
@@ -374,12 +403,17 @@ No data is stored locally; the worker only reads and writes to the shared DB.
 
 ### What it does (two phases per run)
 1. **Enrichment** — picks up to `WORKER_ENRICH_BATCH` contacts where `enriched_at IS NULL`
-   and runs the full 3-layer pipeline (scrape → SMTP verify → Hunter).
+   and runs the full pipeline (Layer 0 domain resolution → scrape → SMTP verify → Hunter).
+   When `WORKER_RETRY_FAILED` is on and the batch isn't full, it also **retries** previously
+   failed *named* contacts (still no email) up to `WORKER_MAX_ATTEMPTS` passes (counter in
+   `enrichment_log.attempts`), so contacts that failed only for a missing domain succeed once
+   Layer 0 resolves it.
 2. **Zoho push** — finds the best opportunity per company (highest score) where a contact
-   has a verified/probable email and `zoho_pushed_at IS NULL`. Uses the stored
-   `outreach_draft` + `outreach_subject` from the DB; generates a fresh draft with Claude
-   Haiku if the opportunity has none (companies that fell outside the workflow's top-20).
-   Sets `zoho_pushed_at` after a successful push (idempotency).
+   has a verified/probable email and `zoho_pushed_at IS NULL`. **Company-level guard**: skips
+   companies already contacted (`ContactStatus`) or pushed in any prior run, so outreach is
+   never duplicated across runs. Uses the stored `outreach_draft` + `outreach_subject`;
+   generates a fresh draft with Claude Haiku if the opportunity has none. Sets `zoho_pushed_at`
+   after a successful push (idempotency).
 
 ### Setup on Windows
 1. Clone the repo; copy `worker/.env.example` → `worker/.env` and fill in credentials.
@@ -412,7 +446,8 @@ automatically applies any pending DB migrations when it first connects.
 | `src/graph/nodes/` | discovery, scoring (rule-based), contacts, insights (disabled), outreach (grounded), report nodes |
 | `src/prompts/outreach.py` | Grounded outreach prompt with `custom_instructions_block` |
 | `src/tools/db_tools.py` | `persist_run_node`, `_upsert_company` (dedup), `normalize_company_name` |
-| `src/enrichment/pipeline.py` | 3-layer enrichment orchestrator |
+| `src/enrichment/domain_resolver.py` | Layer 0 — resolve a missing company domain (email derive + official-site web search) |
+| `src/enrichment/pipeline.py` | Enrichment orchestrator (Layer 0 domain resolution + 3 layers + attempt counter) |
 | `src/enrichment/scraper.py` | Site scraper (Layer 1) |
 | `src/enrichment/patterns.py` | Email pattern generation (Layer 2) |
 | `src/enrichment/providers/` | `base.py`, `million_verifier.py`, `hunter.py` |
