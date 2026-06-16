@@ -12,6 +12,7 @@ logs/*.log
 worker/*.log
 reports/*.json
 reports/*.md
+reports/*.csv
 data/
 .DS_Store
 .zoho_tokens.json
