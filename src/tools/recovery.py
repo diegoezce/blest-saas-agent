@@ -42,6 +42,7 @@ def recover_contact(contact_id: int) -> EnrichmentResult | None:
         c = session.get(Contact, contact_id)
         if not c:
             return None
+        original_email = c.email                  # the address that bounced
         # Copy the dict so the attribute reassignment is a NEW object — SQLAlchemy's
         # change detection ignores in-place mutation of a JSON column.
         log = dict(c.enrichment_log) if isinstance(c.enrichment_log, dict) else {}
@@ -56,7 +57,23 @@ def recover_contact(contact_id: int) -> EnrichmentResult | None:
         c.email_source = None
         session.commit()
 
-    return enrich_contact(contact_id)
+    res = enrich_contact(contact_id)
+
+    # If recovery found no usable email, keep the contact visibly BOUNCED (don't lose the
+    # signal): restore the bounced address + status so it still shows in the report and
+    # stays out of the push queue. A successful recovery keeps the new verified/probable email.
+    if not res or res.email_status not in ("verified", "probable"):
+        with get_session() as session:
+            c = session.get(Contact, contact_id)
+            if c:
+                c.email = original_email
+                c.email_status = "bounced"
+                session.commit()
+        if res:
+            res.email = original_email
+            res.email_status = "bounced"
+
+    return res
 
 
 def run_recovery(limit: int = 15, delay: float = 2.0) -> dict:
