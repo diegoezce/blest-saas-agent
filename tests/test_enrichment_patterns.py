@@ -53,9 +53,10 @@ class TestGenerateCandidates:
         assert "maria.lopez@empresa.com" in candidates
         assert "mlopez@empresa.com" in candidates
 
-    def test_empty_last_name_returns_empty(self):
+    def test_single_name_returns_first_only(self):
+        # A single-name contact still gets the first-name pattern (only one possible).
         candidates = generate_candidates("Juan", "", "empresa.com")
-        assert candidates == []
+        assert candidates == ["juan@empresa.com"]
 
     def test_empty_first_name_returns_empty(self):
         candidates = generate_candidates("", "Perez", "empresa.com")

@@ -10,15 +10,7 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 from sqlalchemy import create_engine
-from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import sessionmaker
-
-
-@compiles(JSONB, "sqlite")
-def _compile_jsonb_sqlite(element, compiler, **kw):  # pragma: no cover - DDL shim
-    return "JSON"
-
 
 from src.database.models import (  # noqa: E402
     Base, Company, Contact, Opportunity, DiscoveryRun, Profile, ContactStatus,

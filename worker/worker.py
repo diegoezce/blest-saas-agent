@@ -3,6 +3,7 @@ Blest Lead Hunter Worker
 Runs every 2 days via Windows Task Scheduler.
 
 Phase 1 — Enrichment:  finds emails for contacts that don't have one yet.
+Phase 1b— Recovery:    retries bounced contacts (blocklist bad address + re-enrich).
 Phase 2 — Zoho push:   pushes outreach drafts for contacts that now have a
            verified/probable email and haven't been sent to Zoho yet.
 Phase 3 — Bounce check: scans the Zoho inbox and marks bounced contacts.
@@ -61,6 +62,9 @@ CHECK_BOUNCES  = os.getenv("WORKER_CHECK_BOUNCES", "true").lower() in ("1", "tru
 FOLLOWUP        = os.getenv("WORKER_FOLLOWUP", "true").lower() in ("1", "true", "yes")
 FOLLOWUP_BATCH  = int(os.getenv("WORKER_FOLLOWUP_BATCH", "15"))
 FOLLOWUP_DELAY_S = float(os.getenv("WORKER_FOLLOWUP_DELAY", "1"))   # between Zoho calls
+RECOVER_BOUNCED = os.getenv("WORKER_RECOVER_BOUNCED", "true").lower() in ("1", "true", "yes")
+RECOVER_BATCH   = int(os.getenv("WORKER_RECOVER_BATCH", "10"))
+RECOVER_DELAY_S = float(os.getenv("WORKER_RECOVER_DELAY", "2"))     # between contacts
 
 
 # ── Draft generation (only called when Opportunity.outreach_draft is NULL) ──
@@ -346,6 +350,27 @@ def _run_bounce_phase() -> int:
         return 0
 
 
+# ── Phase 1b: Bounced recovery ───────────────────────────────────────────────
+
+def _run_recovery_phase() -> int:
+    """Retry bounced contacts: blocklist the bad address and re-enrich to find a
+    different working email. Self-contained (own DB session). Non-fatal on errors."""
+    if not RECOVER_BOUNCED:
+        logger.info("Recovery: disabled (WORKER_RECOVER_BOUNCED=false)")
+        return 0
+    try:
+        from src.tools.recovery import run_recovery
+        res = run_recovery(limit=RECOVER_BATCH, delay=RECOVER_DELAY_S)
+        logger.info(
+            f"Recovery: {res['processed']} bounced retried, "
+            f"{res['recovered']} recovered a new email, {res['still_bad']} still without one"
+        )
+        return res["recovered"]
+    except Exception as exc:
+        logger.warning(f"Recovery skipped/failed: {exc}")
+        return 0
+
+
 # ── Phase 4: Follow-ups ──────────────────────────────────────────────────────
 
 def _run_followup_phase() -> int:
@@ -388,6 +413,8 @@ def main():
 
     from src.database.session import init_db, get_session
     init_db()  # creates tables + runs all migrations (adds zoho_pushed_at if new)
+
+    _run_recovery_phase()  # Phase 1b — retry bounced contacts (own session)
 
     with get_session() as db:
         _run_enrichment_phase(db)

@@ -50,6 +50,11 @@ def enrich_contact(contact_id: int) -> EnrichmentResult:
         prev_log = contact.enrichment_log if isinstance(contact.enrichment_log, dict) else {}
         result.log["attempts"] = prev_log.get("attempts", 0) + 1
 
+        # Known-bad addresses (e.g. ones that bounced) — never re-propose these.
+        bad_emails = {e.lower() for e in prev_log.get("bad_emails", []) if e}
+        if bad_emails:
+            result.log["bad_emails"] = sorted(bad_emails)
+
         company = session.get(Company, contact.company_id)
         domain = company.domain if company else None
 
@@ -127,7 +132,8 @@ def enrich_contact(contact_id: int) -> EnrichmentResult:
                 l_slug = last.lower() if last else None
                 matched = next(
                     (e for e in person_emails
-                     if f_slug in e or (l_slug and l_slug in e)),
+                     if (f_slug in e or (l_slug and l_slug in e))
+                     and e.lower() not in bad_emails),
                     None,
                 )
                 if matched:
@@ -160,6 +166,8 @@ def enrich_contact(contact_id: int) -> EnrichmentResult:
 
                 candidates = generate_candidates(first, last, domain)
                 candidates = prioritize_candidates(candidates, inferred, first, last, domain)
+                if bad_emails:
+                    candidates = [c for c in candidates if c.lower() not in bad_emails]
                 layer2["candidates"] = candidates
                 logger.info(f"{label} — checking {len(candidates)} candidates: {', '.join(candidates)}")
 
@@ -218,6 +226,9 @@ def enrich_contact(contact_id: int) -> EnrichmentResult:
             try:
                 hunter = HunterProvider()
                 found = hunter.find_email(domain, first, last or "")
+                if found and found.get("email", "").lower() in bad_emails:
+                    layer3["skipped_bad_email"] = found["email"]
+                    found = None
                 if found:
                     layer3["hunter_email"] = found["email"]
                     layer3["hunter_score"] = found["score"]

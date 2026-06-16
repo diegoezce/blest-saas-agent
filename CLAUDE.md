@@ -32,6 +32,7 @@ python run.py --zoho-auth <TOKEN>    # Store Zoho Mail OAuth credentials
 python run.py --check-bounces        # Scan Zoho inbox for bounces, mark matched contacts
 python run.py --detect-replies       # Scan Zoho inbox for replies, mark answered contacts
 python run.py --follow-ups           # Generate + push follow-up drafts for unanswered leads
+python run.py --recover-bounced [N]  # Retry bounced contacts (blocklist + re-enrich); N max (default 50)
 ```
 
 ## Multi-Profile System
@@ -184,10 +185,21 @@ or looked up), so they no longer dilute the email ratio.
 ### Layer 2 — Pattern generation + SMTP verification (`src/enrichment/patterns.py` + `providers/`)
 - Generates 6 email permutations: `first.last@`, `flast@`, `first@`, `firstlast@`, `f.last@`, `last@`
 - If Layer 1 found domain emails, infers the corporate pattern and prioritizes it
-- Verifies candidates via the configured provider — `EMAIL_VERIFIER_PROVIDER`: `millionverifier`
-  (default, uses `EMAIL_VERIFIER_API_KEY`) or `neverbounce` (uses `NEVERBOUNCE_API_KEY`). The
-  provider is chosen by `get_verifier()` in `src/enrichment/providers/__init__.py`; both map their
-  results to the same `valid / catch_all / invalid / unknown` statuses.
+- Verifies candidates via the configured provider — `EMAIL_VERIFIER_PROVIDER`:
+  - `neverbounce` (uses `NEVERBOUNCE_API_KEY`) or `millionverifier` (default, uses `EMAIL_VERIFIER_API_KEY`)
+  - `local` — free, no-API pre-filter (`src/enrichment/providers/local_filter.py`): syntax +
+    disposable-domain + **MX/A DNS check** (needs `dnspython`). Rejects dead domains / bad syntax
+    as `invalid`; **never returns `valid`** (can't confirm a mailbox — real SMTP needs port 25,
+    which is blocked here). Use to cheaply drop dead domains.
+  - `smart` / `chain` — `ChainVerifier`: runs the `local` pre-filter first and only calls the paid
+    backend when it can't decide (saves credits on dead domains). Backend = `EMAIL_VERIFIER_BACKEND`,
+    else NeverBounce if its key is set, else MillionVerifier.
+  - All map results to the same `valid / catch_all / invalid / unknown` statuses, chosen by
+    `get_verifier()` in `src/enrichment/providers/__init__.py`.
+  - ⚠ A paid verifier at **0 credits returns errors → `unknown`**, so the pipeline stores
+    unverified pattern guesses as `probable` (`pattern_unverified`) and the worker still pushes
+    them → **bounces**. Keep a verifier funded; `local`/`smart` only catch dead domains, not
+    invalid mailboxes on live domains.
 - Stops on first `valid` result; `catch_all` → stored as `probable`, never `verified`
 
 ### Layer 3 — Hunter.io fallback (`src/enrichment/providers/hunter.py`)
@@ -201,7 +213,20 @@ or looked up), so they no longer dilute the email ratio.
 | `email_source` | `site_scrape`, `pattern_verified`, `pattern_unverified`, `hunter` |
 | `phone_whatsapp` | nullable text |
 | `enriched_at` | datetime |
-| `enrichment_log` | JSONB — full per-layer attempt log |
+| `enrichment_log` | JSONB — full per-layer attempt log; also holds `attempts` (retry counter) and `bad_emails` (addresses that bounced / are known-bad — never re-proposed) |
+
+### Bounced-email recovery
+
+`src/tools/recovery.py` salvages contacts marked `email_status="bounced"`. The bounce
+tells us the previous pattern guess was wrong, so recovery **blocklists** the bad address
+(stored in `enrichment_log["bad_emails"]`), clears the email, and re-runs `enrich_contact`.
+The pipeline reads `bad_emails` and skips them in Layer 1 (scrape match), Layer 2 (pattern
+candidates) and Layer 3 (Hunter), so a fresh run targets the remaining patterns.
+- `select_bounced_contacts`, `recover_contact`, `run_recovery` (shared).
+- CLI: `python run.py --recover-bounced [N]`. Worker: **phase 1b** (`WORKER_RECOVER_BOUNCED`,
+  default on), runs before enrichment so recovered emails get pushed the same run.
+- ⚠ Confirming the alternative needs a **funded verifier** — with 0 credits, recovery only
+  produces another unverified guess (still filtered for dead domains by the `local` pre-filter).
 
 ### Running enrichment
 - **Web UI**: "Enrich" button per contact or "⚡ Enrich All" button in Outreach Drafts section
@@ -445,9 +470,10 @@ Key models: `Profile`, `DiscoveryRun`, `Company`, `Contact` (with enrichment fie
 | `ZOHO_REFRESH_TOKEN` | Zoho/Railway | Long-lived refresh token (from `--zoho-auth`) |
 | `ZOHO_ACCOUNT_ID` | Zoho/Railway | Zoho Mail account ID |
 | `ZOHO_FROM_ADDRESS` | Zoho/Railway | Sender email address |
-| `EMAIL_VERIFIER_PROVIDER` | Enrichment | Layer 2 verifier: `millionverifier` (default) or `neverbounce` |
+| `EMAIL_VERIFIER_PROVIDER` | Enrichment | Layer 2 verifier: `neverbounce`, `millionverifier` (default), `local` (free MX/syntax pre-filter), or `smart`/`chain` (local → paid backend) |
+| `EMAIL_VERIFIER_BACKEND` | Enrichment | Paid backend for `smart`/`chain` (`neverbounce` or `millionverifier`); auto-selected if unset |
 | `EMAIL_VERIFIER_API_KEY` | Enrichment | MillionVerifier API key (~$0.003/check). Needs a credit balance — at 0 credits the API returns `unknown` for every candidate and emails degrade to unverified guesses (`probable`/`pattern_unverified`) |
-| `NEVERBOUNCE_API_KEY` | Enrichment | NeverBounce API key (used when provider=neverbounce; 1,000 free/month) |
+| `NEVERBOUNCE_API_KEY` | Enrichment | NeverBounce API key (used when provider=neverbounce). Needs credits — new accounts must claim free credits / top up, else checks fail with "Insufficient credit balance" (same `unknown` degradation as MillionVerifier) |
 | `HUNTER_API_KEY` | Enrichment | Hunter.io API key (25 free/month) |
 
 ### Worker-only (Windows mini PC — `worker/.env`)
@@ -458,7 +484,8 @@ Key models: `Profile`, `DiscoveryRun`, `Company`, `Contact` (with enrichment fie
 | `ANTHROPIC_API_KEY` | ✅ | Claude API key (Haiku for drafts, ~$2-4/month) |
 | `ZOHO_CLIENT_ID` | ✅ | OAuth2 client ID (same self-client app) |
 | `ZOHO_CLIENT_SECRET` | ✅ | OAuth2 client secret |
-| `EMAIL_VERIFIER_PROVIDER` | Enrichment | Layer 2 verifier: `millionverifier` (default) or `neverbounce` |
+| `EMAIL_VERIFIER_PROVIDER` | Enrichment | Layer 2 verifier: `neverbounce`, `millionverifier` (default), `local`, or `smart`/`chain` |
+| `EMAIL_VERIFIER_BACKEND` | Enrichment | Paid backend for `smart`/`chain` (auto-selected if unset) |
 | `EMAIL_VERIFIER_API_KEY` | Enrichment | MillionVerifier key (provider=millionverifier) |
 | `NEVERBOUNCE_API_KEY` | Enrichment | NeverBounce key (provider=neverbounce) |
 | `HUNTER_API_KEY` | Enrichment | Hunter.io key |
@@ -469,6 +496,9 @@ Key models: `Profile`, `DiscoveryRun`, `Company`, `Contact` (with enrichment fie
 | `WORKER_PUSH_DELAY` | — | Seconds between Zoho API calls (default: 1) |
 | `WORKER_RETRY_FAILED` | — | Retry previously-failed named contacts (default: true) |
 | `WORKER_MAX_ATTEMPTS` | — | Max enrichment passes per contact incl. first (default: 3) |
+| `WORKER_RECOVER_BOUNCED` | — | Phase 1b: retry bounced contacts (blocklist + re-enrich) (default: true) |
+| `WORKER_RECOVER_BATCH` | — | Bounced contacts to retry per run (default: 10) |
+| `WORKER_RECOVER_DELAY` | — | Seconds between recovery contacts (default: 2) |
 | `WORKER_CHECK_BOUNCES` | — | Phase 3: scan Zoho inbox + mark bounced contacts (default: true; needs READ scope) |
 | `WORKER_FOLLOWUP` | — | Phase 4: detect replies + push follow-up drafts (default: true; needs READ scope) |
 | `WORKER_FOLLOWUP_BATCH` | — | Follow-up drafts to push per run (default: 15) |
@@ -482,6 +512,10 @@ source of truth. No data is stored locally; the worker only reads and writes to 
 Full operational runbook: **`worker/README.md`**.
 
 ### What it does (per run)
+0. **Recovery (phase 1b)** — retries up to `WORKER_RECOVER_BATCH` bounced contacts: blocklists
+   the bounced address and re-enriches to find a different working email (see "Bounced-email
+   recovery"). Runs before enrichment so recovered emails get pushed the same run. Toggle with
+   `WORKER_RECOVER_BOUNCED` (default on).
 1. **Enrichment** — picks up to `WORKER_ENRICH_BATCH` contacts where `enriched_at IS NULL`
    and runs the full pipeline (Layer 0 domain resolution → scrape → SMTP verify → Hunter).
    When `WORKER_RETRY_FAILED` is on and the batch isn't full, it also **retries** previously
@@ -544,7 +578,8 @@ when it first connects. See `worker/README.md` for the full runbook.
 | `src/enrichment/pipeline.py` | Enrichment orchestrator (Layer 0 domain resolution + 3 layers + attempt counter) |
 | `src/enrichment/scraper.py` | Site scraper (Layer 1) |
 | `src/enrichment/patterns.py` | Email pattern generation (Layer 2) |
-| `src/enrichment/providers/` | `base.py`, `million_verifier.py`, `neverbounce.py`, `hunter.py`; `__init__.py` → `get_verifier()` factory |
+| `src/enrichment/providers/` | `base.py`, `million_verifier.py`, `neverbounce.py`, `local_filter.py` (free MX/syntax pre-filter + `ChainVerifier`), `hunter.py`; `__init__.py` → `get_verifier()` factory |
+| `src/tools/recovery.py` | Bounced-email recovery: blocklist bad address + re-enrich (worker phase 1b, `--recover-bounced`) |
 | `src/integrations/zoho_mail.py` | Zoho Mail OAuth2 + draft creation |
 | `src/dashboard.py` | Rich terminal dashboard, `_enrich_drafts_from_db()` |
 | `src/export.py` | CSV + Markdown export |

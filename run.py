@@ -14,6 +14,7 @@ Usage:
   python run.py --check-bounces        Scan Zoho inbox for bounces, mark matched contacts
   python run.py --detect-replies       Scan Zoho inbox for replies, mark answered contacts
   python run.py --follow-ups           Generate + push follow-up drafts for unanswered leads
+  python run.py --recover-bounced [N]  Retry bounced contacts (blocklist + re-enrich); N = max (default 50)
 """
 import argparse
 import logging
@@ -72,6 +73,8 @@ def main() -> None:
                         help="Scan the Zoho inbox for replies and mark answered contacts (replied_at)")
     parser.add_argument("--follow-ups", action="store_true",
                         help="Generate and push follow-up drafts for contacted leads that haven't replied")
+    parser.add_argument("--recover-bounced", type=int, nargs="?", const=50, default=None, metavar="N",
+                        help="Retry up to N bounced contacts: blocklist the bad address + re-enrich (default 50)")
     args = parser.parse_args()
 
     setup_logging()
@@ -221,6 +224,18 @@ def main() -> None:
             sys.exit(1)
         print(f"Respuestas marcadas: {res['replies_detected']} | "
               f"Candidatos: {res['candidates']} | Drafts creados: {res['drafted']}")
+        return
+
+    if args.recover_bounced is not None:
+        try:
+            sys.stdout.reconfigure(encoding="utf-8")
+        except Exception:
+            pass
+        from src.tools.recovery import run_recovery
+        res = run_recovery(limit=args.recover_bounced, delay=2.0)
+        print(f"Rebotados reintentados: {res['processed']} | "
+              f"recuperados (nuevo email): {res['recovered']} | "
+              f"sin reemplazo: {res['still_bad']}")
         return
 
     # Default: run once (optionally with a specific profile)

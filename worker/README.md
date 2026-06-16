@@ -34,6 +34,12 @@ No data is stored locally (only logs).
    eligibility). Toggle with `WORKER_CHECK_BOUNCES` (default on); non-fatal if the token lacks
    the READ scope. Same logic as the `📭 Chequear rebotes` button and `python run.py --check-bounces`.
 
+0. **Recovery (phase 1b)** — retries bounced contacts: blocklists the bounced address and
+   re-enriches to find a different working email (the bounce means the previous pattern guess
+   was wrong). Runs before enrichment so a recovered email gets pushed the same run. Toggle with
+   `WORKER_RECOVER_BOUNCED` (default on). Needs a funded verifier to confirm the alternative.
+   Same logic as `python run.py --recover-bounced`.
+
 4. **Follow-ups** — detects replies in the Zoho inbox (sets `Contact.replied_at`, skipping
    leads who already answered) and generates + pushes follow-up drafts for contacted leads with
    no reply, on a 2-touch cadence (~day 4 and ~day 10, max 2). Drafts are Spanish by default
@@ -98,6 +104,9 @@ If step 4 prints "Worker finished." you're ready to schedule it.
 | `WORKER_PUSH_DELAY` | — | Seconds between Zoho calls (default 1) |
 | `WORKER_RETRY_FAILED` | — | Retry previously-failed named contacts (default `true`) |
 | `WORKER_MAX_ATTEMPTS` | — | Max enrichment passes per contact incl. first (default 3) |
+| `WORKER_RECOVER_BOUNCED` | — | Phase 1b: retry bounced contacts (blocklist + re-enrich) (default true) |
+| `WORKER_RECOVER_BATCH` | — | Bounced contacts to retry per run (default 10) |
+| `WORKER_RECOVER_DELAY` | — | Seconds between recovery contacts (default 2) |
 | `WORKER_CHECK_BOUNCES` | — | Phase 3: scan Zoho inbox + mark bounced contacts (default true; needs READ scope) |
 | `WORKER_FOLLOWUP` | — | Phase 4: detect replies + push follow-up drafts (default true; needs READ scope) |
 | `WORKER_FOLLOWUP_BATCH` | — | Follow-up drafts to push per run (default 15) |
