@@ -2,9 +2,11 @@
 Blest Lead Hunter Worker
 Runs every 2 days via Windows Task Scheduler.
 
-Phase 1 — Enrichment: finds emails for contacts that don't have one yet.
-Phase 2 — Zoho push:  pushes outreach drafts for contacts that now have a
+Phase 1 — Enrichment:  finds emails for contacts that don't have one yet.
+Phase 2 — Zoho push:   pushes outreach drafts for contacts that now have a
            verified/probable email and haven't been sent to Zoho yet.
+Phase 3 — Bounce check: scans the Zoho inbox and marks bounced contacts.
+Phase 4 — Follow-ups:  detects replies and pushes follow-up drafts to unanswered leads.
 
 Reads/writes directly to the Railway PostgreSQL database via DATABASE_URL.
 All src/ modules are reused as-is; no code is duplicated.
@@ -56,6 +58,9 @@ PUSH_DELAY_S   = float(os.getenv("WORKER_PUSH_DELAY", "1"))     # between Zoho c
 RETRY_FAILED   = os.getenv("WORKER_RETRY_FAILED", "true").lower() in ("1", "true", "yes")
 MAX_ATTEMPTS   = int(os.getenv("WORKER_MAX_ATTEMPTS", "3"))     # incl. first pass
 CHECK_BOUNCES  = os.getenv("WORKER_CHECK_BOUNCES", "true").lower() in ("1", "true", "yes")
+FOLLOWUP        = os.getenv("WORKER_FOLLOWUP", "true").lower() in ("1", "true", "yes")
+FOLLOWUP_BATCH  = int(os.getenv("WORKER_FOLLOWUP_BATCH", "15"))
+FOLLOWUP_DELAY_S = float(os.getenv("WORKER_FOLLOWUP_DELAY", "1"))   # between Zoho calls
 
 
 # ── Draft generation (only called when Opportunity.outreach_draft is NULL) ──
@@ -341,6 +346,30 @@ def _run_bounce_phase() -> int:
         return 0
 
 
+# ── Phase 4: Follow-ups ──────────────────────────────────────────────────────
+
+def _run_followup_phase() -> int:
+    """Detect replies in the Zoho inbox, then generate + push follow-up drafts for
+    contacted leads that haven't answered (cadence: ~day 4 and ~day 10).
+    Self-contained (own DB session). Non-fatal on errors (e.g. missing read scope)."""
+    if not FOLLOWUP:
+        logger.info("Follow-ups: disabled (WORKER_FOLLOWUP=false)")
+        return 0
+    try:
+        from src.tools.followups import run_followups
+        from src.database.session import get_session
+        with get_session() as db:
+            res = run_followups(db, batch=FOLLOWUP_BATCH, delay=FOLLOWUP_DELAY_S)
+        logger.info(
+            f"Follow-ups: {res['replies_detected']} reply(ies) newly marked, "
+            f"{res['drafted']} follow-up draft(s) pushed ({res['candidates']} due)"
+        )
+        return res["drafted"]
+    except Exception as exc:
+        logger.warning(f"Follow-ups skipped/failed (missing messages.READ/folders.READ scope?): {exc}")
+        return 0
+
+
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 def main():
@@ -364,7 +393,8 @@ def main():
         _run_enrichment_phase(db)
         _run_push_phase(db)
 
-    _run_bounce_phase()  # Phase 3 — mark bounced emails (reads Zoho inbox)
+    _run_bounce_phase()    # Phase 3 — mark bounced emails (reads Zoho inbox)
+    _run_followup_phase()  # Phase 4 — detect replies + push follow-up drafts
 
     logger.info("Worker finished.")
 

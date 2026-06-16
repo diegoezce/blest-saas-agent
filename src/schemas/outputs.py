@@ -89,6 +89,10 @@ class CompanyOutreach(BaseModel):
     drafts: list[OutreachDraft] = Field(description="One draft per channel (email + linkedin)")
 
 
+class FollowUpEmail(BaseModel):
+    body: str = Field(description="Follow-up email body only (no subject; subject is computed as 'Re: <original>')")
+
+
 class DailyReport(BaseModel):
     run_date: str
     run_id: int

@@ -34,6 +34,13 @@ No data is stored locally (only logs).
    eligibility). Toggle with `WORKER_CHECK_BOUNCES` (default on); non-fatal if the token lacks
    the READ scope. Same logic as the `📭 Chequear rebotes` button and `python run.py --check-bounces`.
 
+4. **Follow-ups** — detects replies in the Zoho inbox (sets `Contact.replied_at`, skipping
+   leads who already answered) and generates + pushes follow-up drafts for contacted leads with
+   no reply, on a 2-touch cadence (~day 4 and ~day 10, max 2). Drafts are Spanish by default
+   (profile `outreach_language`), 50–120 words, reference the original and have a single CTA.
+   Toggle with `WORKER_FOLLOWUP` (default on); non-fatal if the token lacks the READ scope. Same
+   logic as the `/follow-ups` page and `python run.py --detect-replies` / `--follow-ups`.
+
 ---
 
 ## Prerequisites
@@ -92,6 +99,9 @@ If step 4 prints "Worker finished." you're ready to schedule it.
 | `WORKER_RETRY_FAILED` | — | Retry previously-failed named contacts (default `true`) |
 | `WORKER_MAX_ATTEMPTS` | — | Max enrichment passes per contact incl. first (default 3) |
 | `WORKER_CHECK_BOUNCES` | — | Phase 3: scan Zoho inbox + mark bounced contacts (default true; needs READ scope) |
+| `WORKER_FOLLOWUP` | — | Phase 4: detect replies + push follow-up drafts (default true; needs READ scope) |
+| `WORKER_FOLLOWUP_BATCH` | — | Follow-up drafts to push per run (default 15) |
+| `WORKER_FOLLOWUP_DELAY` | — | Seconds between Zoho API calls in the follow-up phase (default 1) |
 
 > The enrichment providers read API keys from `os.environ`, which is why the worker calls
 > `load_dotenv(worker/.env)` at startup. If you run enrichment outside the worker, the keys must

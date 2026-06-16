@@ -12,6 +12,8 @@ Usage:
   python run.py --enrich-run <ID>      Enrich all contacts for a run
   python run.py --zoho-auth <TOKEN>    Store Zoho Mail OAuth credentials
   python run.py --check-bounces        Scan Zoho inbox for bounces, mark matched contacts
+  python run.py --detect-replies       Scan Zoho inbox for replies, mark answered contacts
+  python run.py --follow-ups           Generate + push follow-up drafts for unanswered leads
 """
 import argparse
 import logging
@@ -66,6 +68,10 @@ def main() -> None:
                         help="Exchange a Zoho self-client grant token for stored OAuth credentials")
     parser.add_argument("--check-bounces", action="store_true",
                         help="Scan the Zoho inbox for bounces and mark matched contacts as bounced")
+    parser.add_argument("--detect-replies", action="store_true",
+                        help="Scan the Zoho inbox for replies and mark answered contacts (replied_at)")
+    parser.add_argument("--follow-ups", action="store_true",
+                        help="Generate and push follow-up drafts for contacted leads that haven't replied")
     args = parser.parse_args()
 
     setup_logging()
@@ -173,6 +179,48 @@ def main() -> None:
             print(f"Marcados {marked} contactos como rebotados (email_status=bounced).")
         else:
             print("Nada nuevo para marcar.")
+        return
+
+    if args.detect_replies:
+        try:
+            sys.stdout.reconfigure(encoding="utf-8")
+        except Exception:
+            pass
+        from src.integrations.zoho_mail import is_configured
+        from src.tools.followups import detect_replies
+
+        if not is_configured():
+            print("Zoho no configurado. Corre: python run.py --zoho-auth <grant_token>")
+            sys.exit(1)
+        try:
+            res = detect_replies()
+        except Exception as e:
+            print(f"ERROR: no se pudo leer Zoho (falta el scope de lectura?): {e}")
+            sys.exit(1)
+        print(f"Revisados {res['checked']} mensajes | {res['senders']} remitentes | "
+              f"{res['matched']} matchean contactos | {res['newly_marked']} marcados como respondieron")
+        return
+
+    if args.follow_ups:
+        try:
+            sys.stdout.reconfigure(encoding="utf-8")
+        except Exception:
+            pass
+        from src.integrations.zoho_mail import is_configured
+        from src.tools.followups import run_followups
+        from src.database.session import get_session
+
+        if not is_configured():
+            print("Zoho no configurado. Corre: python run.py --zoho-auth <grant_token>")
+            sys.exit(1)
+        try:
+            with get_session() as db:
+                res = run_followups(db, batch=50, delay=1.0)
+        except Exception as e:
+            print(f"ERROR: no se pudieron generar follow-ups: {e}")
+            sys.exit(1)
+        print(f"Respuestas marcadas: {res['replies_detected']} | "
+              f"Candidatos: {res['candidates']} | Drafts creados: {res['drafted']}")
         return
 
     # Default: run once (optionally with a specific profile)

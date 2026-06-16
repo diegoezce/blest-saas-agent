@@ -260,3 +260,70 @@ def scan_bounced_addresses(max_messages: int = 200) -> dict:
             break
 
     return {"checked": checked, "bounce_messages": bounce_messages, "addresses": sorted(addresses)}
+
+
+def scan_inbox_senders(max_messages: int = 200) -> dict:
+    """Scan the Zoho inbox and return the sender addresses of incoming mail.
+
+    Returns {checked, senders} where `senders` is {address: received_ms} — the
+    latest received timestamp (epoch ms) seen per sender address. Reuses the same
+    folder/paging flow as `scan_bounced_addresses` but reads only the message stubs
+    (no body fetch), so it's cheap. Filters out our own domain, the bounce daemon
+    and known noise. Used by follow-up reply detection to skip leads who replied.
+
+    Requires the OAuth token to include ZohoMail.messages.READ + ZohoMail.folders.READ.
+    """
+    access = _get_access_token()
+    tokens = _load_tokens()
+    account_id = tokens.get("account_id")
+    if not account_id:
+        raise RuntimeError("No account_id stored. Re-run --zoho-auth.")
+    base = f"{_ACCOUNTS_URL}/{account_id}"
+    headers = {"Authorization": f"Zoho-oauthtoken {access}"}
+    own_domain = (tokens.get("from_address", "").split("@")[-1] or "").lower()
+
+    fr = requests.get(f"{base}/folders", headers=headers, timeout=15)
+    fr.raise_for_status()
+    folders = fr.json().get("data", [])
+    inbox = next((f for f in folders if (f.get("folderName") or "").lower() == "inbox"), None)
+    if not inbox:
+        return {"checked": 0, "senders": {}}
+    folder_id = inbox["folderId"]
+
+    senders: dict[str, int] = {}
+    checked = 0
+    start = 1
+    page = 50
+    while checked < max_messages:
+        mr = requests.get(
+            f"{base}/messages/view", headers=headers,
+            params={"folderId": folder_id, "limit": min(page, max_messages - checked), "start": start},
+            timeout=20,
+        )
+        if mr.status_code != 200:
+            break
+        batch = mr.json().get("data", [])
+        if not batch:
+            break
+        for m in batch:
+            checked += 1
+            frm = m.get("fromAddress") or m.get("sender") or ""
+            match = _EMAIL_RE.search(frm)
+            if not match:
+                continue
+            em = match.group(0).lower()
+            if own_domain and own_domain in em:
+                continue
+            if any(n in em for n in _ADDR_NOISE):
+                continue
+            try:
+                ts = int(m.get("receivedTime") or 0)
+            except (TypeError, ValueError):
+                ts = 0
+            if em not in senders or ts > senders[em]:
+                senders[em] = ts
+        start += len(batch)
+        if len(batch) < page:
+            break
+
+    return {"checked": checked, "senders": senders}

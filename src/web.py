@@ -1532,6 +1532,116 @@ def create_app() -> Flask:
             overdue=overdue,
         )
 
+    @app.route("/follow-ups")
+    @_require_auth
+    def follow_ups():
+        from sqlalchemy import func
+        from src.database.session import get_session
+        from src.database.models import Company, Contact, Opportunity, DiscoveryRun, Profile, ContactStatus
+        from src.tools.followups import (
+            select_followup_candidates, _aware, FOLLOWUP_FIRST_DAYS, FOLLOWUP_SECOND_DAYS,
+        )
+        from datetime import datetime, timezone, timedelta
+
+        now = datetime.now(timezone.utc)
+        week_ago = now - timedelta(days=7)
+        replied_window = now - timedelta(days=30)
+
+        def _disp_url(company) -> str:
+            d = company.domain or ""
+            w = (company.website_url or "")
+            return (d or w.replace("https://", "").replace("http://", "").split("/")[0])[:35]
+
+        with get_session() as db:
+            # ── Due / pending (reuse the worker's eligibility logic) ──
+            due = []
+            for opp, company, contact, profile in select_followup_candidates(db):
+                count = opp.followup_count or 0
+                if count == 0:
+                    base = _aware(opp.zoho_pushed_at)
+                    target = FOLLOWUP_FIRST_DAYS
+                else:
+                    base = _aware(opp.last_followup_at)
+                    target = FOLLOWUP_SECOND_DAYS - FOLLOWUP_FIRST_DAYS
+                days_since = (now - base).days if base else 0
+                due.append({
+                    "company": company.name or "",
+                    "display_url": _disp_url(company),
+                    "website_url": company.website_url or "",
+                    "location": company.location or "",
+                    "score": opp.score,
+                    "profile_name": profile.name if profile else "Default",
+                    "contact_name": contact.name or "",
+                    "contact_role": contact.role or "",
+                    "contact_email": contact.email or "",
+                    "email_status": contact.email_status or "",
+                    "stage": count + 1,
+                    "days_since": days_since,
+                    "overdue": days_since >= target + 3,
+                })
+
+            # ── Drafted this week (weekly summary) ──
+            drafted_rows = (
+                db.query(Opportunity, Company, Profile)
+                .join(Company, Opportunity.company_id == Company.id)
+                .join(DiscoveryRun, Opportunity.run_id == DiscoveryRun.id)
+                .outerjoin(Profile, DiscoveryRun.profile_id == Profile.id)
+                .filter(Opportunity.last_followup_at.isnot(None))
+                .filter(Opportunity.last_followup_at >= week_ago.replace(tzinfo=None))
+                .order_by(Opportunity.last_followup_at.desc())
+                .all()
+            )
+            drafted = [{
+                "company": company.name or "",
+                "display_url": _disp_url(company),
+                "profile_name": profile.name if profile else "Default",
+                "subject": opp.followup_subject or "",
+                "stage": opp.followup_count or 0,
+                "when": opp.last_followup_at.strftime("%d/%m %H:%M") if opp.last_followup_at else "",
+            } for opp, company, profile in drafted_rows]
+
+            # ── Replied (excluded going forward) ──
+            replied_rows = (
+                db.query(Contact, Company)
+                .join(Company, Contact.company_id == Company.id)
+                .filter(Contact.replied_at.isnot(None))
+                .filter(Contact.replied_at >= replied_window.replace(tzinfo=None))
+                .order_by(Contact.replied_at.desc())
+                .all()
+            )
+            replied = [{
+                "company": company.name or "",
+                "contact_name": contact.name or "",
+                "contact_email": contact.email or "",
+                "when": contact.replied_at.strftime("%d/%m/%Y") if contact.replied_at else "",
+            } for contact, company in replied_rows]
+
+            # ── Stats: contacted & waiting for a response ──
+            replied_sq = db.query(Contact.company_id).filter(Contact.replied_at.isnot(None))
+            responded_sq = (
+                db.query(ContactStatus.company_id)
+                .filter(ContactStatus.response_received.isnot(None))
+            )
+            waiting = (
+                db.query(func.count(func.distinct(Opportunity.company_id)))
+                .filter(Opportunity.zoho_pushed_at.isnot(None))
+                .filter(~Opportunity.company_id.in_(replied_sq))
+                .filter(~Opportunity.company_id.in_(responded_sq))
+                .scalar()
+            ) or 0
+
+            stats = {
+                "waiting": waiting,
+                "due": len(due),
+                "drafted_week": len(drafted),
+                "replied": len(replied),
+            }
+
+        return render_template(
+            "follow_ups.html",
+            due=due, drafted=drafted, replied=replied, stats=stats,
+        )
+
     @app.route("/search")
     @_require_auth
     def search():

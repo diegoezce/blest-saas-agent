@@ -30,6 +30,8 @@ python run.py --setup                # Initialize/migrate database tables
 python run.py --enrich-run <ID>      # Enrich all contacts for a run
 python run.py --zoho-auth <TOKEN>    # Store Zoho Mail OAuth credentials
 python run.py --check-bounces        # Scan Zoho inbox for bounces, mark matched contacts
+python run.py --detect-replies       # Scan Zoho inbox for replies, mark answered contacts
+python run.py --follow-ups           # Generate + push follow-up drafts for unanswered leads
 ```
 
 ## Multi-Profile System
@@ -257,6 +259,35 @@ Shared logic lives in `src/tools/bounces.py` (`scan_and_match`, `mark_bounced`, 
 — used by both the routes and the CLI. Requires the `messages.READ` + `folders.READ` scopes —
 re-run `--zoho-auth` with the scope in the setup above if reads return `INVALID_OAUTHSCOPE`.
 
+## Follow-up agent
+
+Follows up with already-contacted leads that haven't replied. Shared logic in
+`src/tools/followups.py`; runs as worker **phase 4**, exposed via `/follow-ups` and the
+`--detect-replies` / `--follow-ups` CLI flags. Mirrors the bounce molds (scan + match + act)
+and the worker's draft generator (Haiku + instructor). Reuses Zoho read scopes.
+
+- **Reply detection** — `scan_inbox_senders()` (in `zoho_mail.py`) reads inbox message stubs
+  (no body fetch) and returns `{address: latest_received_ms}`. `detect_replies()` intersects
+  with `Contact.email` and sets `Contact.replied_at` **only when the message arrived after the
+  first-touch push** (`Opportunity.zoho_pushed_at`), so unrelated prior mail isn't counted. A
+  detected reply also sets `ContactStatus.response_received="replied"` if no manual feedback
+  exists yet, so it surfaces on `/contacts-report`.
+- **Cadence** — constants `FOLLOWUP_FIRST_DAYS=4`, `FOLLOWUP_SECOND_DAYS=10`, `FOLLOWUP_MAX=2`.
+  `select_followup_candidates()` picks pushed opportunities (one per company) whose company has
+  no reply and no manual `response_received`, with a verified/probable contact email:
+  `followup_count==0` & ≥4 days since push → touch #1; `followup_count==1` & ≥6 days since last
+  follow-up → touch #2; `≥2` → excluded.
+- **Drafting** — `generate_followup()` builds the payload + calls Haiku with
+  `build_followup_prompt()` (`src/prompts/followup.py`, Spanish voseo by default via the profile's
+  `outreach_language`; 50–120 words, references the original, single CTA). Subject = `"Re: " +
+  original`. `run_followups()` pushes each draft via `create_draft()` and bumps
+  `followup_count` / `last_followup_at` / `followup_subject` / `followup_draft`.
+- **Threading caveat (v1)** — the follow-up is a standalone `"Re:"` draft (no `In-Reply-To`
+  header), and the cadence clock runs from `zoho_pushed_at` assuming the first-touch draft is
+  **sent the same day it's pushed**.
+- **`/follow-ups` page** — weekly summary: pending/overdue (cadence due), drafted this week,
+  and who replied; plus a stats bar. Template `src/templates/follow_ups.html`.
+
 ## Web UI Routes
 
 | Route | Method | Description |
@@ -275,6 +306,7 @@ re-run `--zoho-auth` with the scope in the setup above if reads return `INVALID_
 | `/contact/<id>/enrich` | POST | Enrich a single contact |
 | `/contact/<id>/zoho-draft` | POST | Push a single contact's draft to Zoho Mail |
 | `/contacts-report` | GET | Contacted companies grouped by profile (dedup, follow-up tracking) |
+| `/follow-ups` | GET | Follow-up dashboard — pending/overdue (cadence due), drafted this week, replied (weekly summary) |
 | `/bounces/scan` | GET | Preview Zoho bounces matched to contacts (read-only) |
 | `/bounces/apply` | POST | Mark matched bounced contacts (`email_status="bounced"`) |
 | `/search` | GET | Browse/search companies — full paginated listing (25/page); contacts panel when `?q=` set |
@@ -296,7 +328,7 @@ re-run `--zoho-auth` with the scope in the setup above if reads return `INVALID_
 | `/logs` | GET | SSE log stream (JSON) |
 
 ### Navigation (header)
-Inline search bar → `⚡ Quick Run` → `Runs` → `Contactados` → `Perfiles` → `Salir`.
+Inline search bar → `⚡ Quick Run` → `Runs` → `Contactados` → `Follow-ups` → `Perfiles` → `Salir`.
 Visual separators between search/actions and the logout link.
 
 ### Global Search (`/search`)
@@ -368,8 +400,9 @@ Cross-run view of every company with a `ContactStatus` record, for follow-up tra
 SQLAlchemy models in `src/database/models.py`. Migration runs automatically on startup via
 `_run_migrations()` in `src/database/session.py` — uses `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`.
 Current migrations: `discovery_runs.profile_id`, `profiles.outreach_instructions`,
-`profiles.outreach_language`, the five `contacts.*` enrichment columns, and
-`opportunities.outreach_subject` + `opportunities.zoho_pushed_at`.
+`profiles.outreach_language`, the five `contacts.*` enrichment columns, `contacts.replied_at`,
+`opportunities.outreach_subject` + `opportunities.zoho_pushed_at`, and the four follow-up columns
+`opportunities.followup_count` / `last_followup_at` / `followup_subject` / `followup_draft`.
 
 Key models: `Profile`, `DiscoveryRun`, `Company`, `Contact` (with enrichment fields), `Opportunity`,
 `ContactStatus`, `DailyReport`.
@@ -383,6 +416,10 @@ Key models: `Profile`, `DiscoveryRun`, `Company`, `Contact` (with enrichment fie
   - `outreach_draft` — email body text (persisted by workflow + worker)
   - `outreach_subject` — subject line (was previously only in `report_json`; now persisted here too)
   - `zoho_pushed_at` — set when the worker or any push action sends the draft to Zoho; used for idempotency
+  - `followup_count` (0-2) / `last_followup_at` / `followup_subject` / `followup_draft` — follow-up
+    cadence tracking + last generated follow-up (drives the `/follow-ups` page)
+- **`Contact`** also has `replied_at` — set when a reply from that email is seen in the Zoho inbox
+  (drives reply detection; replied contacts/companies are excluded from follow-ups).
 - **`ContactStatus`** — feedback per company (PK = `company_id`, so exactly one per company):
   `contacted_at`, `comment`, `contact_method`, `response_received`, `follow_up_date`,
   `icp_feedback` (JSONB). Drives the `/contacts-report` page.
@@ -433,6 +470,9 @@ Key models: `Profile`, `DiscoveryRun`, `Company`, `Contact` (with enrichment fie
 | `WORKER_RETRY_FAILED` | — | Retry previously-failed named contacts (default: true) |
 | `WORKER_MAX_ATTEMPTS` | — | Max enrichment passes per contact incl. first (default: 3) |
 | `WORKER_CHECK_BOUNCES` | — | Phase 3: scan Zoho inbox + mark bounced contacts (default: true; needs READ scope) |
+| `WORKER_FOLLOWUP` | — | Phase 4: detect replies + push follow-up drafts (default: true; needs READ scope) |
+| `WORKER_FOLLOWUP_BATCH` | — | Follow-up drafts to push per run (default: 15) |
+| `WORKER_FOLLOWUP_DELAY` | — | Seconds between Zoho API calls in the follow-up phase (default: 1) |
 
 ## Windows Worker (`worker/`)
 
@@ -457,6 +497,9 @@ Full operational runbook: **`worker/README.md`**.
 3. **Bounce check** — scans the Zoho inbox for bounce notifications and marks matched contacts
    `email_status="bounced"` (see "Bounce detection"). Toggle with `WORKER_CHECK_BOUNCES`
    (default on); non-fatal if the token lacks the READ scope.
+4. **Follow-ups** — detects replies (marks `Contact.replied_at`) then generates + pushes
+   follow-up drafts for contacted leads that haven't answered (see "Follow-up agent").
+   Toggle with `WORKER_FOLLOWUP` (default on); non-fatal if the token lacks the READ scope.
 
 ### Setup on Windows
 1. Clone the repo; copy `worker/.env.example` → `worker/.env` and fill in credentials.
@@ -495,6 +538,8 @@ when it first connects. See `worker/README.md` for the full runbook.
 | `src/prompts/outreach.py` | Grounded outreach prompt with `custom_instructions_block` |
 | `src/tools/db_tools.py` | `persist_run_node`, `_upsert_company` (dedup), `normalize_company_name` |
 | `src/tools/bounces.py` | Zoho bounce scan + match + mark (shared by `/bounces/*` routes and `--check-bounces`) |
+| `src/tools/followups.py` | Follow-up agent: detect replies + select due leads + generate/push follow-up drafts (shared by worker phase 4, `/follow-ups`, `--detect-replies`/`--follow-ups`) |
+| `src/prompts/followup.py` | Follow-up email prompt (`build_followup_prompt`); reuses outreach language directives |
 | `src/enrichment/domain_resolver.py` | Layer 0 — resolve a missing company domain (email derive + official-site web search) |
 | `src/enrichment/pipeline.py` | Enrichment orchestrator (Layer 0 domain resolution + 3 layers + attempt counter) |
 | `src/enrichment/scraper.py` | Site scraper (Layer 1) |

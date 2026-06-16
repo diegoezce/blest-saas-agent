@@ -157,8 +157,12 @@ def _run_migrations() -> None:
         inspector = inspect(engine)
         opp_cols = {c["name"] for c in inspector.get_columns("opportunities")}
         new_opp_cols = [
-            ("outreach_subject", "TEXT"),
-            ("zoho_pushed_at",   "TIMESTAMP"),
+            ("outreach_subject",  "TEXT"),
+            ("zoho_pushed_at",    "TIMESTAMP"),
+            ("followup_count",    "INTEGER DEFAULT 0"),
+            ("last_followup_at",  "TIMESTAMP"),
+            ("followup_subject",  "TEXT"),
+            ("followup_draft",    "TEXT"),
         ]
         with engine.connect() as conn:
             for col_name, col_type in new_opp_cols:
@@ -182,6 +186,7 @@ def _run_migrations() -> None:
             ("phone_whatsapp", "TEXT"),
             ("enriched_at",    "TIMESTAMP"),
             ("enrichment_log", "JSONB"),
+            ("replied_at",     "TIMESTAMP"),
         ]
         with engine.connect() as conn:
             for col_name, col_type in new_cols:

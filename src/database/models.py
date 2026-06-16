@@ -123,6 +123,11 @@ class Opportunity(Base):
     outreach_draft = Column(Text, nullable=True)
     outreach_subject = Column(Text, nullable=True)
     zoho_pushed_at = Column(DateTime, nullable=True)
+    # Follow-up tracking (cadence: touch #1 ~day 4, touch #2 ~day 10)
+    followup_count = Column(Integer, server_default="0")
+    last_followup_at = Column(DateTime, nullable=True)
+    followup_subject = Column(Text, nullable=True)
+    followup_draft = Column(Text, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
 
     run = relationship("DiscoveryRun", back_populates="opportunities")
@@ -150,6 +155,7 @@ class Contact(Base):
     phone_whatsapp = Column(Text, nullable=True)
     enriched_at = Column(DateTime, nullable=True)
     enrichment_log = Column(JSONB, nullable=True)
+    replied_at = Column(DateTime, nullable=True)   # set when a reply from this email is seen in the Zoho inbox
 
     company = relationship("Company", back_populates="contacts")
 
