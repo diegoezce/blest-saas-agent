@@ -8,6 +8,7 @@ psycopg2-binary>=2.9.0
 pydantic>=2.0.0
 pydantic-settings>=2.0.0
 apscheduler>=3.10.0
+tzlocal>=5.0   # required by apscheduler; pin explicitly so the build always installs it
 rich>=13.0.0
 python-dotenv>=1.0.0
 flask>=3.0.0
