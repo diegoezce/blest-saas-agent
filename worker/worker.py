@@ -32,6 +32,13 @@ logger = logging.getLogger(__name__)
 
 def _setup_logging() -> None:
     log_file = Path(__file__).parent / "worker.log"
+    # On Windows, stdout defaults to cp1252 which can't encode the emoji used in
+    # log messages (⏭ ✍ 📧 →). run_worker.bat redirects stdout into
+    # worker_task.log, so without this every emoji line raises UnicodeEncodeError.
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except (AttributeError, ValueError):
+        pass
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(message)s",
