@@ -1,2 +1,12 @@
+# Explicit install phase so the build ALWAYS does a fresh `pip install -r requirements.txt`.
+# Railway's Nixpacks cache had been reusing a venv missing apscheduler's `tzlocal` dep,
+# which crash-looped the web service. This mirrors the default Nixpacks Python install
+# (venv at /opt/venv) but with --no-cache-dir, and touching this file busts the build cache.
+[phases.install]
+cmds = [
+  "python -m venv --copies /opt/venv",
+  ". /opt/venv/bin/activate && pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt",
+]
+
 [start]
 cmd = "python run.py --web"
