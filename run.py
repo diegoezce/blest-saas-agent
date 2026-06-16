@@ -77,6 +77,15 @@ def main() -> None:
                         help="Retry up to N bounced contacts: blocklist the bad address + re-enrich (default 50)")
     args = parser.parse_args()
 
+    # Load .env into os.environ. pydantic-settings reads .env only for Settings fields;
+    # provider SDKs (anthropic, MillionVerifier/NeverBounce/Hunter) read os.environ
+    # directly, so without this the CLI runs without API keys (verifier → unknown, etc).
+    try:
+        from dotenv import load_dotenv
+        load_dotenv()
+    except Exception:
+        pass
+
     setup_logging()
 
     from src.database.session import init_db
