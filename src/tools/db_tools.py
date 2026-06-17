@@ -2,11 +2,32 @@ import datetime
 import logging
 import re
 
-from src.database.models import Company, Contact, DailyReport, DiscoveryRun, Opportunity
+from src.database.models import Company, Contact, ContactStatus, DailyReport, DiscoveryRun, Opportunity
 from src.database.session import get_session
 from src.graph.state import AgentState
 
 logger = logging.getLogger(__name__)
+
+
+def mark_company_contacted(session, company_id: int, method: str = "email") -> bool:
+    """Ensure a company has a ContactStatus so it appears on the follow-up page.
+
+    Called whenever an outreach draft is pushed to Zoho (worker + web buttons).
+    Idempotent and non-destructive: if a ContactStatus already exists it is left
+    untouched (preserves manually entered feedback/follow-up dates). Returns True
+    only when a new record was created.
+    """
+    if not company_id:
+        return False
+    existing = session.get(ContactStatus, company_id)
+    if existing:
+        return False
+    session.add(ContactStatus(
+        company_id=company_id,
+        contacted_at=datetime.datetime.utcnow(),
+        contact_method=method,
+    ))
+    return True
 
 # Legal/entity suffixes stripped when comparing company names for dedup
 _LEGAL_SUFFIXES = (

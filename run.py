@@ -75,6 +75,8 @@ def main() -> None:
                         help="Generate and push follow-up drafts for contacted leads that haven't replied")
     parser.add_argument("--recover-bounced", type=int, nargs="?", const=50, default=None, metavar="N",
                         help="Retry up to N bounced contacts: blocklist the bad address + re-enrich (default 50)")
+    parser.add_argument("--backfill-contacted", action="store_true",
+                        help="Create a ContactStatus for every already-pushed company that lacks one")
     args = parser.parse_args()
 
     # Load .env into os.environ. pydantic-settings reads .env only for Settings fields;
@@ -123,6 +125,29 @@ def main() -> None:
     if args.web:
         from src.web import start_web_server
         start_web_server()
+        return
+
+    if args.backfill_contacted:
+        from src.database.session import get_session
+        from src.database.models import Opportunity
+        from src.tools.db_tools import mark_company_contacted
+
+        with get_session() as session:
+            # Distinct companies that already had a draft pushed to Zoho
+            pushed_company_ids = [
+                cid for (cid,) in
+                session.query(Opportunity.company_id)
+                .filter(Opportunity.zoho_pushed_at.isnot(None))
+                .distinct()
+                .all()
+            ]
+            created = 0
+            for cid in pushed_company_ids:
+                if mark_company_contacted(session, cid, method="email"):
+                    created += 1
+
+        print(f"Backfill complete: {created} new ContactStatus rows "
+              f"({len(pushed_company_ids)} pushed companies checked).")
         return
 
     if args.enrich_run:

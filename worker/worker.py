@@ -315,6 +315,9 @@ def _run_push_phase(db) -> int:
             )
 
             opp.zoho_pushed_at = datetime.now(timezone.utc)
+            # Mark the company as contacted so it shows on the follow-up page
+            from src.tools.db_tools import mark_company_contacted
+            mark_company_contacted(db, opp.company_id, method="email")
             db.flush()
             pushed += 1
             logger.info(f"  📧 {label} — draft pushed")

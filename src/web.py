@@ -935,6 +935,7 @@ def create_app() -> Flask:
         created = 0
         skipped = 0
         errors = []
+        pushed_company_names: list[str] = []
         for company_name, draft in companies_seen.items():
             to_address = draft.get("contact_email")
             if not to_address:
@@ -945,9 +946,28 @@ def create_app() -> Flask:
             try:
                 create_draft(to_address=to_address, subject=subject, content=body)
                 created += 1
+                pushed_company_names.append(company_name)
             except Exception as e:
                 logger.warning(f"Zoho draft failed for {company_name}: {e}")
                 errors.append(f"{company_name}: {e}")
+
+        # Mark successfully-pushed companies as contacted so they appear on the
+        # follow-up page. Resolve names → company_id within this run's opportunities.
+        if pushed_company_names:
+            from src.database.models import Company, Opportunity
+            from src.tools.db_tools import mark_company_contacted
+            with get_session() as session:
+                run_companies = (
+                    session.query(Company)
+                    .join(Opportunity, Opportunity.company_id == Company.id)
+                    .filter(Opportunity.run_id == run_id)
+                    .all()
+                )
+                by_name = {c.name: c.id for c in run_companies}
+                for name in pushed_company_names:
+                    cid = by_name.get(name)
+                    if cid:
+                        mark_company_contacted(session, cid, method="email")
 
         return jsonify({"created": created, "skipped": skipped, "errors": errors})
 
@@ -993,8 +1013,12 @@ def create_app() -> Flask:
 
         subject = draft.get("subject_line") or f"Outreach — {company.name}"
         body = draft.get("body", "")
+        company_id = company.id
         try:
             create_draft(to_address=contact.email, subject=subject, content=body)
+            with get_session() as session:
+                from src.tools.db_tools import mark_company_contacted
+                mark_company_contacted(session, company_id, method="email")
             return jsonify({"ok": True})
         except Exception as e:
             logger.warning(f"Zoho single draft failed for contact {contact_id}: {e}")
@@ -1300,6 +1324,7 @@ def create_app() -> Flask:
                     email_drafts[cn] = d
             to_push = [{
                 "email": ct.email,
+                "company_id": co.id,
                 "company_name": co.name,
                 "subject": email_drafts.get(co.name, {}).get("subject_line") or f"Outreach — {co.name}",
                 "body": email_drafts.get(co.name, {}).get("body", ""),
@@ -1307,6 +1332,7 @@ def create_app() -> Flask:
 
         created, skipped, errors = 0, 0, []
         seen: set[str] = set()
+        pushed_company_ids: list[int] = []
         for item in to_push:
             if not item["body"] or item["email"] in seen:
                 skipped += 1
@@ -1315,8 +1341,17 @@ def create_app() -> Flask:
             try:
                 create_draft(to_address=item["email"], subject=item["subject"], content=item["body"])
                 created += 1
+                pushed_company_ids.append(item["company_id"])
             except Exception as e:
                 errors.append(f"{item['company_name']}: {e}")
+
+        # Mark pushed companies as contacted → follow-up page
+        if pushed_company_ids:
+            from src.tools.db_tools import mark_company_contacted
+            with get_session() as db:
+                for cid in pushed_company_ids:
+                    mark_company_contacted(db, cid, method="email")
+
         return jsonify({"created": created, "skipped": skipped, "errors": errors})
 
     @app.route("/quick-run/<int:run_id>/push-one-zoho", methods=["POST"])
@@ -1329,12 +1364,18 @@ def create_app() -> Flask:
         email = data.get("email", "").strip()
         if not email:
             return jsonify({"error": "email requerido"}), 400
+        company_id = data.get("company_id")
         try:
             create_draft(
                 to_address=email,
                 subject=data.get("subject", "").strip() or "Outreach",
                 content=data.get("body", "").strip(),
             )
+            if company_id:
+                from src.database.session import get_session
+                from src.tools.db_tools import mark_company_contacted
+                with get_session() as db:
+                    mark_company_contacted(db, int(company_id), method="email")
             return jsonify({"ok": True})
         except Exception as e:
             return jsonify({"error": str(e)}), 500

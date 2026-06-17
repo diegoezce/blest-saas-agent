@@ -209,6 +209,7 @@
           {% if item.email and item.body %}
           <button onclick="pushOneZoho(this)"
             data-email="{{ item.email|e }}"
+            data-company-id="{{ item.company_id }}"
             data-subject="{{ item.subject|e }}"
             data-body="{{ item.body|e }}"
             style="font-size:0.78rem;padding:0.2rem 0.6rem;background:var(--surface-hover);border:1px solid var(--border);border-radius:4px;color:var(--accent);cursor:pointer">
@@ -332,7 +333,7 @@ function pushOneZoho(btn) {
   fetch('/quick-run/' + QR_RUN_ID + '/push-one-zoho', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ email: btn.dataset.email, subject: btn.dataset.subject, body: btn.dataset.body }),
+    body: JSON.stringify({ email: btn.dataset.email, company_id: btn.dataset.companyId, subject: btn.dataset.subject, body: btn.dataset.body }),
   })
     .then(r => r.json())
     .then(d => {
