@@ -437,7 +437,11 @@ Cross-run view of every company with a `ContactStatus` record, for follow-up tra
 - Follow-up highlighting: ⚠ overdue (red border), 📅 Hoy (amber), upcoming (accent).
 - Card actions: **💬 Feedback** (opens the feedback modal) and **✕ Desmarcar** (removes
   the `ContactStatus`) — both target the canonical (richest-feedback) record.
-- Stats bar: total contacted, follow-ups scheduled, overdue.
+- Stats bar: total contacted, respondieron, rebotaron, follow-ups scheduled, overdue.
+- **Filter bar** (client-side pills): Todas / 📭 Rebotadas / ⏰ Seguimiento / ✅ Exitosas.
+  Pills only appear when their count > 0. Selecting a filter hides non-matching cards,
+  collapses empty profile sections, and auto-opens matching ones. Each card carries
+  `data-bounced`, `data-followup`, `data-success` attributes for JS filtering.
 
 ## Schedule
 
