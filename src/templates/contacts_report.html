@@ -104,6 +104,28 @@
   /* Feedback modal mobile */
   #feedback-modal-inner { max-width: 100% !important; margin: 0.75rem; border-radius: 12px; }
 
+  /* Filter bar */
+  .cr-filters {
+    display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 1.25rem;
+  }
+  .cr-filter {
+    display: flex; align-items: center; gap: 0.35rem;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 20px; padding: 0.35rem 0.85rem;
+    cursor: pointer; font-size: 0.82rem; font-weight: 600;
+    color: var(--muted); font-family: inherit; transition: all 0.12s;
+  }
+  .cr-filter:hover { color: var(--text); border-color: var(--muted); }
+  .cr-filter.active {
+    background: var(--accent); border-color: var(--accent);
+    color: #0f172a;
+  }
+  .cr-filter-count {
+    background: rgba(0,0,0,0.15); border-radius: 10px;
+    padding: 0.05rem 0.4rem; font-size: 0.75rem; font-weight: 700;
+  }
+  .cr-filter.active .cr-filter-count { background: rgba(0,0,0,0.2); }
+
   @media (max-width: 600px) {
     .lead-grid { grid-template-columns: 1fr; }
     .cr-stats { gap: 0.4rem; }
@@ -221,12 +243,28 @@
 </div>
 {% endif %}
 
+<!-- ── Filter bar ────────────────────────────────────────────────────── -->
+{% if profiles_order %}
+<div class="cr-filters" id="cr-filter-bar">
+  <button class="cr-filter active" data-filter="all" onclick="applyFilter('all', this)">Todas <span class="cr-filter-count">{{ total }}</span></button>
+  {% if bounced_count %}
+  <button class="cr-filter" data-filter="bounced" onclick="applyFilter('bounced', this)">📭 Rebotadas <span class="cr-filter-count">{{ bounced_count }}</span></button>
+  {% endif %}
+  {% if needs_follow_up %}
+  <button class="cr-filter" data-filter="followup" onclick="applyFilter('followup', this)">⏰ Seguimiento <span class="cr-filter-count">{{ needs_follow_up }}</span></button>
+  {% endif %}
+  {% if success_count %}
+  <button class="cr-filter" data-filter="success" onclick="applyFilter('success', this)">✅ Exitosas <span class="cr-filter-count">{{ success_count }}</span></button>
+  {% endif %}
+</div>
+{% endif %}
+
 {% for profile_name in profiles_order %}
 {% set group = by_profile[profile_name] %}
-<details class="profile-section">
+<details class="profile-section" data-profile="{{ loop.index }}">
   <summary>
     <h2>{{ profile_name }}</h2>
-    <span class="badge badge-muted">{{ group | length }}</span>
+    <span class="badge badge-muted cr-profile-visible-count">{{ group | length }}</span>
     {% set overdue_count = group | selectattr("follow_up_overdue") | list | length %}
     {% if overdue_count %}
     <span class="badge badge-red">{{ overdue_count }} vencido{{ 's' if overdue_count != 1 }}</span>
@@ -236,11 +274,14 @@
   <!-- Follow-up subsection -->
   {% set fu_group = group | selectattr("needs_followup") | list %}
   {% if fu_group %}
-  <div class="followup-label">⏰ Seguimiento pendiente</div>
-  <div class="lead-grid" style="margin-bottom:0.75rem">
+  <div class="followup-label cr-subsection" data-subsection="followup">⏰ Seguimiento pendiente</div>
+  <div class="lead-grid" style="margin-bottom:0.75rem" data-grid="followup">
     {% for d in fu_group %}
     {% set card_class = "overdue" if d.follow_up_overdue else ("due-today" if d.follow_up_today else "upcoming") %}
-    <div class="lead-card {{ card_class }}">
+    <div class="lead-card {{ card_class }}"
+      data-bounced="{{ 'true' if d.has_bounced else 'false' }}"
+      data-followup="true"
+      data-success="{{ 'true' if d.is_success else 'false' }}">
       {{ _card_body(d) }}
     </div>
     {% endfor %}
@@ -250,10 +291,13 @@
   <!-- Rest (no follow-up) -->
   {% set rest_group = group | rejectattr("needs_followup") | list %}
   {% if rest_group %}
-  {% if fu_group %}<div class="rest-label">Resto</div>{% endif %}
-  <div class="lead-grid">
+  {% if fu_group %}<div class="rest-label cr-subsection" data-subsection="rest">Resto</div>{% endif %}
+  <div class="lead-grid" data-grid="rest">
     {% for d in rest_group %}
-    <div class="lead-card">
+    <div class="lead-card"
+      data-bounced="{{ 'true' if d.has_bounced else 'false' }}"
+      data-followup="false"
+      data-success="{{ 'true' if d.is_success else 'false' }}">
       {{ _card_body(d) }}
     </div>
     {% endfor %}
@@ -373,6 +417,40 @@ function closeFeedbackModal() {
 document.getElementById('feedback-modal').addEventListener('click', function(e) {
   if (e.target === this) closeFeedbackModal();
 });
+
+function applyFilter(filter, btn) {
+  // Highlight active pill
+  document.querySelectorAll('.cr-filter').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+
+  const cards = document.querySelectorAll('.lead-card');
+  cards.forEach(card => {
+    let show = true;
+    if (filter === 'bounced')  show = card.dataset.bounced  === 'true';
+    if (filter === 'followup') show = card.dataset.followup === 'true';
+    if (filter === 'success')  show = card.dataset.success  === 'true';
+    card.style.display = show ? '' : 'none';
+  });
+
+  // Hide subsection labels when no visible cards under them
+  document.querySelectorAll('.profile-section').forEach(section => {
+    const visibleCards = section.querySelectorAll('.lead-card:not([style*="display: none"])');
+    const isEmpty = visibleCards.length === 0;
+    section.style.display = isEmpty ? 'none' : '';
+    // Update visible count badge
+    const badge = section.querySelector('.cr-profile-visible-count');
+    if (badge) badge.textContent = visibleCards.length;
+    // Show/hide subsection labels based on whether their grid has visible cards
+    section.querySelectorAll('[data-grid]').forEach(grid => {
+      const gridVisible = grid.querySelectorAll('.lead-card:not([style*="display: none"])').length > 0;
+      grid.style.display = gridVisible ? '' : 'none';
+      const label = section.querySelector('.cr-subsection[data-subsection="' + grid.dataset.grid + '"]');
+      if (label) label.style.display = gridVisible ? '' : 'none';
+    });
+    // Auto-open when filtered (so user sees results without having to expand)
+    if (!isEmpty && filter !== 'all') section.open = true;
+  });
+}
 
 async function checkBounces(btn) {
   btn.disabled = true;
