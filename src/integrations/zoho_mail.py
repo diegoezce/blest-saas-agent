@@ -307,6 +307,8 @@ def scan_inbox_senders(max_messages: int = 200) -> dict:
 
     senders: dict[str, int] = {}
     ooo_senders: set[str] = set()
+    # {sender_email: [alt_email, ...]} — alternative contacts found in OOO bodies
+    ooo_alternatives: dict[str, list[str]] = {}
     checked = 0
     start = 1
     page = 50
@@ -340,8 +342,40 @@ def scan_inbox_senders(max_messages: int = 200) -> dict:
                 senders[em] = ts
             if _is_ooo(m):
                 ooo_senders.add(em)
+                # Fetch body to extract alternative contact emails.
+                # Only capture emails at the same domain (same company).
+                sender_domain = em.split("@")[-1]
+                mid = m.get("messageId")
+                if mid and em not in ooo_alternatives:
+                    try:
+                        cr = requests.get(
+                            f"{base}/folders/{folder_id}/messages/{mid}/content",
+                            headers=headers, timeout=15,
+                        )
+                        if cr.status_code == 200:
+                            body = (cr.json().get("data", {}) or {}).get("content", "") or ""
+                            alts = []
+                            for raw in _EMAIL_RE.findall(body):
+                                alt = raw.lower()
+                                if alt == em:
+                                    continue
+                                if own_domain and own_domain in alt:
+                                    continue
+                                if any(n in alt for n in _ADDR_NOISE):
+                                    continue
+                                if alt.split("@")[-1] == sender_domain:
+                                    alts.append(alt)
+                            if alts:
+                                ooo_alternatives[em] = alts
+                    except Exception:
+                        pass  # non-fatal
         start += len(batch)
         if len(batch) < page:
             break
 
-    return {"checked": checked, "senders": senders, "ooo_senders": ooo_senders}
+    return {
+        "checked": checked,
+        "senders": senders,
+        "ooo_senders": ooo_senders,
+        "ooo_alternatives": ooo_alternatives,
+    }

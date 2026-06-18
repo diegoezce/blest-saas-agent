@@ -42,15 +42,18 @@ def detect_replies(max_messages: int = 200) -> dict:
     Only counts a message as a reply if it arrived *after* the first-touch push to
     that contact's company (avoids marking unrelated prior mail). Also reflects the
     reply in `ContactStatus.response_received` when no manual feedback exists yet,
-    so `/contacts-report` shows it. Returns {checked, senders, matched, newly_marked, ooo_verified}.
+    so `/contacts-report` shows it. Returns {checked, senders, matched, newly_marked,
+    ooo_verified, ooo_alt_captured}.
     """
     res = scan_inbox_senders(max_messages=max_messages)
     senders: dict[str, int] = res["senders"]
     ooo_senders: set[str] = res.get("ooo_senders", set())
+    ooo_alternatives: dict[str, list[str]] = res.get("ooo_alternatives", {})
     addrs = list(senders.keys())
     matched = 0
     newly = 0
     ooo_verified = 0
+    ooo_alt_captured = 0
     if addrs:
         with get_session() as session:
             rows = (
@@ -102,6 +105,29 @@ def detect_replies(max_messages: int = 200) -> dict:
                         )
                         if opp_to_reset:
                             opp_to_reset.last_followup_at = reply_dt
+
+                    # Capture alternative contacts mentioned in the OOO body.
+                    for alt_email in ooo_alternatives.get(em, []):
+                        existing = (
+                            session.query(Contact)
+                            .filter(func.lower(Contact.email) == alt_email)
+                            .filter(Contact.company_id == c.company_id)
+                            .first()
+                        )
+                        if existing:
+                            continue  # already known
+                        new_ct = Contact(
+                            company_id=c.company_id,
+                            email=alt_email,
+                            email_status="verified",
+                            email_source="ooo_alternative",
+                        )
+                        session.add(new_ct)
+                        ooo_alt_captured += 1
+                        logger.info(
+                            "OOO from %s — captured alternative contact: %s (company #%s)",
+                            em, alt_email, c.company_id,
+                        )
                     continue  # not a real reply → skip replied_at
 
                 if c.replied_at is not None:
@@ -127,6 +153,7 @@ def detect_replies(max_messages: int = 200) -> dict:
         "matched": matched,
         "newly_marked": newly,
         "ooo_verified": ooo_verified,
+        "ooo_alt_captured": ooo_alt_captured,
     }
 
 
@@ -315,7 +342,7 @@ def run_followups(session, batch: int = 15, delay: float = 1.0) -> dict:
     candidates = select_followup_candidates(session)[:batch]
     if not candidates:
         logger.info("Follow-ups: nothing due")
-        return {"replies_detected": rep["newly_marked"], "ooo_verified": rep.get("ooo_verified", 0), "candidates": 0, "drafted": 0}
+        return {"replies_detected": rep["newly_marked"], "ooo_verified": rep.get("ooo_verified", 0), "ooo_alt_captured": rep.get("ooo_alt_captured", 0), "candidates": 0, "drafted": 0}
 
     logger.info(
         f"Follow-ups: {len(candidates)} due "

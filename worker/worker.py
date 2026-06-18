@@ -389,9 +389,11 @@ def _run_followup_phase() -> int:
         from src.database.session import get_session
         with get_session() as db:
             res = run_followups(db, batch=FOLLOWUP_BATCH, delay=FOLLOWUP_DELAY_S)
+        alt = res.get("ooo_alt_captured", 0)
         logger.info(
             f"Follow-ups: {res['replies_detected']} reply(ies) newly marked, "
             f"{res['drafted']} follow-up draft(s) pushed ({res['candidates']} due)"
+            + (f", {alt} OOO alternative contact(s) captured" if alt else "")
         )
         return res["drafted"]
     except Exception as exc:
