@@ -118,8 +118,10 @@ English keyword signals (0-10). Priority: `quick_win` ≥70, `strategic` ≥40,
 
 ### Outreach (grounded, profile-tunable)
 
-`src/graph/nodes/outreach.py` + `src/prompts/outreach.py`. Uses **Haiku** (`fast_model`),
-one lean payload per company (no insights). The prompt enforces hard **grounding rules**
+`src/graph/nodes/outreach.py` + `src/prompts/outreach.py`. Uses the **`outreach_model`**
+(`OUTREACH_MODEL`, default Sonnet `claude-sonnet-4-6`) for customer-facing draft quality —
+the same model is used by the workflow node, the worker draft generator, and the follow-up
+generator. One lean payload per company (no insights). The prompt enforces hard **grounding rules**
 to stop hallucination:
 - Reference ONLY facts present in the company payload.
 - Never claim the company "doesn't / lacks / hasn't" something (an absence can't be verified).
@@ -472,6 +474,7 @@ Key models: `Profile`, `DiscoveryRun`, `Company`, `Contact` (with enrichment fie
 | `SCHEDULER_TIMEZONE` | — | Default: America/Argentina/Buenos_Aires |
 | `FAST_MODEL` | — | Fast Claude model (default: claude-haiku-4-5-20251001) |
 | `REASONING_MODEL` | — | Reasoning model (default: claude-sonnet-4-6) |
+| `OUTREACH_MODEL` | — | Model for customer-facing outreach + follow-up drafts (default: claude-sonnet-4-6). Set to the Haiku id to cut cost at the expense of Spanish quality |
 | `ZOHO_CLIENT_ID` | Zoho | OAuth2 client ID |
 | `ZOHO_CLIENT_SECRET` | Zoho | OAuth2 client secret |
 | `ZOHO_REFRESH_TOKEN` | Zoho/Railway | Long-lived refresh token (from `--zoho-auth`) |

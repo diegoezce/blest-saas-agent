@@ -7,6 +7,10 @@ class Settings(BaseSettings):
     anthropic_api_key: str
     fast_model: str = "claude-haiku-4-5-20251001"
     reasoning_model: str = "claude-sonnet-4-6"
+    # Model for customer-facing outreach + follow-up drafts. Defaults to Sonnet for
+    # quality (fewer invented words / better Spanish). Override with OUTREACH_MODEL to
+    # trade quality for cost (e.g. the Haiku fast model).
+    outreach_model: str = "claude-sonnet-4-6"
 
     # Search
     tavily_api_key: str = ""

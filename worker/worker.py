@@ -110,7 +110,8 @@ def _generate_draft(company, contact, opportunity, profile) -> tuple[str, str]:
 
     client = instructor.from_anthropic(anthropic.Anthropic())
     result = client.messages.create(
-        model=os.getenv("FAST_MODEL", "claude-haiku-4-5-20251001"),
+        # Customer-facing draft → use the quality model (Sonnet) by default.
+        model=os.getenv("OUTREACH_MODEL", "claude-sonnet-4-6"),
         max_tokens=800,
         messages=[{
             "role": "user",

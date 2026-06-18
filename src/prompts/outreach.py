@@ -68,7 +68,11 @@ def _language_directives(language: str | None) -> tuple[str, str, str, str]:
         "castellanices palabras en inglés; ante la menor duda con una palabra, reemplazala por "
         "una más simple y correcta. "
         "Puntuación correcta: abrí toda pregunta con \"¿\" y cerrala con \"?\"; "
-        "no uses signos de exclamación ni de apertura (\"¡\") ni de cierre (\"!\").",
+        "no uses signos de exclamación ni de apertura (\"¡\") ni de cierre (\"!\"). "
+        "Escribí en español; podés usar un término en inglés solo si es estándar y necesario "
+        "(p. ej. \"business English\", \"deadline\"), pero NUNCA mezcles artículos o verbos con "
+        "inglés (mal: \"el English\", \"los deals\", \"mercado US\"; bien: \"el inglés\", "
+        "\"las oportunidades\", \"el mercado estadounidense\").",
     )
 
 

@@ -75,7 +75,7 @@ def run_outreach_node(state: AgentState) -> AgentState:
 
         try:
             result = _llm().messages.create(
-                model=cfg.fast_model,
+                model=cfg.outreach_model,
                 max_tokens=1024,
                 messages=[{
                     "role": "user",
