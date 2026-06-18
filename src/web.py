@@ -1475,6 +1475,7 @@ def create_app() -> Flask:
                 return render_template(
                     "contacts_report.html",
                     by_profile={}, profiles_order=[], total=0, needs_follow_up=0, overdue=0,
+                    bounced_count=0, success_count=0,
                 )
 
             company_ids = [c.id for c, _ in pairs]
@@ -1621,6 +1622,9 @@ def create_app() -> Flask:
                     "follow_up_overdue": follow_up_overdue,
                     "follow_up_today": follow_up_today,
                     "needs_followup": needs_followup,
+                    "has_bounced": any(c.get("email_status") == "bounced" for c in merged_contacts),
+                    "is_success": (status.response_received or "") in
+                                  ("replied", "interested", "meeting_scheduled"),
                 })
 
             profiles_order: list = []
@@ -1635,6 +1639,8 @@ def create_app() -> Flask:
             total = len(companies_data)
             needs_follow_up = sum(1 for d in companies_data if d["needs_followup"])
             overdue = sum(1 for d in companies_data if d["follow_up_overdue"])
+            bounced_count = sum(1 for d in companies_data if d["has_bounced"])
+            success_count = sum(1 for d in companies_data if d["is_success"])
 
         return render_template(
             "contacts_report.html",
@@ -1643,6 +1649,8 @@ def create_app() -> Flask:
             total=total,
             needs_follow_up=needs_follow_up,
             overdue=overdue,
+            bounced_count=bounced_count,
+            success_count=success_count,
         )
 
     @app.route("/follow-ups")

@@ -191,6 +191,14 @@
     <span class="cr-stat-num text-accent">{{ total }}</span>
     <span class="cr-stat-label">Contactadas</span>
   </div>
+  <div class="cr-stat">
+    <span class="cr-stat-num text-green">{{ success_count }}</span>
+    <span class="cr-stat-label">Respondieron</span>
+  </div>
+  <div class="cr-stat">
+    <span class="cr-stat-num text-red">{{ bounced_count }}</span>
+    <span class="cr-stat-label">Rebotaron</span>
+  </div>
   {% if needs_follow_up %}
   <div class="cr-stat">
     <span class="cr-stat-num text-amber">{{ needs_follow_up }}</span>
