@@ -185,6 +185,13 @@ _BOUNCE_SUBJECTS = (
 # Domains/markers that are never the bounced lead (our own mailbox, the bounce daemon, Zoho).
 _ADDR_NOISE = ("mailer-daemon", "postmaster", "@zoho.com", "noreply", "no-reply")
 
+_OOO_SUBJECTS = (
+    "out of office", "fuera de oficina", "fuera de la oficina",
+    "automatic reply", "auto-reply", "autoreply",
+    "respuesta automática", "respuesta automatica",
+    "ausente", "vacation", "vacaciones",
+)
+
 
 def _is_bounce(msg: dict) -> bool:
     """True if a message looks like a hard bounce (excludes 'delay' notifications)."""
@@ -193,6 +200,12 @@ def _is_bounce(msg: dict) -> bool:
     if "delay" in subj:  # delivery delay ≠ bounce; mail may still arrive
         return False
     return any(s in frm for s in _BOUNCE_SENDERS) or any(s in subj for s in _BOUNCE_SUBJECTS)
+
+
+def _is_ooo(msg: dict) -> bool:
+    """True if a message is an out-of-office auto-reply."""
+    subj = (msg.get("subject") or "").lower()
+    return any(s in subj for s in _OOO_SUBJECTS)
 
 
 def scan_bounced_addresses(max_messages: int = 200) -> dict:
@@ -265,11 +278,13 @@ def scan_bounced_addresses(max_messages: int = 200) -> dict:
 def scan_inbox_senders(max_messages: int = 200) -> dict:
     """Scan the Zoho inbox and return the sender addresses of incoming mail.
 
-    Returns {checked, senders} where `senders` is {address: received_ms} — the
-    latest received timestamp (epoch ms) seen per sender address. Reuses the same
-    folder/paging flow as `scan_bounced_addresses` but reads only the message stubs
-    (no body fetch), so it's cheap. Filters out our own domain, the bounce daemon
-    and known noise. Used by follow-up reply detection to skip leads who replied.
+    Returns {checked, senders, ooo_senders} where:
+    - `senders` is {address: received_ms} — latest received timestamp per sender
+    - `ooo_senders` is a set of addresses that sent an out-of-office auto-reply;
+      these confirm the email is valid without counting as a real reply.
+
+    Reads only message stubs (no body fetch), so it's cheap. Filters out our own
+    domain, the bounce daemon and known noise.
 
     Requires the OAuth token to include ZohoMail.messages.READ + ZohoMail.folders.READ.
     """
@@ -291,6 +306,7 @@ def scan_inbox_senders(max_messages: int = 200) -> dict:
     folder_id = inbox["folderId"]
 
     senders: dict[str, int] = {}
+    ooo_senders: set[str] = set()
     checked = 0
     start = 1
     page = 50
@@ -322,8 +338,10 @@ def scan_inbox_senders(max_messages: int = 200) -> dict:
                 ts = 0
             if em not in senders or ts > senders[em]:
                 senders[em] = ts
+            if _is_ooo(m):
+                ooo_senders.add(em)
         start += len(batch)
         if len(batch) < page:
             break
 
-    return {"checked": checked, "senders": senders}
+    return {"checked": checked, "senders": senders, "ooo_senders": ooo_senders}

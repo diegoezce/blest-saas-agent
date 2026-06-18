@@ -42,13 +42,15 @@ def detect_replies(max_messages: int = 200) -> dict:
     Only counts a message as a reply if it arrived *after* the first-touch push to
     that contact's company (avoids marking unrelated prior mail). Also reflects the
     reply in `ContactStatus.response_received` when no manual feedback exists yet,
-    so `/contacts-report` shows it. Returns {checked, senders, matched, newly_marked}.
+    so `/contacts-report` shows it. Returns {checked, senders, matched, newly_marked, ooo_verified}.
     """
     res = scan_inbox_senders(max_messages=max_messages)
     senders: dict[str, int] = res["senders"]
+    ooo_senders: set[str] = res.get("ooo_senders", set())
     addrs = list(senders.keys())
     matched = 0
     newly = 0
+    ooo_verified = 0
     if addrs:
         with get_session() as session:
             rows = (
@@ -58,9 +60,8 @@ def detect_replies(max_messages: int = 200) -> dict:
             )
             for c in rows:
                 matched += 1
-                if c.replied_at is not None:
-                    continue
-                reply_ms = senders.get((c.email or "").lower())
+                em = (c.email or "").lower()
+                reply_ms = senders.get(em)
                 if not reply_ms:
                     continue
                 reply_dt = datetime.fromtimestamp(reply_ms / 1000, tz=timezone.utc)
@@ -75,6 +76,33 @@ def detect_replies(max_messages: int = 200) -> dict:
                     continue  # we never contacted them → not a reply to us
                 if reply_dt < _aware(pushed):
                     continue  # mail predates our outreach
+
+                # OOO auto-reply: confirms the address is valid and resets the cadence
+                # clock so we don't follow up while they're away.
+                if em in ooo_senders:
+                    if c.email_status != "verified":
+                        c.email_status = "verified"
+                        c.email_source = "ooo_confirmed"
+                        ooo_verified += 1
+                    log = c.enrichment_log or {}
+                    if not log.get("ooo_confirmed_at"):
+                        log["ooo_confirmed_at"] = reply_dt.isoformat()
+                        c.enrichment_log = log
+                        logger.info("OOO from %s — email confirmed valid, cadence paused", c.email)
+                        # Reset the follow-up cadence clock for this company.
+                        opp_to_reset = (
+                            session.query(Opportunity)
+                            .filter(Opportunity.company_id == c.company_id)
+                            .filter(Opportunity.zoho_pushed_at.isnot(None))
+                            .order_by(Opportunity.score.desc())
+                            .first()
+                        )
+                        if opp_to_reset:
+                            opp_to_reset.last_followup_at = reply_dt
+                    continue  # not a real reply → skip replied_at
+
+                if c.replied_at is not None:
+                    continue
 
                 c.replied_at = reply_dt
                 newly += 1
@@ -95,6 +123,7 @@ def detect_replies(max_messages: int = 200) -> dict:
         "senders": len(addrs),
         "matched": matched,
         "newly_marked": newly,
+        "ooo_verified": ooo_verified,
     }
 
 
@@ -111,6 +140,10 @@ def _followup_due_date(opp) -> datetime | None:
         base = _aware(opp.zoho_pushed_at)
         if not base:
             return None
+        # If last_followup_at is set at count=0, it means an OOO was received and
+        # reset the cadence clock — use whichever is later.
+        if opp.last_followup_at:
+            base = max(base, _aware(opp.last_followup_at))
         return base + timedelta(days=FOLLOWUP_FIRST_DAYS)
     if count == 1:
         base = _aware(opp.last_followup_at)
@@ -279,9 +312,12 @@ def run_followups(session, batch: int = 15, delay: float = 1.0) -> dict:
     candidates = select_followup_candidates(session)[:batch]
     if not candidates:
         logger.info("Follow-ups: nothing due")
-        return {"replies_detected": rep["newly_marked"], "candidates": 0, "drafted": 0}
+        return {"replies_detected": rep["newly_marked"], "ooo_verified": rep.get("ooo_verified", 0), "candidates": 0, "drafted": 0}
 
-    logger.info(f"Follow-ups: {len(candidates)} due (replies newly marked: {rep['newly_marked']})")
+    logger.info(
+        f"Follow-ups: {len(candidates)} due "
+        f"(replies: {rep['newly_marked']}, OOO confirmed: {rep.get('ooo_verified', 0)})"
+    )
     drafted = 0
     for opp, company, contact, profile in candidates:
         label = f"{company.name} → {contact.email} (#{(opp.followup_count or 0) + 1})"
@@ -301,7 +337,7 @@ def run_followups(session, batch: int = 15, delay: float = 1.0) -> dict:
 
     session.commit()
     logger.info(f"Follow-ups done: {drafted} drafts pushed")
-    return {"replies_detected": rep["newly_marked"], "candidates": len(candidates), "drafted": drafted}
+    return {"replies_detected": rep["newly_marked"], "ooo_verified": rep.get("ooo_verified", 0), "candidates": len(candidates), "drafted": drafted}
 
 
 def push_followup_now(session, company_id: int) -> dict:
