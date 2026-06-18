@@ -61,8 +61,14 @@ def _language_directives(language: str | None) -> tuple[str, str, str, str]:
         "Hola",
         "Escribí en español rioplatense natural y profesional, usando voseo "
         "(\"tenés\", \"podés\", \"te interesa\", \"contame\"). Cercano pero serio; "
-        "sin formalismos acartonados (\"Estimado/a\", \"Cordialmente\"), sin traducir "
-        "literal del inglés y sin signos de exclamación de apertura.",
+        "sin formalismos acartonados (\"Estimado/a\", \"Cordialmente\") y sin traducir "
+        "literal del inglés. "
+        "ORTOGRAFÍA Y GRAMÁTICA IMPECABLES: usá ÚNICAMENTE palabras que existan en español "
+        "(p. ej. \"malentendidos\", NO \"malinterpretidos\"); jamás inventes términos ni "
+        "castellanices palabras en inglés; ante la menor duda con una palabra, reemplazala por "
+        "una más simple y correcta. "
+        "Puntuación correcta: abrí toda pregunta con \"¿\" y cerrala con \"?\"; "
+        "no uses signos de exclamación ni de apertura (\"¡\") ni de cierre (\"!\").",
     )
 
 
