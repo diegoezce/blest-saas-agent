@@ -11,7 +11,7 @@ import json
 import logging
 import os
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from sqlalchemy import func
 
@@ -100,18 +100,47 @@ def detect_replies(max_messages: int = 200) -> dict:
 
 # ── Candidate selection ───────────────────────────────────────────────────────
 
-def select_followup_candidates(session) -> list:
-    """Opportunities due for a follow-up. Returns [(opp, company, contact, profile)].
+def _followup_due_date(opp) -> datetime | None:
+    """When this opportunity becomes due for its next follow-up (UTC), or None.
 
-    Eligibility:
-      - first touch already pushed (`zoho_pushed_at` not null)
-      - `followup_count` < FOLLOWUP_MAX
-      - company has no contact that replied, and no manual `ContactStatus.response_received`
-      - a best contact with a verified/probable, non-replied email exists
-      - cadence: count 0 → ≥ FIRST_DAYS since push; count 1 → ≥ (SECOND-FIRST) days since last
+    count 0 → FIRST_DAYS after the first-touch push;
+    count 1 → (SECOND-FIRST) days after the last follow-up.
     """
-    now = datetime.now(timezone.utc)
+    count = opp.followup_count or 0
+    if count == 0:
+        base = _aware(opp.zoho_pushed_at)
+        if not base:
+            return None
+        return base + timedelta(days=FOLLOWUP_FIRST_DAYS)
+    if count == 1:
+        base = _aware(opp.last_followup_at)
+        if not base:
+            return None
+        return base + timedelta(days=(FOLLOWUP_SECOND_DAYS - FOLLOWUP_FIRST_DAYS))
+    return None
 
+
+def _best_followup_contact(session, company_id):
+    """Best verified/probable, non-replied contact for a company, or None."""
+    return (
+        session.query(Contact)
+        .filter(Contact.company_id == company_id)
+        .filter(Contact.email.isnot(None))
+        .filter(Contact.email_status.in_(["verified", "probable"]))
+        .filter(Contact.replied_at.is_(None))
+        .order_by(Contact.confidence_score.desc().nullslast())
+        .first()
+    )
+
+
+def _eligible_followup_opps(session) -> list:
+    """All opportunities eligible for a follow-up *regardless of cadence timing*.
+
+    Returns [(opp, company, contact, profile)], one per company (highest score),
+    filtered by: first touch pushed, `followup_count` < MAX, no reply, no manual
+    response, and a verified/probable non-replied contact. Cadence timing is left to
+    the caller via `_followup_due_date(opp)`.
+    """
     replied_sq = session.query(Contact.company_id).filter(Contact.replied_at.isnot(None))
     responded_sq = (
         session.query(ContactStatus.company_id)
@@ -131,39 +160,47 @@ def select_followup_candidates(session) -> list:
         .all()
     )
 
-    candidates: list = []
+    out: list = []
     seen_company: set = set()
     for opp, company, profile in opps:
         if opp.company_id in seen_company:
             continue
-        count = opp.followup_count or 0
-        if count == 0:
-            pushed = _aware(opp.zoho_pushed_at)
-            if not pushed or (now - pushed).days < FOLLOWUP_FIRST_DAYS:
-                continue
-        elif count == 1:
-            last = _aware(opp.last_followup_at)
-            if not last or (now - last).days < (FOLLOWUP_SECOND_DAYS - FOLLOWUP_FIRST_DAYS):
-                continue
-        else:
-            continue
-
-        contact = (
-            session.query(Contact)
-            .filter(Contact.company_id == opp.company_id)
-            .filter(Contact.email.isnot(None))
-            .filter(Contact.email_status.in_(["verified", "probable"]))
-            .filter(Contact.replied_at.is_(None))
-            .order_by(Contact.confidence_score.desc().nullslast())
-            .first()
-        )
+        contact = _best_followup_contact(session, opp.company_id)
         if not contact:
             continue
-
         seen_company.add(opp.company_id)
-        candidates.append((opp, company, contact, profile))
+        out.append((opp, company, contact, profile))
+    return out
 
-    return candidates
+
+def select_followup_candidates(session) -> list:
+    """Opportunities **due now** for a follow-up. Returns [(opp, company, contact, profile)].
+
+    Eligibility per `_eligible_followup_opps`; due when `_followup_due_date(opp) <= now`.
+    """
+    now = datetime.now(timezone.utc)
+    out: list = []
+    for opp, company, contact, profile in _eligible_followup_opps(session):
+        due = _followup_due_date(opp)
+        if due and due <= now:
+            out.append((opp, company, contact, profile))
+    return out
+
+
+def select_upcoming_followups(session, within_days: int = 7) -> list:
+    """Eligible follow-ups **not yet due** but coming up within `within_days`.
+
+    Returns [(opp, company, contact, profile, due_date)], soonest first.
+    """
+    now = datetime.now(timezone.utc)
+    horizon = now + timedelta(days=within_days)
+    out: list = []
+    for opp, company, contact, profile in _eligible_followup_opps(session):
+        due = _followup_due_date(opp)
+        if due and now < due <= horizon:
+            out.append((opp, company, contact, profile, due))
+    out.sort(key=lambda t: t[4])
+    return out
 
 
 # ── Draft generation — mirror of worker._generate_draft ───────────────────────
@@ -265,3 +302,36 @@ def run_followups(session, batch: int = 15, delay: float = 1.0) -> dict:
     session.commit()
     logger.info(f"Follow-ups done: {drafted} drafts pushed")
     return {"replies_detected": rep["newly_marked"], "candidates": len(candidates), "drafted": drafted}
+
+
+def push_followup_now(session, company_id: int) -> dict:
+    """Generate + push a follow-up draft for one company **right now**, bypassing the
+    cadence wait (manual "do it today" / bring-forward action).
+
+    The company must still be eligible (pushed, no reply, no manual response,
+    `followup_count` < MAX, with a verified/probable contact). Returns
+    {ok, message, stage}.
+    """
+    match = next(
+        (t for t in _eligible_followup_opps(session) if t[0].company_id == company_id),
+        None,
+    )
+    if match is None:
+        return {"ok": False, "message": "Empresa no elegible para follow-up", "stage": None}
+
+    opp, company, contact, profile = match
+    stage = (opp.followup_count or 0) + 1
+    try:
+        subject, body = generate_followup(company, contact, opp, profile)
+        zoho_create_draft(to_address=contact.email, subject=subject, content=body)
+        opp.followup_count = (opp.followup_count or 0) + 1
+        opp.last_followup_at = datetime.now(timezone.utc)
+        opp.followup_subject = subject
+        opp.followup_draft = body
+        session.commit()
+        logger.info(f"Follow-up #{stage} adelantado: {company.name} → {contact.email}")
+        return {"ok": True, "message": f"Follow-up #{stage} drafteado para {company.name}", "stage": stage}
+    except Exception as exc:
+        session.rollback()
+        logger.error(f"Follow-up adelantado falló ({company.name}): {exc}")
+        return {"ok": False, "message": f"Error: {exc}", "stage": stage}

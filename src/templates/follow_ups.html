@@ -44,6 +44,12 @@
     padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--border); }
   table.fu-table td { padding: 0.45rem 0.6rem; border-bottom: 1px solid var(--border); vertical-align: top; }
 
+  .fu-now-btn {
+    background: var(--accent); color: #fff; border: none; border-radius: 6px;
+    padding: 0.25rem 0.6rem; font-size: 0.74rem; font-weight: 600; cursor: pointer; white-space: nowrap;
+  }
+  .fu-now-btn:hover { filter: brightness(1.08); }
+
   .empty-state { text-align: center; padding: 2.5rem 1rem; color: var(--muted); }
   @media (max-width: 600px) {
     .lead-grid { grid-template-columns: 1fr; }
@@ -63,6 +69,7 @@
 <div class="cr-stats">
   <div class="cr-stat"><span class="cr-stat-num text-accent">{{ stats.waiting }}</span><span class="cr-stat-label">Esperando respuesta</span></div>
   <div class="cr-stat"><span class="cr-stat-num text-amber">{{ stats.due }}</span><span class="cr-stat-label">Vencidos / por enviar</span></div>
+  <div class="cr-stat"><span class="cr-stat-num text-accent">{{ stats.upcoming }}</span><span class="cr-stat-label">Próximos ({{ within_days }}d)</span></div>
   <div class="cr-stat"><span class="cr-stat-num text-accent">{{ stats.drafted_week }}</span><span class="cr-stat-label">Drafteados (7d)</span></div>
   <div class="cr-stat"><span class="cr-stat-num text-green">{{ stats.replied }}</span><span class="cr-stat-label">Respondieron</span></div>
 </div>
@@ -94,12 +101,51 @@
         <span class="badge {{ 'badge-red' if d.overdue else 'badge-amber' }}">Toque #{{ d.stage }}</span>
         <span>hace {{ d.days_since }} día{{ 's' if d.days_since != 1 }}</span>
         {% if d.overdue %}<span style="color:var(--red);font-weight:600">⚠ vencido</span>{% endif %}
+        <form method="post" action="{{ url_for('follow_ups_push_now') }}" style="margin-left:auto">
+          <input type="hidden" name="company_id" value="{{ d.company_id }}">
+          <button type="submit" class="fu-now-btn" title="Generar y pushear el follow-up a Zoho ahora">⏩ Hacer hoy</button>
+        </form>
       </div>
     </div>
     {% endfor %}
   </div>
   {% else %}
   <div class="empty-state">Nada pendiente. El worker draftea automáticamente cuando un lead cumple la cadencia.</div>
+  {% endif %}
+</details>
+
+<!-- ── Próximos (cadencia aún no vencida) ─────────────────────────── -->
+<details class="fu-section" open>
+  <summary>
+    <h2>📅 Próximos follow-ups ({{ within_days }}d)</h2>
+    <span class="badge badge-muted">{{ upcoming | length }}</span>
+  </summary>
+  {% if upcoming %}
+  <table class="fu-table">
+    <thead><tr><th>Empresa</th><th>Perfil</th><th>Contacto</th><th>Toque</th><th>Vence</th><th></th></tr></thead>
+    <tbody>
+      {% for u in upcoming %}
+      <tr>
+        <td data-label="Empresa"><strong>{{ u.company }}</strong></td>
+        <td data-label="Perfil"><span class="badge badge-muted">{{ u.profile_name }}</span></td>
+        <td data-label="Contacto">
+          {{ u.contact_name }}{% if u.contact_role %} <span style="color:var(--muted)">· {{ u.contact_role }}</span>{% endif %}
+          {% if u.email_status == 'verified' %} ✅{% elif u.email_status == 'probable' %} 🟡{% endif %}
+        </td>
+        <td data-label="Toque">#{{ u.stage }}</td>
+        <td data-label="Vence">{{ u.due_display }} <span style="color:var(--muted)">(en {{ u.days_until }}d)</span></td>
+        <td data-label="">
+          <form method="post" action="{{ url_for('follow_ups_push_now') }}">
+            <input type="hidden" name="company_id" value="{{ u.company_id }}">
+            <button type="submit" class="fu-now-btn" title="Adelantar: generar y pushear el follow-up a Zoho ahora">⏩ Hacer hoy</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty-state">Nada próximo a vencer en los próximos {{ within_days }} días.</div>
   {% endif %}
 </details>
 

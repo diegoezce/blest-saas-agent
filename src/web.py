@@ -1660,9 +1660,15 @@ def create_app() -> Flask:
         from src.database.session import get_session
         from src.database.models import Company, Contact, Opportunity, DiscoveryRun, Profile, ContactStatus
         from src.tools.followups import (
-            select_followup_candidates, _aware, FOLLOWUP_FIRST_DAYS, FOLLOWUP_SECOND_DAYS,
+            select_followup_candidates, select_upcoming_followups, _aware,
+            FOLLOWUP_FIRST_DAYS, FOLLOWUP_SECOND_DAYS,
         )
         from datetime import datetime, timezone, timedelta
+
+        try:
+            within_days = max(1, min(30, int(request.args.get("within", 7))))
+        except (TypeError, ValueError):
+            within_days = 7
 
         now = datetime.now(timezone.utc)
         week_ago = now - timedelta(days=7)
@@ -1686,6 +1692,7 @@ def create_app() -> Flask:
                     target = FOLLOWUP_SECOND_DAYS - FOLLOWUP_FIRST_DAYS
                 days_since = (now - base).days if base else 0
                 due.append({
+                    "company_id": opp.company_id,
                     "company": company.name or "",
                     "display_url": _disp_url(company),
                     "website_url": company.website_url or "",
@@ -1699,6 +1706,25 @@ def create_app() -> Flask:
                     "stage": count + 1,
                     "days_since": days_since,
                     "overdue": days_since >= target + 3,
+                })
+
+            # ── Upcoming (eligible but cadence not yet due) ──
+            upcoming = []
+            for opp, company, contact, profile, due_date in select_upcoming_followups(db, within_days):
+                days_until = max(0, (due_date - now).days)
+                upcoming.append({
+                    "company_id": opp.company_id,
+                    "company": company.name or "",
+                    "display_url": _disp_url(company),
+                    "website_url": company.website_url or "",
+                    "profile_name": profile.name if profile else "Default",
+                    "contact_name": contact.name or "",
+                    "contact_role": contact.role or "",
+                    "contact_email": contact.email or "",
+                    "email_status": contact.email_status or "",
+                    "stage": (opp.followup_count or 0) + 1,
+                    "days_until": days_until,
+                    "due_display": due_date.strftime("%d/%m"),
                 })
 
             # ── Drafted this week (weekly summary) ──
@@ -1754,14 +1780,33 @@ def create_app() -> Flask:
             stats = {
                 "waiting": waiting,
                 "due": len(due),
+                "upcoming": len(upcoming),
                 "drafted_week": len(drafted),
                 "replied": len(replied),
             }
 
         return render_template(
             "follow_ups.html",
-            due=due, drafted=drafted, replied=replied, stats=stats,
+            due=due, upcoming=upcoming, drafted=drafted, replied=replied,
+            stats=stats, within_days=within_days,
         )
+
+    @app.route("/follow-ups/push-now", methods=["POST"])
+    @_require_auth
+    def follow_ups_push_now():
+        from src.database.session import get_session
+        from src.tools.followups import push_followup_now
+
+        try:
+            company_id = int(request.form.get("company_id", ""))
+        except (TypeError, ValueError):
+            flash("Empresa inválida.", "error")
+            return redirect(url_for("follow_ups"))
+
+        with get_session() as db:
+            res = push_followup_now(db, company_id)
+        flash(res["message"], "success" if res["ok"] else "error")
+        return redirect(url_for("follow_ups"))
 
     @app.route("/search")
     @_require_auth
