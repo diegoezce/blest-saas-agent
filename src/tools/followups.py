@@ -80,7 +80,10 @@ def detect_replies(max_messages: int = 200) -> dict:
                 # OOO auto-reply: confirms the address is valid and resets the cadence
                 # clock so we don't follow up while they're away.
                 if em in ooo_senders:
-                    if c.email_status != "verified":
+                    # Don't override a confirmed bounce — bounce from the mail server
+                    # is stronger evidence than an OOO (which may have been sent before
+                    # the mailbox was deleted/disabled).
+                    if c.email_status not in ("verified", "bounced"):
                         c.email_status = "verified"
                         c.email_source = "ooo_confirmed"
                         ooo_verified += 1
