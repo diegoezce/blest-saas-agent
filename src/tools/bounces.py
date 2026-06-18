@@ -52,6 +52,8 @@ def mark_bounced(addresses: list[str]) -> int:
     (skips ones already marked). Returns how many were newly marked."""
     if not addresses:
         return 0
+    from src.tools.db_tools import mark_company_contacted
+
     addrs = [a.lower() for a in addresses]
     marked = 0
     with get_session() as session:
@@ -60,6 +62,10 @@ def mark_bounced(addresses: list[str]) -> int:
             if c.email_status != "bounced":
                 c.email_status = "bounced"
                 marked += 1
+            # A bounce means we DID send this company an email → make sure it's
+            # recorded as contacted so it shows on /contacts-report (idempotent).
+            if c.company_id:
+                mark_company_contacted(session, c.company_id, method="email")
     return marked
 
 
