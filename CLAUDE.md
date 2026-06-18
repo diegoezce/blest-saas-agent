@@ -312,16 +312,24 @@ Follows up with already-contacted leads that haven't replied. Shared logic in
 and the worker's draft generator (Haiku + instructor). Reuses Zoho read scopes.
 
 - **Reply detection** — `scan_inbox_senders()` (in `zoho_mail.py`) reads inbox message stubs
-  (no body fetch) and returns `{address: latest_received_ms}`. `detect_replies()` intersects
-  with `Contact.email` and sets `Contact.replied_at` **only when the message arrived after the
-  first-touch push** (`Opportunity.zoho_pushed_at`), so unrelated prior mail isn't counted. A
-  detected reply also sets `ContactStatus.response_received="replied"` if no manual feedback
-  exists yet, so it surfaces on `/contacts-report`.
+  (no body fetch) and returns `{address: latest_received_ms, ooo_senders: set}`. `detect_replies()`
+  intersects with `Contact.email` and sets `Contact.replied_at` **only when the message arrived
+  after the first-touch push** (`Opportunity.zoho_pushed_at`), so unrelated prior mail isn't
+  counted. A detected reply also sets `ContactStatus.response_received="replied"` if no manual
+  feedback exists yet, so it surfaces on `/contacts-report`.
+- **OOO detection** — `scan_inbox_senders()` also detects out-of-office auto-replies by subject
+  (`_OOO_SUBJECTS`: "out of office", "fuera de oficina", "automatic reply", etc.). When an OOO
+  arrives from a known contact's address after their company was contacted: upgrades
+  `email_status → "verified"` / `email_source → "ooo_confirmed"` (delivery confirmed), logs
+  `enrichment_log["ooo_confirmed_at"]`, and resets the follow-up cadence clock by setting
+  `Opportunity.last_followup_at = ooo_date` (without incrementing `followup_count`). The cadence
+  then fires ~`FOLLOWUP_FIRST_DAYS` after the OOO, not while the person is away. Repeated OOOs
+  from the same contact don't further delay the cadence (`ooo_confirmed_at` already set → skip).
 - **Cadence** — constants `FOLLOWUP_FIRST_DAYS=4`, `FOLLOWUP_SECOND_DAYS=10`, `FOLLOWUP_MAX=2`.
   `select_followup_candidates()` picks pushed opportunities (one per company) whose company has
   no reply and no manual `response_received`, with a verified/probable contact email:
-  `followup_count==0` & ≥4 days since push → touch #1; `followup_count==1` & ≥6 days since last
-  follow-up → touch #2; `≥2` → excluded.
+  `followup_count==0` & ≥4 days since push (or since OOO if later) → touch #1;
+  `followup_count==1` & ≥6 days since last follow-up (or OOO) → touch #2; `≥2` → excluded.
 - **Drafting** — `generate_followup()` builds the payload + calls Haiku with
   `build_followup_prompt()` (`src/prompts/followup.py`, Spanish voseo by default via the profile's
   `outreach_language`; 50–120 words, references the original, single CTA). Subject = `"Re: " +
