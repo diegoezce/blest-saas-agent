@@ -326,10 +326,13 @@ and the worker's draft generator (Haiku + instructor). Reuses Zoho read scopes.
   then fires ~`FOLLOWUP_FIRST_DAYS` after the OOO, not while the person is away. Repeated OOOs
   from the same contact don't further delay the cadence (`ooo_confirmed_at` already set → skip).
 - **Cadence** — constants `FOLLOWUP_FIRST_DAYS=4`, `FOLLOWUP_SECOND_DAYS=10`, `FOLLOWUP_MAX=2`.
-  `select_followup_candidates()` picks pushed opportunities (one per company) whose company has
-  no reply and no manual `response_received`, with a verified/probable contact email:
-  `followup_count==0` & ≥4 days since push (or since OOO if later) → touch #1;
-  `followup_count==1` & ≥6 days since last follow-up (or OOO) → touch #2; `≥2` → excluded.
+  Eligibility and cadence timing are split: `_eligible_followup_opps()` returns pushed
+  opportunities (one per company, highest score) whose company has no reply and no manual
+  `response_received`, with a verified/probable, non-replied contact email — **regardless of
+  timing**. `_followup_due_date(opp)` computes when the next touch is due (`count==0` → push +
+  4d, or since OOO if later; `count==1` → last follow-up + 6d). `select_followup_candidates()` =
+  eligible with `due_date <= now` (used by the worker); `select_upcoming_followups(within_days=7)`
+  = eligible with `now < due_date <= now+N` (drives the "Próximos" UI).
 - **Drafting** — `generate_followup()` builds the payload + calls Haiku with
   `build_followup_prompt()` (`src/prompts/followup.py`, Spanish voseo by default via the profile's
   `outreach_language`; 50–120 words, references the original, single CTA). Subject = `"Re: " +
@@ -338,8 +341,14 @@ and the worker's draft generator (Haiku + instructor). Reuses Zoho read scopes.
 - **Threading caveat (v1)** — the follow-up is a standalone `"Re:"` draft (no `In-Reply-To`
   header), and the cadence clock runs from `zoho_pushed_at` assuming the first-touch draft is
   **sent the same day it's pushed**.
-- **`/follow-ups` page** — weekly summary: pending/overdue (cadence due), drafted this week,
-  and who replied; plus a stats bar. Template `src/templates/follow_ups.html`.
+- **Bring-forward ("Hacer hoy")** — `push_followup_now(session, company_id)` generates + pushes
+  a follow-up draft for one company **immediately, bypassing the cadence wait** (the company must
+  still be eligible), then bumps the same counters as `run_followups`. Exposed via
+  `POST /follow-ups/push-now` (form field `company_id`).
+- **`/follow-ups` page** — weekly summary: pending/overdue (cadence due), **upcoming** (eligible
+  but not yet due, within `?within=N` days — default 7, clamp 1–30), drafted this week, and who
+  replied; plus a stats bar. Pending cards and the Próximos table each have a **"⏩ Hacer hoy"**
+  button (→ `/follow-ups/push-now`) to draft a follow-up early. Template `src/templates/follow_ups.html`.
 
 ## Web UI Routes
 
@@ -359,7 +368,8 @@ and the worker's draft generator (Haiku + instructor). Reuses Zoho read scopes.
 | `/contact/<id>/enrich` | POST | Enrich a single contact |
 | `/contact/<id>/zoho-draft` | POST | Push a single contact's draft to Zoho Mail |
 | `/contacts-report` | GET | Contacted companies grouped by profile (dedup, follow-up tracking) |
-| `/follow-ups` | GET | Follow-up dashboard — pending/overdue (cadence due), drafted this week, replied (weekly summary) |
+| `/follow-ups` | GET | Follow-up dashboard — pending/overdue (cadence due), upcoming (`?within=N` days), drafted this week, replied (weekly summary) |
+| `/follow-ups/push-now` | POST | Bring-forward: draft + push a follow-up for one company now, bypassing cadence (`company_id`) |
 | `/bounces/scan` | GET | Preview Zoho bounces matched to contacts (read-only) |
 | `/bounces/apply` | POST | Mark matched bounced contacts (`email_status="bounced"`) |
 | `/search` | GET | Browse/search companies — full paginated listing (25/page); contacts panel when `?q=` set |
@@ -612,7 +622,7 @@ when it first connects. See `worker/README.md` for the full runbook.
 | `src/prompts/outreach.py` | Grounded outreach prompt with `custom_instructions_block` |
 | `src/tools/db_tools.py` | `persist_run_node`, `_upsert_company` (dedup), `normalize_company_name` |
 | `src/tools/bounces.py` | Zoho bounce scan + match + mark (shared by `/bounces/*` routes and `--check-bounces`) |
-| `src/tools/followups.py` | Follow-up agent: detect replies + select due leads + generate/push follow-up drafts (shared by worker phase 4, `/follow-ups`, `--detect-replies`/`--follow-ups`) |
+| `src/tools/followups.py` | Follow-up agent: detect replies + select due/upcoming leads + generate/push follow-up drafts + bring-forward (`push_followup_now`) (shared by worker phase 4, `/follow-ups`, `--detect-replies`/`--follow-ups`) |
 | `src/prompts/followup.py` | Follow-up email prompt (`build_followup_prompt`); reuses outreach language directives |
 | `src/enrichment/domain_resolver.py` | Layer 0 — resolve a missing company domain (email derive + official-site web search) |
 | `src/enrichment/pipeline.py` | Enrichment orchestrator (Layer 0 domain resolution + 3 layers + attempt counter) |
