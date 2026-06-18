@@ -142,12 +142,34 @@ def enrich_contact(contact_id: int) -> EnrichmentResult:
             # Real published generic inboxes (info@, contacto@, …), deduped + ordered by
             # outreach preference, minus anything already known-bad. Used as a fallback
             # later only if no verified *named* email is found.
+            # Scan same-domain emails first (highest confidence), then cross-domain
+            # generics found on the page — catches cases where the company's stored
+            # domain differs from their email domain (e.g. site: ytec.com.ar,
+            # email found: info@ypftecnologia.com).
+            _FREE_PROVIDERS = frozenset({
+                "gmail.com", "hotmail.com", "outlook.com", "yahoo.com",
+                "yahoo.com.ar", "live.com", "icloud.com",
+            })
             generic_seen: set[str] = set()
             for pref in GENERIC_PREFIXES:
+                # same-domain first
                 for e in domain_emails:
                     el = e.lower()
                     if (el.split("@")[0] == pref and el not in bad_emails
                             and el not in generic_seen):
+                        generic_seen.add(el)
+                        generic_emails.append(e)
+            for pref in GENERIC_PREFIXES:
+                # cross-domain fallback (email domain ≠ stored domain but found on their site)
+                for e in scrape.emails:
+                    el = e.lower()
+                    parts = el.split("@")
+                    if len(parts) != 2:
+                        continue
+                    edom = parts[1]
+                    if (parts[0] == pref and el not in bad_emails
+                            and el not in generic_seen
+                            and edom not in _FREE_PROVIDERS):
                         generic_seen.add(el)
                         generic_emails.append(e)
             layer1["generic_emails"] = generic_emails
