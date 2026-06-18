@@ -340,7 +340,8 @@ and the worker's draft generator (Haiku + instructor). Reuses Zoho read scopes.
 | `/quick-run` | POST | Start a Quick Run (creates DiscoveryRun, spawns background thread) |
 | `/quick-run/<run_id>` | GET | Quick Run results page |
 | `/quick-run/<run_id>/status` | GET | Polling endpoint `{phase, done, total, error}` |
-| `/quick-run/<run_id>/push-all-zoho` | POST | Push all email drafts in a Quick Run to Zoho Mail |
+| `/quick-run/<run_id>/push-all-zoho` | POST | Push all **eligible** drafts (verified/probable, not already contacted/pushed) to Zoho |
+| `/quick-run/<run_id>/push-selected-zoho` | POST | Push only the selected contacts (still eligibility-filtered) |
 | `/quick-run/<run_id>/push-one-zoho` | POST | Push a single company's draft to Zoho Mail |
 | `/trigger` | POST | Manual discovery run (requires TRIGGER_PASSWORD) |
 | `/schedule/update` | POST | Update cron schedule + profile |
@@ -394,8 +395,14 @@ Fast email-hunting workflow designed to maximize contact coverage in a single pa
 
 **Results page (`src/templates/quick_run.html`):**
 - JS polls `/quick-run/<run_id>/status` every 3s during active phases; reloads when `phase == "done"`.
-- "Push all to Zoho" button → `POST /quick-run/<run_id>/push-all-zoho` (bulk, returns count).
-- Per-row "Zoho" button → `POST /quick-run/<run_id>/push-one-zoho` (single company).
+- Push to Zoho is **eligibility-gated** (same guards as the worker): only `verified`/`probable`
+  emails with a draft, skipping companies already contacted (`ContactStatus`) or pushed
+  (`zoho_pushed_at`), one contact per company per batch. Shared helper `_quick_push_eligible()`.
+  - Per-row **checkbox** (pre-checked for eligibles only; ineligible rows greyed with the reason).
+  - **"Push seleccionados (N)"** → `POST /quick-run/<run_id>/push-selected-zoho` ({contact_ids}).
+  - **"Push todos los elegibles"** → `POST /quick-run/<run_id>/push-all-zoho` (all eligible).
+  - Both set `zoho_pushed_at` + mark the company contacted, so re-pushes are idempotent.
+- Per-row "📧" button (eligible rows only) → `POST /quick-run/<run_id>/push-one-zoho` (single).
 - "Seguimiento" column: one toggle-contact button per company (using Jinja2 `namespace` to track `last_co` across rows).
 - Draft preview modal with copy-to-clipboard.
 - History list on the form page (`GET /quick-run`) shows last 15 DiscoveryRuns for navigation.

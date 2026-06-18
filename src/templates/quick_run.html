@@ -112,7 +112,7 @@
 </div>
 
 {% set with_email = contacts_data | selectattr("email") | list %}
-{% set with_draft = contacts_data | selectattr("body") | list %}
+{% set eligible_rows = contacts_data | selectattr("eligible") | list %}
 
 {% if contacts_data %}
 <!-- Action bar -->
@@ -120,16 +120,20 @@
   <span style="font-size:0.85rem;color:var(--muted)">
     {{ contacts_data|length }} contactos ·
     {{ with_email|length }} con email ·
-    {{ with_draft|length }} con draft
+    <strong style="color:#4ade80">{{ eligible_rows|length }} elegibles</strong>
   </span>
   <button id="filter-email-btn" onclick="toggleEmailFilter()"
     style="background:var(--surface-hover);border:1px solid var(--border);padding:0.35rem 0.9rem;border-radius:6px;cursor:pointer;font-size:0.82rem;color:var(--muted);font-weight:600">
     ✉ Solo con email
   </button>
-  {% if zoho_configured and with_email|length > 0 %}
-  <button id="push-all-btn" onclick="pushAllZoho()"
+  {% if zoho_configured and eligible_rows|length > 0 %}
+  <button id="push-selected-btn" onclick="pushZoho(true)"
     style="background:#0ea5e9;color:#fff;border:none;padding:0.45rem 1.1rem;border-radius:6px;cursor:pointer;font-size:0.85rem;font-weight:600">
-    📧 Push all to Zoho ({{ with_email|length }})
+    📧 Push seleccionados (<span id="sel-count">0</span>)
+  </button>
+  <button id="push-eligible-btn" onclick="pushZoho(false)"
+    style="background:var(--surface-hover);color:var(--text);border:1px solid var(--border);padding:0.45rem 1.1rem;border-radius:6px;cursor:pointer;font-size:0.85rem;font-weight:600">
+    Push todos los elegibles ({{ eligible_rows|length }})
   </button>
   <span id="push-all-result" style="font-size:0.82rem;color:var(--muted)"></span>
   {% endif %}
@@ -140,6 +144,7 @@
   <table class="qr-table">
     <thead>
       <tr>
+        {% if zoho_configured %}<th style="text-align:center;width:34px"><input type="checkbox" id="sel-all" onclick="toggleSelectAll(this)" title="Seleccionar/deseleccionar todos los elegibles" checked></th>{% endif %}
         <th>Empresa</th>
         <th>Contacto</th>
         <th>Email</th>
@@ -155,7 +160,17 @@
       {% set first_of_company = (item.company_id != ns.last_co) %}
       {% set ns.last_co = item.company_id %}
       <tr data-has-email="{{ 'yes' if item.email else 'no' }}" data-company-id="{{ item.company_id }}"
-          class="{{ 'company-first' if first_of_company else '' }}">
+          class="{{ 'company-first' if first_of_company else '' }}"
+          style="{% if item.email and not item.eligible %}opacity:0.55{% endif %}">
+        {% if zoho_configured %}
+        <td style="text-align:center;vertical-align:middle">
+          {% if item.eligible %}
+          <input type="checkbox" class="qr-sel" data-contact-id="{{ item.contact_id }}" checked onclick="updateSelCount()">
+          {% elif item.email %}
+          <span title="{{ item.reason }}" style="font-size:0.66rem;color:var(--muted);cursor:help">⊘</span>
+          {% endif %}
+        </td>
+        {% endif %}
         <td>
           {% if first_of_company %}
           <div style="font-weight:600;font-size:0.9rem">{{ item.company_name }}</div>
@@ -206,7 +221,7 @@
         </td>
         {% if zoho_configured %}
         <td style="text-align:center">
-          {% if item.email and item.body %}
+          {% if item.eligible %}
           <button onclick="pushOneZoho(this)"
             data-email="{{ item.email|e }}"
             data-company-id="{{ item.company_id }}"
@@ -215,6 +230,7 @@
             style="font-size:0.78rem;padding:0.2rem 0.6rem;background:var(--surface-hover);border:1px solid var(--border);border-radius:4px;color:var(--accent);cursor:pointer">
             📧
           </button>
+          {% elif item.email %}<span title="{{ item.reason }}" style="color:var(--muted);font-size:0.72rem;cursor:help">{{ item.reason }}</span>
           {% else %}<span style="color:var(--muted)">—</span>{% endif %}
         </td>
         {% endif %}
@@ -305,25 +321,48 @@ function showDraft(btn) {
   m.onclick = e => { if (e.target === m) m.style.display = 'none'; };
 }
 
-function pushAllZoho() {
-  const btn = document.getElementById('push-all-btn');
+function selectedIds() {
+  return Array.from(document.querySelectorAll('.qr-sel:checked')).map(c => parseInt(c.dataset.contactId));
+}
+function updateSelCount() {
+  const el = document.getElementById('sel-count');
+  if (el) el.textContent = selectedIds().length;
+}
+function toggleSelectAll(box) {
+  document.querySelectorAll('.qr-sel').forEach(c => { c.checked = box.checked; });
+  updateSelCount();
+}
+function _reasonSummary(reasons) {
+  if (!reasons) return '';
+  const parts = Object.entries(reasons).map(([k, v]) => v + ' ' + k);
+  return parts.length ? ' · omitidos: ' + parts.join(', ') : '';
+}
+function pushZoho(selectedOnly) {
   const res = document.getElementById('push-all-result');
-  btn.disabled = true;
-  btn.textContent = '⟳ Enviando…';
-  fetch('/quick-run/' + QR_RUN_ID + '/push-all-zoho', { method: 'POST' })
+  const btnSel = document.getElementById('push-selected-btn');
+  const btnAll = document.getElementById('push-eligible-btn');
+  let url, body = null;
+  if (selectedOnly) {
+    const ids = selectedIds();
+    if (!ids.length) { res.textContent = '⚠ No hay nada seleccionado'; return; }
+    url = '/quick-run/' + QR_RUN_ID + '/push-selected-zoho';
+    body = JSON.stringify({ contact_ids: ids });
+  } else {
+    url = '/quick-run/' + QR_RUN_ID + '/push-all-zoho';
+  }
+  btnSel.disabled = true; btnAll.disabled = true;
+  res.textContent = '⟳ Enviando…';
+  fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body })
     .then(r => r.json())
     .then(d => {
-      if (d.error) {
-        res.textContent = '❌ ' + d.error;
-        btn.disabled = false;
-        btn.textContent = '📧 Push all to Zoho';
-      } else {
-        btn.textContent = '✓ ' + d.created + ' draft' + (d.created !== 1 ? 's' : '') + ' creados';
-        btn.style.background = '#16a34a';
-        res.textContent = d.skipped ? '(' + d.skipped + ' sin draft)' : '';
-      }
+      btnSel.disabled = false; btnAll.disabled = false;
+      if (d.error) { res.textContent = '❌ ' + d.error; return; }
+      res.textContent = '✓ ' + d.created + ' draft' + (d.created !== 1 ? 's' : '') + ' creados'
+        + _reasonSummary(d.skipped_reasons)
+        + ((d.errors && d.errors.length) ? ' · ' + d.errors.length + ' error(es)' : '')
+        + ' — recargá para ver el estado actualizado';
     })
-    .catch(() => { res.textContent = '❌ Error de red'; btn.disabled = false; });
+    .catch(() => { res.textContent = '❌ Error de red'; btnSel.disabled = false; btnAll.disabled = false; });
 }
 
 function pushOneZoho(btn) {
@@ -342,6 +381,8 @@ function pushOneZoho(btn) {
     })
     .catch(() => { btn.textContent = '❌'; btn.disabled = false; });
 }
+
+updateSelCount();  // initialize "Push seleccionados (N)" with all eligible pre-checked
 
 {% if phase not in ("done", "error") %}
 // Poll every 3s until done, then reload to show final results

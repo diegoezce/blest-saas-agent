@@ -1245,10 +1245,31 @@ def create_app() -> Flask:
                     if len(desc) > 90:
                         desc = desc[:90] + "…"
                     cs = contact_statuses.get(co.id)
+                    is_pushed = opp.zoho_pushed_at is not None
                     for ct in ctcs_by_co.get(co.id, []):
                         # Skip contacts from previous runs (only show new ones from this run)
                         if fresh_ids is not None and ct.id not in fresh_ids:
                             continue
+                        # Eligibility for a safe push: real verified/probable email, a draft,
+                        # and the company isn't already contacted or pushed.
+                        has_body = bool(draft.get("body"))
+                        eligible = bool(
+                            ct.email
+                            and ct.email_status in ("verified", "probable")
+                            and has_body and cs is None and not is_pushed
+                        )
+                        if eligible:
+                            reason = ""
+                        elif cs is not None:
+                            reason = "ya contactado"
+                        elif is_pushed:
+                            reason = "ya pusheado"
+                        elif not ct.email:
+                            reason = "sin email"
+                        elif ct.email_status not in ("verified", "probable"):
+                            reason = "email rebotó / sin verificar"
+                        else:
+                            reason = "sin draft"
                         contacts_data.append({
                             "company_name": co.name,
                             "company_id": co.id,
@@ -1265,6 +1286,9 @@ def create_app() -> Flask:
                             "subject": draft.get("subject_line", ""),
                             "body": draft.get("body", ""),
                             "is_contacted": cs is not None,
+                            "is_pushed": is_pushed,
+                            "eligible": eligible,
+                            "reason": reason,
                             "contacted_at": str(cs.contacted_at)[:10] if cs and cs.contacted_at else "",
                         })
 
@@ -1295,26 +1319,32 @@ def create_app() -> Flask:
                     return jsonify({"phase": phase})
         return jsonify(state)
 
-    @app.route("/quick-run/<int:run_id>/push-all-zoho", methods=["POST"])
-    @_require_auth
-    def quick_run_push_all_zoho(run_id):
+    def _quick_push_eligible(run_id, only_contact_ids=None):
+        """Push Zoho drafts for a Quick Run, applying the same safety guards as the worker:
+        only verified/probable emails with a draft, skipping companies already contacted
+        or pushed, and at most one contact per company per batch. If `only_contact_ids` is
+        given, restrict to those contacts (still filtered for eligibility).
+        Returns (created, skipped, skipped_reasons, errors)."""
         from src.database.session import get_session
-        from src.database.models import Company, Contact, Opportunity, DailyReport
-        from src.integrations.zoho_mail import create_draft, is_configured
+        from src.database.models import Company, Contact, Opportunity, DailyReport, ContactStatus
+        from src.integrations.zoho_mail import create_draft
+        from src.tools.db_tools import mark_company_contacted
+        from datetime import datetime, timezone
 
-        if not is_configured():
-            return jsonify({"error": "Zoho no configurado"}), 503
+        only = set(only_contact_ids) if only_contact_ids is not None else None
+        created, skipped, errors = 0, 0, []
+        skipped_reasons: dict[str, int] = {}
 
         with get_session() as db:
-            opp_co_ids = [o.company_id for o in db.query(Opportunity).filter_by(run_id=run_id).all()]
-            if not opp_co_ids:
-                return jsonify({"error": "sin oportunidades"}), 404
-            ctcs_cos = (
-                db.query(Contact, Company)
-                .join(Company, Contact.company_id == Company.id)
-                .filter(Contact.company_id.in_(opp_co_ids), Contact.email.isnot(None))
-                .all()
-            )
+            opps = {o.company_id: o for o in db.query(Opportunity).filter_by(run_id=run_id).all()}
+            if not opps:
+                return 0, 0, {}, ["sin oportunidades"]
+            company_ids = list(opps.keys())
+
+            statuses = {
+                s.company_id for s in
+                db.query(ContactStatus.company_id).filter(ContactStatus.company_id.in_(company_ids)).all()
+            }
             report = db.query(DailyReport).filter_by(run_id=run_id).first()
             drafts_raw = (report.report_json or {}).get("outreach_drafts", []) if report else []
             email_drafts: dict[str, dict] = {}
@@ -1322,37 +1352,79 @@ def create_app() -> Flask:
                 cn = d.get("company_name", "")
                 if cn and d.get("channel") == "email" and cn not in email_drafts:
                     email_drafts[cn] = d
-            to_push = [{
-                "email": ct.email,
-                "company_id": co.id,
-                "company_name": co.name,
-                "subject": email_drafts.get(co.name, {}).get("subject_line") or f"Outreach — {co.name}",
-                "body": email_drafts.get(co.name, {}).get("body", ""),
-            } for ct, co in ctcs_cos]
 
-        created, skipped, errors = 0, 0, []
-        seen: set[str] = set()
-        pushed_company_ids: list[int] = []
-        for item in to_push:
-            if not item["body"] or item["email"] in seen:
-                skipped += 1
-                continue
-            seen.add(item["email"])
-            try:
-                create_draft(to_address=item["email"], subject=item["subject"], content=item["body"])
-                created += 1
-                pushed_company_ids.append(item["company_id"])
-            except Exception as e:
-                errors.append(f"{item['company_name']}: {e}")
+            contacts = (
+                db.query(Contact, Company)
+                .join(Company, Contact.company_id == Company.id)
+                .filter(Contact.company_id.in_(company_ids))
+                .order_by(Contact.confidence_score.desc().nullslast())
+                .all()
+            )
 
-        # Mark pushed companies as contacted → follow-up page
-        if pushed_company_ids:
-            from src.tools.db_tools import mark_company_contacted
-            with get_session() as db:
-                for cid in pushed_company_ids:
-                    mark_company_contacted(db, cid, method="email")
+            def _bump(reason):
+                skipped_reasons[reason] = skipped_reasons.get(reason, 0) + 1
 
-        return jsonify({"created": created, "skipped": skipped, "errors": errors})
+            done_companies: set[int] = set()
+            for ct, co in contacts:
+                if only is not None and ct.id not in only:
+                    continue
+                opp = opps.get(co.id)
+                draft = email_drafts.get(co.name, {})
+                body = draft.get("body", "")
+                # Eligibility (same guards as the worker push)
+                if co.id in statuses:
+                    skipped += 1; _bump("ya contactado"); continue
+                if opp is None or opp.zoho_pushed_at is not None:
+                    skipped += 1; _bump("ya pusheado"); continue
+                if not ct.email or ct.email_status not in ("verified", "probable"):
+                    skipped += 1; _bump("email rebotó / sin verificar"); continue
+                if not body:
+                    skipped += 1; _bump("sin draft"); continue
+                if co.id in done_companies:
+                    skipped += 1; _bump("otro contacto de la empresa ya pusheado"); continue
+
+                subject = draft.get("subject_line") or f"Outreach — {co.name}"
+                try:
+                    create_draft(to_address=ct.email, subject=subject, content=body)
+                    opp.zoho_pushed_at = datetime.now(timezone.utc)
+                    mark_company_contacted(db, co.id, method="email")
+                    db.flush()
+                    created += 1
+                    done_companies.add(co.id)
+                except Exception as e:
+                    errors.append(f"{co.name}: {e}")
+
+        return created, skipped, skipped_reasons, errors
+
+    @app.route("/quick-run/<int:run_id>/push-all-zoho", methods=["POST"])
+    @_require_auth
+    def quick_run_push_all_zoho(run_id):
+        """Push every ELIGIBLE contact (verified/probable, not yet contacted/pushed)."""
+        from src.integrations.zoho_mail import is_configured
+        if not is_configured():
+            return jsonify({"error": "Zoho no configurado"}), 503
+        created, skipped, reasons, errors = _quick_push_eligible(run_id)
+        return jsonify({"created": created, "skipped": skipped,
+                        "skipped_reasons": reasons, "errors": errors})
+
+    @app.route("/quick-run/<int:run_id>/push-selected-zoho", methods=["POST"])
+    @_require_auth
+    def quick_run_push_selected_zoho(run_id):
+        """Push only the selected contacts (still filtered for eligibility)."""
+        from src.integrations.zoho_mail import is_configured
+        if not is_configured():
+            return jsonify({"error": "Zoho no configurado"}), 503
+        data = request.get_json(silent=True) or {}
+        ids = data.get("contact_ids") or []
+        try:
+            ids = [int(i) for i in ids]
+        except (TypeError, ValueError):
+            return jsonify({"error": "contact_ids inválido"}), 400
+        if not ids:
+            return jsonify({"error": "nada seleccionado"}), 400
+        created, skipped, reasons, errors = _quick_push_eligible(run_id, only_contact_ids=ids)
+        return jsonify({"created": created, "skipped": skipped,
+                        "skipped_reasons": reasons, "errors": errors})
 
     @app.route("/quick-run/<int:run_id>/push-one-zoho", methods=["POST"])
     @_require_auth
