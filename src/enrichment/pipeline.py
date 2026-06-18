@@ -20,9 +20,10 @@ logger = logging.getLogger(__name__)
 # found. Ordered by outreach preference (most appropriate first) — a real published
 # address here beats any invented pattern guess and won't bounce.
 GENERIC_PREFIXES: tuple[str, ...] = (
-    "contacto", "contact", "info", "hola", "hello", "consultas",
+    "contacto", "contact", "info", "informes", "hola", "hello", "consultas",
     "ventas", "sales", "recepcion", "secretaria", "ayuda", "soporte",
-    "support", "admin", "administracion",
+    "support", "admin", "administracion", "comercial", "marketing",
+    "capacitacion", "formacion", "rrhh", "recursoshumanos",
 )
 # Never adopt these — non-deliverable / system mailboxes.
 NEVER_EMAIL_PREFIXES: frozenset[str] = frozenset({
