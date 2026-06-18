@@ -327,6 +327,27 @@
 </details>
 {% endfor %}
 
+<!-- ── Bounce Modal ─────────────────────────────────────────────────── -->
+<div id="bounce-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:300;align-items:center;justify-content:center">
+  <div class="card" style="width:100%;max-width:540px;padding:1.75rem;max-height:85vh;display:flex;flex-direction:column;gap:1rem">
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <h2 style="font-size:1.1rem;font-weight:700">📭 Rebotes detectados</h2>
+      <button onclick="closeBounceModal()" style="background:none;border:none;color:var(--muted);font-size:1.3rem;cursor:pointer;padding:0.25rem">&times;</button>
+    </div>
+    <div id="bounce-modal-body" style="font-size:0.88rem;line-height:1.6;overflow-y:auto;flex:1;white-space:pre-wrap;user-select:text;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:0.75rem 1rem"></div>
+    <div id="bounce-modal-actions" style="display:flex;gap:0.75rem;border-top:1px solid var(--border);padding-top:0.75rem">
+      <button id="bounce-confirm-btn" onclick="applyBounces()"
+        style="flex:1;background:#ef4444;color:#fff;font-weight:700;border:none;padding:0.6rem;border-radius:6px;cursor:pointer;font-size:0.9rem">
+        Marcar como rebotados
+      </button>
+      <button onclick="closeBounceModal()"
+        style="flex:1;background:var(--surface);color:var(--text);border:1px solid var(--border);padding:0.6rem;border-radius:6px;cursor:pointer;font-size:0.9rem">
+        Cancelar
+      </button>
+    </div>
+  </div>
+</div>
+
 <!-- ── Feedback Modal ───────────────────────────────────────────────── -->
 <div id="feedback-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:300;align-items:center;justify-content:center">
   <div id="feedback-modal-inner" class="card" style="width:100%;max-width:520px;padding:1.75rem;max-height:90vh;overflow-y:auto">
@@ -472,36 +493,68 @@ function applyFilter(filter, btn) {
   });
 }
 
+let _bounceScanData = null;
+let _bounceCheckBtn = null;
+
+function closeBounceModal() {
+  document.getElementById('bounce-modal').style.display = 'none';
+  if (_bounceCheckBtn) {
+    _bounceCheckBtn.disabled = false;
+    _bounceCheckBtn.textContent = '📭 Chequear rebotes';
+    _bounceCheckBtn = null;
+  }
+}
+
 async function checkBounces(btn) {
+  _bounceCheckBtn = btn;
   btn.disabled = true;
   btn.textContent = '📭 Revisando Zoho…';
   try {
     const r = await fetch('/bounces/scan');
     const d = await r.json();
-    if (d.error) { alert('Error: ' + d.error); return; }
-    let msg = `Revisé ${d.checked} mensajes del inbox.\n`
-            + `Rebotes detectados: ${d.bounce_messages}\n`
-            + `Coinciden con contactos: ${d.matched_count} (${d.new_count} nuevos, ${d.already_count} ya marcados)`;
+    if (d.error) { alert('Error: ' + d.error); btn.disabled = false; btn.textContent = '📭 Chequear rebotes'; return; }
+    _bounceScanData = d;
+
+    let msg = `Mensajes revisados: ${d.checked}\n`
+            + `Rebotes en inbox: ${d.bounce_messages}\n`
+            + `Coinciden con contactos: ${d.matched_count}  (${d.new_count} nuevos, ${d.already_count} ya marcados)`;
     if (d.matched.length) {
-      msg += '\n\n' + d.matched.slice(0, 40).map(m => '• ' + m.email + (m.already ? ' (ya)' : '')).join('\n');
-      if (d.matched.length > 40) msg += '\n…y ' + (d.matched.length - 40) + ' más';
+      msg += '\n\n' + d.matched.slice(0, 60).map(m => (m.already ? '✓ ' : '● ') + m.email).join('\n');
+      if (d.matched.length > 60) msg += '\n…y ' + (d.matched.length - 60) + ' más';
     }
-    if (d.new_count === 0) { alert(msg + '\n\nNo hay nuevos para marcar.'); return; }
-    if (!confirm(msg + '\n\n¿Marcar ' + d.new_count + ' contacto(s) como rebotados?')) return;
-    btn.textContent = '📭 Marcando…';
-    const r2 = await fetch('/bounces/apply', { method: 'POST' });
-    const d2 = await r2.json();
-    if (d2.error) { alert('Error: ' + d2.error); return; }
-    const compTxt = d2.companies !== undefined
-      ? ' (' + d2.companies + ' empresa' + (d2.companies !== 1 ? 's' : '') + ')'
-      : '';
-    alert('Listo: ' + d2.marked + ' contacto(s) marcados como rebotados' + compTxt + '.\n\nEl contador "Rebotaron" muestra empresas, por eso puede diferir del número de contactos.');
-    location.reload();
+    if (d.new_count === 0) msg += '\n\nNo hay nuevos para marcar.';
+
+    document.getElementById('bounce-modal-body').textContent = msg;
+    const confirmBtn = document.getElementById('bounce-confirm-btn');
+    confirmBtn.style.display = d.new_count > 0 ? '' : 'none';
+    confirmBtn.textContent = 'Marcar ' + d.new_count + ' como rebotado' + (d.new_count !== 1 ? 's' : '');
+    document.getElementById('bounce-modal').style.display = 'flex';
   } catch (e) {
     alert('Error: ' + e);
-  } finally {
     btn.disabled = false;
     btn.textContent = '📭 Chequear rebotes';
+  }
+}
+
+async function applyBounces() {
+  const confirmBtn = document.getElementById('bounce-confirm-btn');
+  confirmBtn.disabled = true;
+  confirmBtn.textContent = 'Marcando…';
+  try {
+    const r = await fetch('/bounces/apply', { method: 'POST' });
+    const d = await r.json();
+    if (d.error) { alert('Error: ' + d.error); confirmBtn.disabled = false; return; }
+    const compTxt = d.companies !== undefined
+      ? ' (' + d.companies + ' empresa' + (d.companies !== 1 ? 's' : '') + ')'
+      : '';
+    document.getElementById('bounce-modal-body').textContent =
+      '✅ Listo: ' + d.marked + ' contacto(s) marcados como rebotados' + compTxt + '.\n\n'
+      + 'El contador "Rebotaron" muestra empresas, por eso puede diferir del número de contactos.';
+    document.getElementById('bounce-modal-actions').innerHTML =
+      '<button onclick="location.reload()" style="flex:1;background:var(--accent);color:#0f172a;font-weight:700;border:none;padding:0.6rem;border-radius:6px;cursor:pointer;font-size:0.9rem">Actualizar página</button>';
+  } catch (e) {
+    alert('Error: ' + e);
+    confirmBtn.disabled = false;
   }
 }
 
