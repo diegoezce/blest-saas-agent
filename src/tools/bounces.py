@@ -47,15 +47,16 @@ def scan_and_match(max_messages: int = 200) -> dict:
     }
 
 
-def mark_bounced(addresses: list[str]) -> int:
+def mark_bounced(addresses: list[str]) -> dict:
     """Set Contact.email_status='bounced' for contacts whose email is in `addresses`
-    (skips ones already marked). Returns how many were newly marked."""
+    (skips ones already marked). Returns {marked, companies}."""
     if not addresses:
-        return 0
+        return {"marked": 0, "companies": 0}
     from src.tools.db_tools import mark_company_contacted
 
     addrs = [a.lower() for a in addresses]
     marked = 0
+    company_ids: set[int] = set()
     with get_session() as session:
         contacts = session.query(Contact).filter(func.lower(Contact.email).in_(addrs)).all()
         for c in contacts:
@@ -66,15 +67,17 @@ def mark_bounced(addresses: list[str]) -> int:
             # recorded as contacted so it shows on /contacts-report (idempotent).
             if c.company_id:
                 mark_company_contacted(session, c.company_id, method="email")
-    return marked
+                company_ids.add(c.company_id)
+    return {"marked": marked, "companies": len(company_ids)}
 
 
 def apply_bounces(max_messages: int = 200) -> dict:
-    """One-shot: scan + mark. Returns {marked, matched, bounce_messages}."""
+    """One-shot: scan + mark. Returns {marked, companies, matched, bounce_messages}."""
     summary = scan_and_match(max_messages=max_messages)
-    marked = mark_bounced(summary["addresses"])
+    res = mark_bounced(summary["addresses"])
     return {
-        "marked": marked,
+        "marked": res["marked"],
+        "companies": res["companies"],
         "matched": summary["addresses_found"],
         "bounce_messages": summary["bounce_messages"],
     }

@@ -472,7 +472,10 @@ async function checkBounces(btn) {
     const r2 = await fetch('/bounces/apply', { method: 'POST' });
     const d2 = await r2.json();
     if (d2.error) { alert('Error: ' + d2.error); return; }
-    alert('Listo: ' + d2.marked + ' contacto(s) marcados como rebotados.');
+    const compTxt = d2.companies !== undefined
+      ? ' (' + d2.companies + ' empresa' + (d2.companies !== 1 ? 's' : '') + ')'
+      : '';
+    alert('Listo: ' + d2.marked + ' contacto(s) marcados como rebotados' + compTxt + '.\n\nEl contador "Rebotaron" muestra empresas, por eso puede diferir del número de contactos.');
     location.reload();
   } catch (e) {
     alert('Error: ' + e);
