@@ -1044,6 +1044,25 @@ def create_app() -> Flask:
             "enrichment_log": result.log,
         })
 
+    @app.route("/contact/<int:contact_id>/set-email", methods=["POST"])
+    @_require_auth
+    def set_contact_email(contact_id):
+        """Manually assign a verified email to a contact."""
+        from src.database.session import get_session
+        from src.database.models import Contact
+        data = request.get_json(silent=True) or {}
+        email = (data.get("email") or "").strip().lower()
+        if not email or "@" not in email or "." not in email.split("@")[-1]:
+            return jsonify({"error": "email inválido"}), 400
+        with get_session() as db:
+            c = db.get(Contact, contact_id)
+            if not c:
+                return jsonify({"error": "contacto no encontrado"}), 404
+            c.email = email
+            c.email_status = "verified"
+            c.email_source = "manual"
+        return jsonify({"ok": True, "email": email})
+
     @app.route("/run/<int:run_id>/enrich-all", methods=["POST"])
     @_require_auth
     def enrich_run_all(run_id):
@@ -1490,6 +1509,7 @@ def create_app() -> Flask:
             contacts_by_company: dict = {}
             for c in contacts_rows:
                 contacts_by_company.setdefault(c.company_id, []).append({
+                    "id": c.id,
                     "name": c.name or "",
                     "role": c.role or "",
                     "email": c.email or "",
