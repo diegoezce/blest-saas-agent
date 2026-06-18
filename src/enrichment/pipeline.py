@@ -16,13 +16,26 @@ from src.enrichment.providers.hunter import HunterProvider
 
 logger = logging.getLogger(__name__)
 
+# Generic/shared inboxes worth using as an outreach fallback when no named email is
+# found. Ordered by outreach preference (most appropriate first) — a real published
+# address here beats any invented pattern guess and won't bounce.
+GENERIC_PREFIXES: tuple[str, ...] = (
+    "contacto", "contact", "info", "hola", "hello", "consultas",
+    "ventas", "sales", "recepcion", "secretaria", "ayuda", "soporte",
+    "support", "admin", "administracion",
+)
+# Never adopt these — non-deliverable / system mailboxes.
+NEVER_EMAIL_PREFIXES: frozenset[str] = frozenset({
+    "noreply", "no-reply", "postmaster", "webmaster", "mailer-daemon",
+})
+
 
 @dataclass
 class EnrichmentResult:
     contact_id: int
     email: str | None = None
     email_status: str | None = None   # verified | probable | catch_all | not_found
-    email_source: str | None = None   # site_scrape | pattern_verified | hunter
+    email_source: str | None = None   # site_scrape | site_scrape_generic | pattern_verified | hunter
     phone_whatsapp: str | None = None
     log: dict = field(default_factory=dict)
 
@@ -96,6 +109,7 @@ def enrich_contact(contact_id: int) -> EnrichmentResult:
 
         # ── Layer 1: site scrape ───────────────────────────────────────────
         layer1: dict = {}
+        generic_emails: list[str] = []  # real published inboxes; fallback at end
         logger.info(f"{label} — Layer 1: scraping site")
         try:
             scrape = scrape_domain(domain)
@@ -120,12 +134,23 @@ def enrich_contact(contact_id: int) -> EnrichmentResult:
             # If a person's email at this domain is found (not generic),
             # record as site_scrape hit
             domain_emails = [e for e in scrape.emails if e.endswith(f"@{domain}")]
-            generic_prefixes = {"info", "hola", "hello", "contact", "contacto",
-                                 "ventas", "sales", "admin", "support", "ayuda"}
+            generic_prefixes = set(GENERIC_PREFIXES) | NEVER_EMAIL_PREFIXES
             person_emails = [
                 e for e in domain_emails
-                if e.split("@")[0] not in generic_prefixes
+                if e.split("@")[0].lower() not in generic_prefixes
             ]
+            # Real published generic inboxes (info@, contacto@, …), deduped + ordered by
+            # outreach preference, minus anything already known-bad. Used as a fallback
+            # later only if no verified *named* email is found.
+            generic_seen: set[str] = set()
+            for pref in GENERIC_PREFIXES:
+                for e in domain_emails:
+                    el = e.lower()
+                    if (el.split("@")[0] == pref and el not in bad_emails
+                            and el not in generic_seen):
+                        generic_seen.add(el)
+                        generic_emails.append(e)
+            layer1["generic_emails"] = generic_emails
             if person_emails and first:
                 # Check if any matches the contact's name (first or last)
                 f_slug = first.lower()
@@ -254,6 +279,18 @@ def enrich_contact(contact_id: int) -> EnrichmentResult:
             logger.info(f"{label} — Layer 3 skipped (no first name)")
 
         result.log["layer3"] = layer3
+
+        # ── Fallback: real published generic inbox ─────────────────────────
+        # A generic address scraped off the site (info@, contacto@, …) is real and
+        # deliverable, so it beats any invented/unverified pattern guess. Only a
+        # SMTP-verified *named* email (set above) outranks it.
+        if result.email_status != "verified" and generic_emails:
+            chosen = generic_emails[0]
+            result.email = chosen
+            result.email_status = "verified"   # published site address = deliverable
+            result.email_source = "site_scrape_generic"
+            result.log["generic_fallback"] = chosen
+            logger.info(f"{label} — ✅ using published generic inbox: {chosen}")
 
         # If nothing found at all
         if not result.email_status:

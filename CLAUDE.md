@@ -183,6 +183,12 @@ or looked up), so they no longer dilute the email ratio.
 - http fallback only attempted on the root path `/`
 - Extracts emails (regex) and Argentine phone/WhatsApp numbers
 - All found emails are used to infer the corporate pattern for Layer 2
+- A **named-person** email matching the contact (first/last in the local part) is taken
+  immediately as `verified` / `site_scrape`.
+- **Generic/shared inboxes** on the domain (`info@`, `contacto@`, `ventas@`, …) are captured
+  and held as a fallback (`GENERIC_PREFIXES` in `pipeline.py`; system boxes like `noreply@`
+  excluded). They are a real, published, deliverable address, so they're used **only if no
+  verified named email is found** — see the precedence note below.
 
 ### Layer 2 — Pattern generation + SMTP verification (`src/enrichment/patterns.py` + `providers/`)
 - Generates 6 email permutations: `first.last@`, `flast@`, `first@`, `firstlast@`, `f.last@`, `last@`
@@ -208,11 +214,23 @@ or looked up), so they no longer dilute the email ratio.
 - Calls Hunter.io email finder API (`HUNTER_API_KEY`)
 - score ≥ 90 → `verified`; score ≥ 50 → `probable`
 
+### Email precedence (which address wins)
+After all layers run, the contact's email is chosen in this order:
+1. **Verified named email** — Layer 1 name-match scrape, Layer 2 SMTP `valid`, or Hunter ≥90.
+2. **Real published generic inbox** — a `info@`/`contacto@` scraped off the site
+   (`site_scrape_generic`, stored as `verified`). It's real and won't bounce, so it beats
+   any invented guess. Picked just before the `not_found` fallback in `enrich_contact()`.
+3. **Unverified/uncertain pattern guess** — `pattern_unverified` or `catch_all` (`probable`),
+   or Hunter ≥50. Only used when **no** generic inbox exists (these are the bounce-prone path).
+
+This stops the agent from pushing an invented `first.last@` guess (which bounces) when a
+real `info@` is sitting on the company's contact page.
+
 ### Enrichment result fields on `Contact` model
 | Field | Values |
 |---|---|
 | `email_status` | `verified`, `probable`, `not_found` (final values); `bounced` = set by the Zoho bounce check (`/bounces/apply`). `catch_all` is an intermediate verifier result, stored as `probable` |
-| `email_source` | `site_scrape`, `pattern_verified`, `pattern_unverified`, `hunter` |
+| `email_source` | `site_scrape`, `site_scrape_generic` (published role inbox used when no verified named email exists; stored as `verified`), `pattern_verified`, `pattern_unverified`, `hunter` |
 | `phone_whatsapp` | nullable text |
 | `enriched_at` | datetime |
 | `enrichment_log` | JSONB — full per-layer attempt log; also holds `attempts` (retry counter) and `bad_emails` (addresses that bounced / are known-bad — never re-proposed) |
