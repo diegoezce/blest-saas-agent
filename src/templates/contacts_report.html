@@ -174,7 +174,7 @@
       {% elif ct.linkedin_url %}
       <a href="{{ ct.linkedin_url }}" target="_blank" rel="noopener" style="color:var(--accent);font-size:0.77rem">🔵 LinkedIn</a>
       {% else %}<span style="color:var(--muted);font-size:0.74rem">sin email</span>{% endif %}
-      {% if ct.id and (not ct.email or ct.email_status == 'bounced') %}
+      {% if ct.id %}
       <span class="set-email-wrap" id="se-wrap-{{ ct.id }}">
         <button class="set-email-btn" onclick="toggleSetEmail({{ ct.id }})" title="Ingresar email manualmente">✏️</button>
         <span class="set-email-form" id="se-form-{{ ct.id }}" style="display:none">
