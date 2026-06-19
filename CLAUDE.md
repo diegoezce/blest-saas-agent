@@ -349,6 +349,10 @@ and the worker's draft generator (Haiku + instructor). Reuses Zoho read scopes.
   but not yet due, within `?within=N` days — default 7, clamp 1–30), drafted this week, and who
   replied; plus a stats bar. Pending cards and the Próximos table each have a **"⏩ Hacer hoy"**
   button (→ `/follow-ups/push-now`) to draft a follow-up early. Template `src/templates/follow_ups.html`.
+- **"↩ Reactivar" button** in the "Respondieron" section — clears `Contact.replied_at` and, if
+  `ContactStatus.response_received` was auto-set to `"replied"`, clears that too. Lets you override
+  a false-positive reply detection (e.g. an OOO that slipped through) and re-enter the company into
+  the follow-up cadence. Route: `POST /contact/<id>/clear-replied`.
 
 ## Web UI Routes
 
@@ -367,6 +371,8 @@ and the worker's draft generator (Haiku + instructor). Reuses Zoho read scopes.
 | `/run/<id>/enrich-status` | GET | Enrichment progress `{done, total, failed, running, current_name}` |
 | `/contact/<id>/enrich` | POST | Enrich a single contact |
 | `/contact/<id>/zoho-draft` | POST | Push a single contact's draft to Zoho Mail |
+| `/contact/<id>/set-email` | POST | Manually set a contact's email (sets status=verified, source=manual) |
+| `/contact/<id>/clear-replied` | POST | Clear replied_at + auto-set response_received, re-entering the company into follow-up cadence |
 | `/contacts-report` | GET | Contacted companies grouped by profile (dedup, follow-up tracking) |
 | `/follow-ups` | GET | Follow-up dashboard — pending/overdue (cadence due), upcoming (`?within=N` days), drafted this week, replied (weekly summary) |
 | `/follow-ups/push-now` | POST | Bring-forward: draft + push a follow-up for one company now, bypassing cadence (`company_id`) |
@@ -455,6 +461,9 @@ Cross-run view of every company with a `ContactStatus` record, for follow-up tra
 - Follow-up highlighting: ⚠ overdue (red border), 📅 Hoy (amber), upcoming (accent).
 - Card actions: **💬 Feedback** (opens the feedback modal) and **✕ Desmarcar** (removes
   the `ContactStatus`) — both target the canonical (richest-feedback) record.
+- **✏️ manual email button** — appears on every contact row (regardless of current email status),
+  letting you type and save an email manually. Sets `email_status = "verified"` / `email_source = "manual"`,
+  making the contact immediately eligible for Zoho push. Route: `POST /contact/<id>/set-email`.
 - Stats bar: total contacted, respondieron, rebotaron, follow-ups scheduled, overdue.
 - **Filter bar** (client-side pills): Todas / 📭 Rebotadas / ⏰ Seguimiento / ✅ Exitosas.
   Pills only appear when their count > 0. Selecting a filter hides non-matching cards,
