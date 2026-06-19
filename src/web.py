@@ -1046,33 +1046,36 @@ def create_app() -> Flask:
             if not company:
                 return jsonify({"error": "Empresa no encontrada"}), 404
 
+            company_name = company.name
+            company_id = company.id
+
             report = session.query(DailyReport).filter_by(run_id=run_id).first()
             if not report or not report.report_json:
                 return jsonify({"error": "Sin datos de reporte para este run"}), 404
 
             report_data = _enrich_drafts_from_db(session, dict(report.report_json))
 
-        # Find the email-channel draft for this company
-        all_drafts = report_data.get("outreach_drafts", [])
-        company_drafts = [d for d in all_drafts if d.get("company_name") == company.name]
-        draft = next((d for d in company_drafts if d.get("channel") == "email"), None)
-        if not draft and company_drafts:
-            draft = company_drafts[0]
-        if not draft:
-            return jsonify({"error": f"Sin draft para {company.name}"}), 404
+            # Find the email-channel draft for this company
+            all_drafts = report_data.get("outreach_drafts", [])
+            company_drafts = [d for d in all_drafts if d.get("company_name") == company_name]
+            draft = next((d for d in company_drafts if d.get("channel") == "email"), None)
+            if not draft and company_drafts:
+                draft = company_drafts[0]
+            if not draft:
+                return jsonify({"error": f"Sin draft para {company_name}"}), 404
 
-        subject = draft.get("subject_line") or f"Outreach — {company.name}"
-        body = draft.get("body", "")
-        company_id = company.id
-        try:
-            create_draft(to_address=contact.email, subject=subject, content=body)
-            with get_session() as session:
+            subject = draft.get("subject_line") or f"Outreach — {company_name}"
+            body = draft.get("body", "")
+            contact_email = contact.email
+
+            try:
+                create_draft(to_address=contact_email, subject=subject, content=body)
                 from src.tools.db_tools import mark_company_contacted
                 mark_company_contacted(session, company_id, method="email")
-            return jsonify({"ok": True})
-        except Exception as e:
-            logger.warning(f"Zoho single draft failed for contact {contact_id}: {e}")
-            return jsonify({"error": str(e)}), 500
+                return jsonify({"ok": True})
+            except Exception as e:
+                logger.warning(f"Zoho single draft failed for contact {contact_id}: {e}")
+                return jsonify({"error": str(e)}), 500
 
     # ── Contact Enrichment ───────────────────────────────────────────────────
 
