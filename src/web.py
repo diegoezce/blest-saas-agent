@@ -1777,6 +1777,7 @@ def create_app() -> Flask:
                 .all()
             )
             replied = [{
+                "contact_id": contact.id,
                 "company": company.name or "",
                 "contact_name": contact.name or "",
                 "contact_email": contact.email or "",
@@ -1826,6 +1827,26 @@ def create_app() -> Flask:
         with get_session() as db:
             res = push_followup_now(db, company_id)
         flash(res["message"], "success" if res["ok"] else "error")
+        return redirect(url_for("follow_ups"))
+
+    @app.route("/contact/<int:contact_id>/clear-replied", methods=["POST"])
+    @_require_auth
+    def contact_clear_replied(contact_id: int):
+        from src.database.session import get_session
+        from src.database.models import Contact, ContactStatus
+        with get_session() as db:
+            c = db.query(Contact).filter_by(id=contact_id).first()
+            if not c:
+                flash("Contacto no encontrado.", "error")
+                return redirect(url_for("follow_ups"))
+            c.replied_at = None
+            # Clear auto-set response_received only if it was set to "replied"
+            # (leave manually-set values like "interested" or "meeting_scheduled" untouched)
+            cs = db.query(ContactStatus).filter_by(company_id=c.company_id).first()
+            if cs and cs.response_received == "replied":
+                cs.response_received = None
+            db.commit()
+        flash("Respuesta borrada — la empresa vuelve al circuito de follow-ups.", "success")
         return redirect(url_for("follow_ups"))
 
     @app.route("/search")

@@ -183,7 +183,7 @@
   </summary>
   {% if replied %}
   <table class="fu-table">
-    <thead><tr><th>Empresa</th><th>Contacto</th><th>Email</th><th>Respondió</th></tr></thead>
+    <thead><tr><th>Empresa</th><th>Contacto</th><th>Email</th><th>Respondió</th><th></th></tr></thead>
     <tbody>
       {% for r in replied %}
       <tr>
@@ -191,6 +191,13 @@
         <td data-label="Contacto">{{ r.contact_name }}</td>
         <td data-label="Email"><a href="mailto:{{ r.contact_email }}" style="color:var(--accent)">{{ r.contact_email }}</a></td>
         <td data-label="Respondió">{{ r.when }}</td>
+        <td>
+          <form method="POST" action="/contact/{{ r.contact_id }}/clear-replied" style="display:inline">
+            <button type="submit" title="Borrar respuesta y reactivar follow-ups"
+              style="font-size:0.72rem;padding:0.15rem 0.45rem;border:1px solid var(--border);border-radius:4px;background:transparent;color:var(--muted);cursor:pointer"
+              onclick="return confirm('¿Borrar la respuesta de {{ r.contact_name }} y reactivar follow-ups?')">↩ Reactivar</button>
+          </form>
+        </td>
       </tr>
       {% endfor %}
     </tbody>
