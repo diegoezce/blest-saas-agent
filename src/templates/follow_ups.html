@@ -41,7 +41,11 @@
 
   table.fu-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
   table.fu-table th { text-align: left; color: var(--muted); font-weight: 600; font-size: 0.74rem;
-    padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--border); }
+    padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--border); cursor: pointer; user-select: none; }
+  table.fu-table th:hover { color: var(--accent); }
+  table.fu-table th.sortable::after { content: ' ⇅'; font-size: 0.65rem; opacity: 0.5; }
+  table.fu-table th.sorted-asc::after { content: ' ↑'; opacity: 1; }
+  table.fu-table th.sorted-desc::after { content: ' ↓'; opacity: 1; }
   table.fu-table td { padding: 0.45rem 0.6rem; border-bottom: 1px solid var(--border); vertical-align: top; }
 
   .fu-now-btn {
@@ -133,11 +137,18 @@
     <span class="badge badge-muted">{{ upcoming | length }}</span>
   </summary>
   {% if upcoming %}
-  <table class="fu-table">
-    <thead><tr><th>Empresa</th><th>Perfil</th><th>Contacto</th><th>Toque</th><th>Vence</th><th></th></tr></thead>
+  <table class="fu-table" id="upcomingTable">
+    <thead><tr>
+      <th class="sortable" data-sort="company">Empresa</th>
+      <th>Perfil</th>
+      <th>Contacto</th>
+      <th>Toque</th>
+      <th class="sortable" data-sort="due">Vence</th>
+      <th></th>
+    </tr></thead>
     <tbody>
       {% for u in upcoming %}
-      <tr>
+      <tr data-company="{{ u.company }}" data-due="{{ u.due_display }}" data-days-until="{{ u.days_until }}">
         <td data-label="Empresa"><strong><span class="company-name-link" onclick="openCompanyModal({{ u.company_id }})">{{ u.company }}</span></strong></td>
         <td data-label="Perfil"><span class="badge badge-muted">{{ u.profile_name }}</span></td>
         <td data-label="Contacto">
@@ -145,7 +156,7 @@
           {% if u.email_status == 'verified' %} ✅{% elif u.email_status == 'probable' %} 🟡{% endif %}
         </td>
         <td data-label="Toque">#{{ u.stage }}</td>
-        <td data-label="Vence">{{ u.due_display }} <span style="color:var(--muted)">(en {{ u.days_until }}d)</span></td>
+        <td data-label="Vence" data-due-value="{{ u.days_until }}">{{ u.due_display }} <span style="color:var(--muted)">(en {{ u.days_until }}d)</span></td>
         <td data-label="">
           <form method="post" action="{{ url_for('follow_ups_push_now') }}" class="fu-push-form">
             <input type="hidden" name="company_id" value="{{ u.company_id }}">
@@ -231,6 +242,61 @@ document.querySelectorAll('.fu-push-form').forEach(form => {
     button.insertBefore(spinner, button.firstChild);
   });
 });
+
+// Table sorting functionality
+const upcomingTable = document.getElementById('upcomingTable');
+if (upcomingTable) {
+  let currentSort = { column: 'company', direction: 'asc' };
+
+  upcomingTable.querySelectorAll('th.sortable').forEach(th => {
+    th.addEventListener('click', function() {
+      const column = this.dataset.sort;
+
+      if (currentSort.column === column) {
+        currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+      } else {
+        currentSort.column = column;
+        currentSort.direction = 'asc';
+      }
+
+      // Update header visual state
+      upcomingTable.querySelectorAll('th.sortable').forEach(h => {
+        h.classList.remove('sorted-asc', 'sorted-desc');
+      });
+      this.classList.add(currentSort.direction === 'asc' ? 'sorted-asc' : 'sorted-desc');
+
+      // Sort rows
+      const tbody = upcomingTable.querySelector('tbody');
+      const rows = Array.from(tbody.querySelectorAll('tr'));
+
+      rows.sort((a, b) => {
+        let aVal, bVal;
+
+        if (column === 'company') {
+          aVal = a.dataset.company.toLowerCase();
+          bVal = b.dataset.company.toLowerCase();
+        } else if (column === 'due') {
+          aVal = parseInt(a.dataset.daysUntil) || 999;
+          bVal = parseInt(b.dataset.daysUntil) || 999;
+        }
+
+        if (currentSort.direction === 'asc') {
+          return aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+        } else {
+          return aVal > bVal ? -1 : aVal < bVal ? 1 : 0;
+        }
+      });
+
+      rows.forEach(row => tbody.appendChild(row));
+    });
+  });
+
+  // Set initial sort indicator
+  const companyHeader = upcomingTable.querySelector('th[data-sort="company"]');
+  if (companyHeader) {
+    companyHeader.classList.add('sorted-asc');
+  }
+}
 </script>
 
 {% endblock %}
