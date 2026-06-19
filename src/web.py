@@ -1553,7 +1553,7 @@ def create_app() -> Flask:
             pairs = (
                 db.query(Company, ContactStatus)
                 .join(ContactStatus, Company.id == ContactStatus.company_id)
-                .order_by(ContactStatus.contacted_at.desc())
+                .order_by(Company.name.asc())
                 .all()
             )
 
@@ -1722,6 +1722,9 @@ def create_app() -> Flask:
                     by_profile[pname] = []
                     profiles_order.append(pname)
                 by_profile[pname].append(d)
+
+            for companies in by_profile.values():
+                companies.sort(key=lambda x: x["name"].lower())
 
             total = len(companies_data)
             needs_follow_up = sum(1 for d in companies_data if d["needs_followup"])
