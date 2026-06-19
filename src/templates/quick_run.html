@@ -173,7 +173,7 @@
         {% endif %}
         <td>
           {% if first_of_company %}
-          <div style="font-weight:600;font-size:0.9rem">{{ item.company_name }}</div>
+          <div style="font-weight:600;font-size:0.9rem"><span class="company-name-link" onclick="openCompanyModal({{ item.company_id }})">{{ item.company_name }}</span></div>
           {% if item.location %}<div style="font-size:0.75rem;color:var(--muted)">📍 {{ item.location }}</div>{% endif %}
           {% if item.score %}
             {% if item.score >= 70 %}<span class="score score-high" style="font-size:0.7rem;padding:0.1rem 0.35rem">{{ item.score }}</span>

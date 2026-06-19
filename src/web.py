@@ -749,6 +749,56 @@ def create_app() -> Flask:
                 "icp_feedback": status.icp_feedback or {},
             })
 
+    @app.route("/company/<int:company_id>/details", methods=["GET"])
+    @_require_auth
+    def get_company_details(company_id):
+        from src.database.session import get_session
+        from src.database.models import Company
+
+        with get_session() as session:
+            company = session.get(Company, company_id)
+            if not company:
+                return jsonify({"error": "Not found"}), 404
+
+            return jsonify({
+                "id": company.id,
+                "name": company.name,
+                "domain": company.domain,
+                "industry": company.industry,
+                "size_estimate": company.size_estimate,
+                "location": company.location,
+                "description": company.description,
+                "website_url": company.website_url,
+                "linkedin_url": company.linkedin_url,
+                "source": company.source,
+                "source_url": company.source_url,
+                "first_seen_at": str(company.first_seen_at)[:10] if company.first_seen_at else None,
+                "last_updated_at": str(company.last_updated_at)[:10] if company.last_updated_at else None,
+            })
+
+    @app.route("/company/<int:company_id>/update", methods=["POST"])
+    @_require_auth
+    def update_company(company_id):
+        from src.database.session import get_session
+        from src.database.models import Company
+
+        with get_session() as session:
+            company = session.get(Company, company_id)
+            if not company:
+                return jsonify({"error": "Not found"}), 404
+
+            data = request.get_json()
+            if not data:
+                return jsonify({"error": "No data provided"}), 400
+
+            editable_fields = ['industry', 'size_estimate', 'location', 'description', 'website_url', 'linkedin_url']
+            for field in editable_fields:
+                if field in data:
+                    setattr(company, field, data[field] or None)
+
+            session.commit()
+            return jsonify({"success": True, "message": "Company updated"})
+
     # ── Profile Management ───────────────────────────────────────────────────
 
     @app.route("/profiles")

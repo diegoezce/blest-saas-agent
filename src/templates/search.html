@@ -245,10 +245,9 @@
     {% for c in companies %}
     <div class="result-card">
       <div class="rc-name">
+        <span class="company-name-link" onclick="openCompanyModal({{ c.id }})">{{ c.name }}</span>
         {% if c.run_id %}
-          <a href="/run/{{ c.run_id }}">{{ c.name }}</a>
-        {% else %}
-          {{ c.name }}
+          <a href="/run/{{ c.run_id }}" style="font-size:0.78rem;color:var(--muted);margin-left:0.5rem">run ↗</a>
         {% endif %}
       </div>
       <div class="rc-meta">

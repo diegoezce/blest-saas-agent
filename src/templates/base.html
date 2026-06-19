@@ -198,6 +198,97 @@
     /* push page content above panel */
     body { padding-bottom: 36px; }
     body.logs-open { padding-bottom: 256px; }
+
+    /* Company Details Modal */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+      overflow-y: auto;
+      padding: 1rem;
+      animation: fadeIn 0.15s ease-out;
+    }
+    .modal-overlay.open { display: flex; }
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    .modal-content {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.5rem;
+      max-width: 500px;
+      width: 100%;
+      max-height: 75vh;
+      overflow-y: auto;
+      animation: slideUp 0.2s ease-out;
+      margin: auto;
+    }
+    @keyframes slideUp {
+      from { transform: translateY(20px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 1rem;
+      gap: 0.75rem;
+    }
+    .modal-title { font-size: 1.2rem; font-weight: 800; line-height: 1.2; }
+    .modal-close {
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-size: 1.5rem;
+      cursor: pointer;
+      padding: 0;
+      line-height: 1;
+      flex-shrink: 0;
+    }
+    .modal-close:hover { color: var(--text); }
+    .modal-field {
+      margin-bottom: 0.75rem;
+      padding-bottom: 0.75rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .modal-field:last-child {
+      border-bottom: none;
+      margin-bottom: 0;
+      padding-bottom: 0;
+    }
+    .modal-label {
+      font-size: 0.7rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      font-weight: 600;
+      margin-bottom: 0.25rem;
+      display: block;
+    }
+    .modal-value {
+      font-size: 0.85rem;
+      color: var(--text);
+      word-break: break-word;
+    }
+    .modal-value a {
+      color: var(--accent);
+    }
+    .modal-value a:hover { text-decoration: underline; }
+    .company-name-link {
+      cursor: pointer;
+      border-bottom: 1px dotted var(--accent);
+      transition: color 0.15s;
+    }
+    .company-name-link:hover { color: var(--accent); }
   </style>
 </head>
 <body>
@@ -221,6 +312,26 @@
   <main>
     {% block content %}{% endblock %}
   </main>
+
+  <!-- Company Details Modal -->
+  <div id="company-modal" class="modal-overlay">
+    <div class="modal-content">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; gap: 1rem;">
+        <h2 class="modal-title" id="modal-company-name">Empresa</h2>
+        <button onclick="closeCompanyModal()" style="background: transparent; border: none; color: var(--text); font-size: 1.5rem; cursor: pointer; padding: 0; line-height: 1; flex-shrink: 0;">✕</button>
+      </div>
+      <div id="modal-edit-btn-container" style="margin-bottom: 1rem;">
+        <button id="modal-edit-btn" onclick="toggleEditMode()" style="background: #ff4444; color: #fff; border: 3px solid #ff0000; border-radius: 8px; padding: 1rem; font-size: 1.1rem; font-weight: 900; cursor: pointer; width: 100%; text-transform: uppercase;">🔧 EDITAR</button>
+      </div>
+      <div id="modal-body">
+        <div style="text-align: center; color: var(--muted);">Cargando...</div>
+      </div>
+      <div id="modal-actions" style="display: none; gap: 0.5rem; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border);">
+        <button onclick="saveCompanyChanges()" style="flex: 1; background: var(--green); color: #fff; border: none; border-radius: 6px; padding: 0.6rem 1rem; font-size: 0.85rem; font-weight: 600; cursor: pointer;">💾 Guardar</button>
+        <button onclick="toggleEditMode()" style="flex: 1; background: var(--surface-hover); color: var(--muted); border: 1px solid var(--border); border-radius: 6px; padding: 0.6rem 1rem; font-size: 0.85rem; font-weight: 600; cursor: pointer;">✕ Cancelar</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Log panel -->
   <div id="log-panel">
@@ -294,6 +405,233 @@
 
     fetchLogs();
     setInterval(fetchLogs, 2000);
+
+    var _currentCompanyId = null;
+    var _currentCompanyData = null;
+    var _editMode = false;
+
+    function openCompanyModal(companyId) {
+      _currentCompanyId = companyId;
+      _editMode = false;
+      var modal = document.getElementById('company-modal');
+      modal.classList.add('open');
+      var btnContainer = document.getElementById('modal-edit-btn-container');
+      var actions = document.getElementById('modal-actions');
+      btnContainer.style.display = 'block';
+      actions.style.display = 'none';
+      var body = document.getElementById('modal-body');
+      body.innerHTML = '<div style="text-align: center; color: var(--muted);">Cargando...</div>';
+
+      fetch('/company/' + companyId + '/details')
+        .then(function(r) { return r.json(); })
+        .then(function(company) {
+          if (company.error) {
+            body.innerHTML = '<div style="color: var(--red);">Error cargando detalles</div>';
+            return;
+          }
+          _currentCompanyData = company;
+          document.getElementById('modal-company-name').textContent = company.name;
+          renderCompanyFields(company, false);
+        })
+        .catch(function() {
+          body.innerHTML = '<div style="color: var(--red);">Error cargando detalles</div>';
+        });
+    }
+
+    function renderCompanyFields(company, editMode) {
+      var body = document.getElementById('modal-body');
+      var html = '';
+
+      var editableFields = ['industry', 'size_estimate', 'location', 'description', 'website_url', 'linkedin_url'];
+      var fields = [
+        { key: 'name', label: 'Nombre', editable: false },
+        { key: 'domain', label: 'Dominio', editable: false, isLink: true },
+        { key: 'location', label: 'Ubicación', editable: true },
+        { key: 'industry', label: 'Industria', editable: true },
+        { key: 'size_estimate', label: 'Tamaño (estimado)', editable: true },
+        { key: 'description', label: 'Descripción', editable: true, type: 'textarea' },
+        { key: 'website_url', label: 'Sitio web', editable: true, isLink: true },
+        { key: 'linkedin_url', label: 'LinkedIn', editable: true, isLink: true },
+        { key: 'source', label: 'Fuente', editable: false },
+        { key: 'source_url', label: 'URL Fuente', editable: false, isLink: true },
+        { key: 'first_seen_at', label: 'Primero visto', editable: false },
+        { key: 'last_updated_at', label: 'Último actualizado', editable: false },
+      ];
+
+      fields.forEach(function(field) {
+        var value = company[field.key];
+        if (value === null || value === undefined || value === '') value = null;
+
+        if (value || field.editable) {
+          html += '<div class="modal-field">';
+          html += '<label class="modal-label">' + field.label + '</label>';
+
+          if (editMode && field.editable) {
+            if (field.type === 'textarea') {
+              html += '<textarea data-field="' + field.key + '" style="width: 100%; min-height: 80px; padding: 0.5rem; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); color: var(--text); font-family: inherit; font-size: 0.9rem;">' + (value || '') + '</textarea>';
+            } else {
+              html += '<input type="text" data-field="' + field.key + '" value="' + (value || '') + '" style="width: 100%; padding: 0.5rem; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); color: var(--text); font-size: 0.9rem;">';
+            }
+          } else {
+            if (field.isLink && value) {
+              var href = value;
+              if (!href.startsWith('http')) href = 'http://' + href;
+              html += '<div class="modal-value"><a href="' + href + '" target="_blank">' + value.substring(0, 60) + (value.length > 60 ? '...' : '') + '</a></div>';
+            } else {
+              html += '<div class="modal-value">' + (value || 'No disponible') + '</div>';
+            }
+          }
+          html += '</div>';
+        }
+      });
+
+      if (!html) {
+        html = '<div style="color: var(--muted); text-align: center;">Sin datos disponibles</div>';
+      }
+
+      body.innerHTML = html;
+    }
+
+    function toggleEditMode() {
+      _editMode = !_editMode;
+      var btnContainer = document.getElementById('modal-edit-btn-container');
+      var actions = document.getElementById('modal-actions');
+
+      if (_editMode) {
+        btnContainer.style.display = 'none';
+        actions.style.display = 'flex';
+      } else {
+        btnContainer.style.display = 'block';
+        actions.style.display = 'none';
+      }
+
+      renderCompanyFields(_currentCompanyData, _editMode);
+    }
+
+    function saveCompanyChanges() {
+      if (!_currentCompanyId) return;
+
+      var data = {};
+      var inputs = document.querySelectorAll('[data-field]');
+      inputs.forEach(function(input) {
+        var field = input.getAttribute('data-field');
+        var value = input.value;
+        data[field] = value || null;
+      });
+
+      fetch('/company/' + _currentCompanyId + '/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      })
+        .then(function(r) { return r.json(); })
+        .then(function(result) {
+          if (result.success) {
+            Object.keys(data).forEach(function(key) {
+              _currentCompanyData[key] = data[key];
+            });
+            _editMode = false;
+            var editBtn = document.getElementById('modal-edit-btn');
+            var actions = document.getElementById('modal-actions');
+            editBtn.style.display = 'block';
+            actions.style.display = 'none';
+            renderCompanyFields(_currentCompanyData, false);
+          }
+        })
+        .catch(function(e) {
+          alert('Error al guardar: ' + e);
+        });
+    }
+
+    function closeCompanyModal() {
+      var modal = document.getElementById('company-modal');
+      modal.classList.remove('open');
+    }
+
+    function openEditModal(companyId, companyName) {
+      fetch('/company/' + companyId + '/details')
+        .then(function(r) { return r.json(); })
+        .then(function(company) {
+          var modal = document.getElementById('company-modal');
+          modal.classList.add('open');
+          document.getElementById('modal-company-name').textContent = '✎ ' + companyName;
+
+          var html = '<div style="display: flex; flex-direction: column; gap: 1.2rem;">';
+
+          var fields = [
+            { key: 'location', label: '📍 Ubicación', type: 'text', placeholder: 'Ej: Buenos Aires' },
+            { key: 'industry', label: '🏢 Industria', type: 'text', placeholder: 'Ej: Technology' },
+            { key: 'size_estimate', label: '👥 Tamaño (estimado)', type: 'text', placeholder: 'Ej: 50-100' },
+            { key: 'description', label: '📝 Descripción', type: 'textarea', placeholder: 'Descripción de la empresa...' },
+            { key: 'website_url', label: '🌐 Sitio web', type: 'text', placeholder: 'https://ejemplo.com' },
+            { key: 'linkedin_url', label: '💼 LinkedIn', type: 'text', placeholder: 'https://linkedin.com/company/...' },
+          ];
+
+          fields.forEach(function(field) {
+            var value = company[field.key] || '';
+            html += '<div>';
+            html += '<label style="display: block; font-weight: 700; margin-bottom: 0.5rem; font-size: 0.85rem; color: var(--text); text-transform: uppercase; letter-spacing: 0.05em;">' + field.label + '</label>';
+
+            if (field.type === 'textarea') {
+              html += '<textarea data-field="' + field.key + '" placeholder="' + field.placeholder + '" style="width: 100%; min-height: 100px; padding: 0.8rem; border: 2px solid var(--border); border-radius: 8px; background: #0f172a; color: var(--text); font-family: inherit; font-size: 0.95rem; transition: border-color 0.2s; resize: vertical;">' + value + '</textarea>';
+            } else {
+              html += '<input type="text" data-field="' + field.key + '" placeholder="' + field.placeholder + '" value="' + value.replace(/"/g, '&quot;') + '" style="width: 100%; padding: 0.8rem; border: 2px solid var(--border); border-radius: 8px; background: #0f172a; color: var(--text); font-size: 0.95rem; transition: border-color 0.2s;">';
+            }
+            html += '</div>';
+          });
+
+          html += '<div style="display: flex; gap: 0.75rem; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border);">';
+          html += '<button onclick="saveEditModal(' + companyId + ')" style="flex: 1; background: var(--green); color: #fff; border: none; border-radius: 8px; padding: 0.9rem 1.2rem; font-weight: 700; font-size: 0.95rem; cursor: pointer; transition: all 0.2s;">💾 Guardar cambios</button>';
+          html += '<button onclick="closeCompanyModal()" style="flex: 1; background: transparent; color: var(--muted); border: 2px solid var(--border); border-radius: 8px; padding: 0.9rem 1.2rem; font-weight: 700; font-size: 0.95rem; cursor: pointer; transition: all 0.2s;">✕ Cancelar</button>';
+          html += '</div></div>';
+
+          document.getElementById('modal-body').innerHTML = html;
+          document.getElementById('modal-edit-btn-container').style.display = 'none';
+          document.getElementById('modal-actions').style.display = 'none';
+        });
+    }
+
+    function saveEditModal(companyId) {
+      var data = {};
+      var inputs = document.querySelectorAll('[data-field]');
+      inputs.forEach(function(input) {
+        var field = input.getAttribute('data-field');
+        var value = input.value;
+        data[field] = value || null;
+      });
+
+      fetch('/company/' + companyId + '/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      })
+        .then(function(r) { return r.json(); })
+        .then(function(result) {
+          if (result.success) {
+            alert('✅ Guardado exitosamente!');
+            closeCompanyModal();
+          } else {
+            alert('❌ Error al guardar');
+          }
+        })
+        .catch(function(e) {
+          alert('Error: ' + e);
+        });
+    }
+
+    // Close modal when clicking outside
+    document.getElementById('company-modal').addEventListener('click', function(e) {
+      if (e.target === this) {
+        closeCompanyModal();
+      }
+    });
+
+    // Close modal with Escape key
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') {
+        closeCompanyModal();
+      }
+    });
   </script>
 </body>
 </html>

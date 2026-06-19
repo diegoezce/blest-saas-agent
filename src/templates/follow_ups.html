@@ -84,7 +84,10 @@
   <div class="lead-grid">
     {% for d in due %}
     <div class="lead-card {{ 'overdue' if d.overdue else 'upcoming' }}">
-      <div class="lead-name">{{ d.company }}</div>
+      <div class="lead-name" style="display: flex; align-items: center; gap: 0.6rem;">
+        <span class="company-name-link" onclick="openCompanyModal({{ d.company_id }})">{{ d.company }}</span>
+        <button onclick="openEditModal({{ d.company_id }}, '{{ d.company|e }}'); event.stopPropagation();" style="background: var(--accent); color: #fff; border: none; border-radius: 6px; padding: 0.4rem 0.7rem; font-size: 0.75rem; font-weight: 700; cursor: pointer; transition: all 0.2s; flex-shrink: 0;">✎ Editar</button>
+      </div>
       <div class="lead-meta">
         {% if d.location %}<span data-label="Ubicación">📍 {{ d.location }}</span>{% endif %}
         {% if d.website_url %}<a href="{{ d.website_url }}" target="_blank" rel="noopener" style="color:var(--accent)">🌐 {{ d.display_url }}</a>{% endif %}
@@ -126,7 +129,7 @@
     <tbody>
       {% for u in upcoming %}
       <tr>
-        <td data-label="Empresa"><strong>{{ u.company }}</strong></td>
+        <td data-label="Empresa"><strong><span class="company-name-link" onclick="openCompanyModal({{ u.company_id }})">{{ u.company }}</span></strong></td>
         <td data-label="Perfil"><span class="badge badge-muted">{{ u.profile_name }}</span></td>
         <td data-label="Contacto">
           {{ u.contact_name }}{% if u.contact_role %} <span style="color:var(--muted)">· {{ u.contact_role }}</span>{% endif %}
@@ -161,7 +164,7 @@
     <tbody>
       {% for d in drafted %}
       <tr>
-        <td data-label="Empresa"><strong>{{ d.company }}</strong></td>
+        <td data-label="Empresa"><strong><span class="company-name-link" onclick="openCompanyModal({{ d.company_id }})">{{ d.company }}</span></strong></td>
         <td data-label="Perfil"><span class="badge badge-muted">{{ d.profile_name }}</span></td>
         <td data-label="Toque">#{{ d.stage }}</td>
         <td data-label="Asunto">{{ d.subject }}</td>
@@ -187,7 +190,7 @@
     <tbody>
       {% for r in replied %}
       <tr>
-        <td data-label="Empresa"><strong>{{ r.company }}</strong></td>
+        <td data-label="Empresa"><strong><span class="company-name-link" onclick="openCompanyModal({{ r.company_id }})">{{ r.company }}</span></strong></td>
         <td data-label="Contacto">{{ r.contact_name }}</td>
         <td data-label="Email"><a href="mailto:{{ r.contact_email }}" style="color:var(--accent)">{{ r.contact_email }}</a></td>
         <td data-label="Respondió">{{ r.when }}</td>

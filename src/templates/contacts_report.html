@@ -144,7 +144,7 @@
 
 <!-- ── Card body macro (must be defined before use in Jinja2) ──────── -->
 {% macro _card_body(d) %}
-  <div class="lead-name">{{ d.name }}</div>
+  <div class="lead-name"><span class="company-name-link" onclick="openCompanyModal({{ d.id }})">{{ d.name }}</span></div>
 
   <div class="lead-meta">
     {% if d.location %}<span>📍 {{ d.location }}</span>{% endif %}
