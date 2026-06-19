@@ -423,7 +423,12 @@
       body.innerHTML = '<div style="text-align: center; color: var(--muted);">Cargando...</div>';
 
       fetch('/company/' + companyId + '/details')
-        .then(function(r) { return r.json(); })
+        .then(function(r) {
+          if (!r.ok) {
+            throw new Error('HTTP error, status = ' + r.status);
+          }
+          return r.json();
+        })
         .then(function(company) {
           if (company.error) {
             body.innerHTML = '<div style="color: var(--red);">Error cargando detalles</div>';
@@ -433,8 +438,9 @@
           document.getElementById('modal-company-name').textContent = company.name;
           renderCompanyFields(company, false);
         })
-        .catch(function() {
-          body.innerHTML = '<div style="color: var(--red);">Error cargando detalles</div>';
+        .catch(function(err) {
+          console.error('Error:', err);
+          body.innerHTML = '<div style="color: var(--red);">Error cargando detalles: ' + err.message + '</div>';
         });
     }
 
@@ -485,6 +491,47 @@
         }
       });
 
+      // Contacts section
+      if (company.contacts && company.contacts.length > 0) {
+        html += '<div class="modal-field">';
+        html += '<label class="modal-label">Contactos</label>';
+        html += '<div style="display: flex; flex-direction: column; gap: 0.6rem;">';
+
+        company.contacts.forEach(function(contact) {
+          html += '<div style="padding: 0.6rem; border: 1px solid var(--border); border-radius: 6px; background: rgba(255,255,255,0.02)">';
+
+          var contactName = (contact.name || 'Sin nombre').replace(/"/g, '&quot;');
+          var contactRole = (contact.role || '').replace(/"/g, '&quot;');
+          var contactEmail = (contact.email || '').replace(/"/g, '&quot;');
+          var contactLinkedIn = (contact.linkedin_url || '').replace(/"/g, '&quot;');
+
+          if (editMode) {
+            html += '<div style="margin-bottom: 0.4rem;"><strong style="color: var(--text); font-size: 0.85rem;">' + contactName + '</strong></div>';
+            if (contact.role) {
+              html += '<div style="color: var(--muted); font-size: 0.8rem; margin-bottom: 0.3rem;">' + contactRole + '</div>';
+            }
+            html += '<input type="email" data-contact-id="' + contact.id + '" placeholder="Correo..." value="' + contactEmail + '" style="width: 100%; padding: 0.5rem; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); color: var(--text); font-size: 0.85rem;">';
+          } else {
+            html += '<div style="font-size: 0.85rem;"><strong>' + contactName + '</strong>';
+            if (contact.role) html += ' · <em style="color: var(--muted);">' + contactRole + '</em>';
+            html += '</div>';
+            if (contact.email) {
+              html += '<a href="mailto:' + contactEmail + '" style="font-size: 0.8rem; color: var(--accent);">' + contactEmail + '</a>';
+            } else {
+              html += '<div style="font-size: 0.8rem; color: var(--muted);">Sin email</div>';
+            }
+            if (contact.linkedin_url) {
+              html += ' <a href="' + contactLinkedIn + '" target="_blank" style="font-size: 0.8rem; color: var(--muted);">LinkedIn ↗</a>';
+            }
+          }
+
+          html += '</div>';
+        });
+
+        html += '</div>';
+        html += '</div>';
+      }
+
       if (!html) {
         html = '<div style="color: var(--muted); text-align: center;">Sin datos disponibles</div>';
       }
@@ -519,23 +566,56 @@
         data[field] = value || null;
       });
 
-      fetch('/company/' + _currentCompanyId + '/update', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-      })
-        .then(function(r) { return r.json(); })
-        .then(function(result) {
-          if (result.success) {
+      var contactUpdates = {};
+      var promises = [
+        fetch('/company/' + _currentCompanyId + '/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        }).then(function(r) { return r.json(); })
+      ];
+
+      // Save contact emails
+      var contactInputs = document.querySelectorAll('[data-contact-id]');
+      contactInputs.forEach(function(input) {
+        var contactId = input.getAttribute('data-contact-id');
+        var email = input.value.trim();
+        contactUpdates[contactId] = email;
+        if (email) {
+          promises.push(
+            fetch('/contact/' + contactId + '/set-email', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email: email })
+            }).then(function(r) { return r.json(); })
+          );
+        }
+      });
+
+      Promise.all(promises)
+        .then(function(results) {
+          var hasErrors = results.some(function(r) { return r.error; });
+          if (!hasErrors) {
             Object.keys(data).forEach(function(key) {
               _currentCompanyData[key] = data[key];
             });
+            // Update contacts with new emails
+            if (_currentCompanyData.contacts) {
+              _currentCompanyData.contacts.forEach(function(contact) {
+                if (contactUpdates[contact.id] !== undefined) {
+                  contact.email = contactUpdates[contact.id];
+                }
+              });
+            }
             _editMode = false;
             var editBtn = document.getElementById('modal-edit-btn');
             var actions = document.getElementById('modal-actions');
             editBtn.style.display = 'block';
             actions.style.display = 'none';
             renderCompanyFields(_currentCompanyData, false);
+            alert('✅ Cambios guardados exitosamente');
+          } else {
+            alert('⚠️ Algunos cambios no se pudieron guardar');
           }
         })
         .catch(function(e) {

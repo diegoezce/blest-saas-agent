@@ -294,7 +294,13 @@ details.lead[open] .lead-chevron { transform:rotate(90deg); }
 
     <details class="lead">
       <summary>
-        <span style="font-weight:700;font-size:0.95rem"><span class="company-name-link" onclick="event.stopPropagation();openCompanyModal({{ first.get('company_id') }})">{{ company_name }}</span></span>
+        <span style="font-weight:700;font-size:0.95rem">
+        {% if first.get('company_id') %}
+        <span class="company-name-link" onclick="openCompanyModal({{ first.get('company_id') }})">{{ company_name }}</span>
+        {% else %}
+        <span>{{ company_name }}</span>
+        {% endif %}
+        </span>
         {% if score > 0 %}
           {% if score >= 70 %}
             <span class="score score-high" style="font-size:0.75rem;padding:0.15rem 0.45rem">{{ score }}</span>

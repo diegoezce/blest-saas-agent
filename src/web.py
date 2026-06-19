@@ -753,12 +753,25 @@ def create_app() -> Flask:
     @_require_auth
     def get_company_details(company_id):
         from src.database.session import get_session
-        from src.database.models import Company
+        from src.database.models import Company, Contact
 
         with get_session() as session:
             company = session.get(Company, company_id)
             if not company:
                 return jsonify({"error": "Not found"}), 404
+
+            # Fetch all contacts for this company
+            contacts = session.query(Contact).filter_by(company_id=company_id).all()
+            contacts_data = [
+                {
+                    "id": c.id,
+                    "name": c.name,
+                    "email": c.email,
+                    "role": c.role,
+                    "linkedin_url": c.linkedin_url,
+                }
+                for c in contacts
+            ]
 
             return jsonify({
                 "id": company.id,
@@ -774,6 +787,7 @@ def create_app() -> Flask:
                 "source_url": company.source_url,
                 "first_seen_at": str(company.first_seen_at)[:10] if company.first_seen_at else None,
                 "last_updated_at": str(company.last_updated_at)[:10] if company.last_updated_at else None,
+                "contacts": contacts_data,
             })
 
     @app.route("/company/<int:company_id>/update", methods=["POST"])
