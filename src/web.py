@@ -1876,6 +1876,11 @@ def create_app() -> Flask:
                 "replied": len(replied),
             }
 
+            due.sort(key=lambda x: x["company"].lower())
+            upcoming.sort(key=lambda x: x["company"].lower())
+            drafted.sort(key=lambda x: x["company"].lower())
+            replied.sort(key=lambda x: x["company"].lower())
+
         return render_template(
             "follow_ups.html",
             due=due, upcoming=upcoming, drafted=drafted, replied=replied,
