@@ -444,6 +444,52 @@
         });
     }
 
+    function _renderContactRow(contact, editMode) {
+      var esc = function(s) { return (s||'').replace(/[<>"&]/g, function(c){return {'<':'&lt;','>':'&gt;','"':'&quot;','&':'&amp;'}[c];}); };
+      var contactName = esc(contact.name);
+      var contactRole = esc(contact.role);
+      var contactEmail = esc(contact.email);
+      var contactLinkedIn = esc(contact.linkedin_url);
+      var isManual = contact.email_source === 'manual' && !contact.name && !contact.role;
+      var isPrimary = contact.is_primary === true;
+      var row = '<div id="modal-contact-row-' + contact.id + '" style="padding: 0.6rem; border: 1px solid var(--border); border-radius: 6px; background: rgba(255,255,255,0.02)">';
+      if (editMode) {
+        if (contactName) {
+          row += '<div style="margin-bottom: 0.3rem;"><strong style="color: var(--text); font-size: 0.85rem;">' + contactName + '</strong>';
+          if (contactRole) row += ' <em style="color: var(--muted); font-size: 0.8rem;">· ' + contactRole + '</em>';
+          row += '</div>';
+        }
+        row += '<div style="display: flex; gap: 0.4rem; align-items: center;">';
+        row += '<input type="email" data-contact-id="' + contact.id + '" placeholder="Correo..." value="' + contactEmail + '" style="flex: 1; padding: 0.45rem 0.5rem; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); color: var(--text); font-size: 0.85rem;">';
+        var primaryLabel = isPrimary ? '⭐' : '☆';
+        var primaryTitle = isPrimary ? 'Email principal' : 'Marcar como email principal';
+        row += '<button onclick="_setPrimaryContact(' + contact.id + ')" title="' + primaryTitle + '" style="background: ' + (isPrimary ? 'var(--accent)' : 'var(--surface-hover)') + '; color: ' + (isPrimary ? '#0f172a' : 'var(--muted)') + '; border: 1px solid var(--border); border-radius: 4px; padding: 0.35rem 0.5rem; font-size: 0.85rem; cursor: pointer;">' + primaryLabel + '</button>';
+        if (isManual) {
+          row += '<button onclick="_deleteManualContact(' + contact.id + ')" title="Eliminar email" style="background: none; color: #ef4444; border: 1px solid var(--border); border-radius: 4px; padding: 0.35rem 0.5rem; font-size: 0.85rem; cursor: pointer;">🗑</button>';
+        }
+        row += '</div>';
+      } else {
+        if (contactName) {
+          row += '<div style="font-size: 0.85rem;"><strong>' + contactName + '</strong>';
+          if (contactRole) row += ' · <em style="color: var(--muted);">' + contactRole + '</em>';
+          row += '</div>';
+        }
+        if (contact.email) {
+          row += '<div style="display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap; margin-top: 0.15rem;">';
+          row += '<a href="mailto:' + contactEmail + '" style="font-size: 0.8rem; color: var(--accent);">' + contactEmail + '</a>';
+          if (isPrimary) row += '<span title="Email principal" style="font-size: 0.75rem;">⭐</span>';
+          row += '</div>';
+        } else {
+          row += '<div style="font-size: 0.8rem; color: var(--muted);">Sin email</div>';
+        }
+        if (contact.linkedin_url) {
+          row += ' <a href="' + contactLinkedIn + '" target="_blank" style="font-size: 0.8rem; color: var(--muted);">LinkedIn ↗</a>';
+        }
+      }
+      row += '</div>';
+      return row;
+    }
+
     function renderCompanyFields(company, editMode) {
       var body = document.getElementById('modal-body');
       var html = '';
@@ -492,45 +538,31 @@
       });
 
       // Contacts section
-      if (company.contacts && company.contacts.length > 0) {
-        html += '<div class="modal-field">';
-        html += '<label class="modal-label">Contactos</label>';
-        html += '<div style="display: flex; flex-direction: column; gap: 0.6rem;">';
+      var contactsList = company.contacts && company.contacts.length > 0 ? company.contacts : [];
+      html += '<div class="modal-field">';
+      html += '<label class="modal-label">Contactos</label>';
+      html += '<div id="modal-contacts-list" style="display: flex; flex-direction: column; gap: 0.6rem;">';
 
-        company.contacts.forEach(function(contact) {
-          html += '<div style="padding: 0.6rem; border: 1px solid var(--border); border-radius: 6px; background: rgba(255,255,255,0.02)">';
-
-          var contactName = (contact.name || 'Sin nombre').replace(/"/g, '&quot;');
-          var contactRole = (contact.role || '').replace(/"/g, '&quot;');
-          var contactEmail = (contact.email || '').replace(/"/g, '&quot;');
-          var contactLinkedIn = (contact.linkedin_url || '').replace(/"/g, '&quot;');
-
-          if (editMode) {
-            html += '<div style="margin-bottom: 0.4rem;"><strong style="color: var(--text); font-size: 0.85rem;">' + contactName + '</strong></div>';
-            if (contact.role) {
-              html += '<div style="color: var(--muted); font-size: 0.8rem; margin-bottom: 0.3rem;">' + contactRole + '</div>';
-            }
-            html += '<input type="email" data-contact-id="' + contact.id + '" placeholder="Correo..." value="' + contactEmail + '" style="width: 100%; padding: 0.5rem; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); color: var(--text); font-size: 0.85rem;">';
-          } else {
-            html += '<div style="font-size: 0.85rem;"><strong>' + contactName + '</strong>';
-            if (contact.role) html += ' · <em style="color: var(--muted);">' + contactRole + '</em>';
-            html += '</div>';
-            if (contact.email) {
-              html += '<a href="mailto:' + contactEmail + '" style="font-size: 0.8rem; color: var(--accent);">' + contactEmail + '</a>';
-            } else {
-              html += '<div style="font-size: 0.8rem; color: var(--muted);">Sin email</div>';
-            }
-            if (contact.linkedin_url) {
-              html += ' <a href="' + contactLinkedIn + '" target="_blank" style="font-size: 0.8rem; color: var(--muted);">LinkedIn ↗</a>';
-            }
-          }
-
-          html += '</div>';
+      if (contactsList.length > 0) {
+        contactsList.forEach(function(contact) {
+          html += _renderContactRow(contact, editMode);
         });
+      } else {
+        html += '<div style="color: var(--muted); font-size: 0.85rem;">Sin contactos</div>';
+      }
 
+      if (editMode) {
+        html += '<div id="modal-add-email-section" style="margin-top: 0.4rem; padding: 0.6rem; border: 1px dashed var(--border); border-radius: 6px;">';
+        html += '<div style="font-size: 0.8rem; color: var(--muted); margin-bottom: 0.4rem;">Agregar email de contacto</div>';
+        html += '<div style="display: flex; gap: 0.4rem;">';
+        html += '<input type="email" id="modal-new-email-input" placeholder="nuevo@empresa.com" style="flex: 1; padding: 0.45rem 0.5rem; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); color: var(--text); font-size: 0.85rem;">';
+        html += '<button onclick="_addCompanyEmail()" style="background: var(--accent); color: #0f172a; border: none; border-radius: 4px; padding: 0.45rem 0.75rem; font-size: 0.8rem; font-weight: 700; cursor: pointer;">➕ Agregar</button>';
         html += '</div>';
         html += '</div>';
       }
+
+      html += '</div>';
+      html += '</div>';
 
       if (!html) {
         html = '<div style="color: var(--muted); text-align: center;">Sin datos disponibles</div>';
@@ -626,6 +658,78 @@
     function closeCompanyModal() {
       var modal = document.getElementById('company-modal');
       modal.classList.remove('open');
+    }
+
+    function _setPrimaryContact(contactId) {
+      fetch('/contact/' + contactId + '/set-primary', { method: 'POST' })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          if (d.ok) {
+            if (_currentCompanyData && _currentCompanyData.contacts) {
+              _currentCompanyData.contacts.forEach(function(c) {
+                c.is_primary = (c.id === contactId);
+              });
+            }
+            renderCompanyFields(_currentCompanyData, true);
+          } else {
+            alert('Error al marcar como principal: ' + (d.error || 'desconocido'));
+          }
+        })
+        .catch(function(e) { alert('Error: ' + e); });
+    }
+
+    function _deleteManualContact(contactId) {
+      if (!confirm('¿Eliminar este email?')) return;
+      fetch('/contact/' + contactId + '/delete-manual', { method: 'POST' })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          if (d.ok) {
+            if (_currentCompanyData && _currentCompanyData.contacts) {
+              _currentCompanyData.contacts = _currentCompanyData.contacts.filter(function(c) {
+                return c.id !== contactId;
+              });
+            }
+            var row = document.getElementById('modal-contact-row-' + contactId);
+            if (row) row.remove();
+          } else {
+            alert('Error al eliminar: ' + (d.error || 'desconocido'));
+          }
+        })
+        .catch(function(e) { alert('Error: ' + e); });
+    }
+
+    function _addCompanyEmail() {
+      var input = document.getElementById('modal-new-email-input');
+      if (!input) return;
+      var email = input.value.trim().toLowerCase();
+      if (!email || !email.includes('@') || !email.split('@')[1].includes('.')) {
+        alert('Email inválido'); return;
+      }
+      fetch('/company/' + _currentCompanyId + '/add-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email }),
+      })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          if (d.ok && d.contact) {
+            var newContact = { id: d.contact.id, email: d.contact.email, name: null, role: null, email_source: 'manual', is_primary: false };
+            if (!_currentCompanyData.contacts) _currentCompanyData.contacts = [];
+            _currentCompanyData.contacts.push(newContact);
+            var list = document.getElementById('modal-contacts-list');
+            if (list) {
+              var addSection = document.getElementById('modal-add-email-section');
+              var div = document.createElement('div');
+              div.innerHTML = _renderContactRow(newContact, true);
+              if (addSection) list.insertBefore(div.firstChild, addSection);
+              else list.appendChild(div.firstChild);
+            }
+            input.value = '';
+          } else {
+            alert('Error al agregar: ' + (d.error || 'desconocido'));
+          }
+        })
+        .catch(function(e) { alert('Error: ' + e); });
     }
 
     function openEditModal(companyId, companyName) {

@@ -19,7 +19,7 @@ One idea only — no feature lists, no buzzwords.
 (a comparable client type or result). Otherwise omit it entirely.
 - Ask (1 sentence): a single low-friction, specific CTA that's easy to say yes to \
 (e.g. a 15-minute call next week, or offering to send one short example).
-- Sign-off: a short, human sign-off from {agent_name}.
+- Do NOT include any closing, sign-off, or signature. End the message right after the CTA.
 
 APPROACH (what makes this land):
 - Earn the reply — the opening is about THEM, the ask is small. Never pitch in the first sentence.

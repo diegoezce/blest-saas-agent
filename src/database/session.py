@@ -187,6 +187,7 @@ def _run_migrations() -> None:
             ("enriched_at",    "TIMESTAMP"),
             ("enrichment_log", "JSONB"),
             ("replied_at",     "TIMESTAMP"),
+            ("is_primary",     "BOOLEAN DEFAULT FALSE"),
         ]
         with engine.connect() as conn:
             for col_name, col_type in new_cols:
