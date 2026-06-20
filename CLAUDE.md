@@ -214,6 +214,13 @@ or looked up), so they no longer dilute the email ratio.
 - Calls Hunter.io email finder API (`HUNTER_API_KEY`)
 - score ≥ 90 → `verified`; score ≥ 50 → `probable`
 
+### Layer 4 — Web search (Tavily) (`src/enrichment/web_email_finder.py`)
+- Only invoked if no verified email found yet (email_status != "verified")
+- Replicates manual "empresa email" Google search: queries like `"{name}" "{company}" email`
+- Extracts emails from search result snippets; filters by domain, name match, reputation
+- Returns `web_search` (named match) or `web_search_generic` (inbox); both stored as `verified`
+- Uses existing Tavily search (no new vendor); no SMTP confirmation in v1 (precision-over-cost tradeoff)
+
 ### Email precedence (which address wins)
 After all layers run, the contact's email is chosen in this order:
 1. **Verified named email** — Layer 1 name-match scrape, Layer 2 SMTP `valid`, or Hunter ≥90.
@@ -230,7 +237,7 @@ real `info@` is sitting on the company's contact page.
 | Field | Values |
 |---|---|
 | `email_status` | `verified`, `probable`, `not_found` (final values); `bounced` = set by the Zoho bounce check (`/bounces/apply`). `catch_all` is an intermediate verifier result, stored as `probable` |
-| `email_source` | `site_scrape`, `site_scrape_generic` (published role inbox used when no verified named email exists; stored as `verified`), `pattern_verified`, `pattern_unverified`, `hunter` |
+| `email_source` | `site_scrape`, `site_scrape_generic`, `pattern_verified`, `pattern_unverified`, `hunter`, `web_search`, `web_search_generic` |
 | `phone_whatsapp` | nullable text |
 | `enriched_at` | datetime |
 | `enrichment_log` | JSONB — full per-layer attempt log; also holds `attempts` (retry counter) and `bad_emails` (addresses that bounced / are known-bad — never re-proposed) |

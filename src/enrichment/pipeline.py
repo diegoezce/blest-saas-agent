@@ -13,6 +13,7 @@ from src.enrichment.patterns import (
 )
 from src.enrichment.providers import get_verifier
 from src.enrichment.providers.hunter import HunterProvider
+from src.enrichment.web_email_finder import find_emails_via_web_search
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +37,7 @@ class EnrichmentResult:
     contact_id: int
     email: str | None = None
     email_status: str | None = None   # verified | probable | catch_all | not_found
-    email_source: str | None = None   # site_scrape | site_scrape_generic | pattern_verified | hunter
+    email_source: str | None = None   # site_scrape | site_scrape_generic | pattern_verified | hunter | web_search | web_search_generic
     phone_whatsapp: str | None = None
     log: dict = field(default_factory=dict)
 
@@ -302,6 +303,46 @@ def enrich_contact(contact_id: int) -> EnrichmentResult:
             logger.info(f"{label} — Layer 3 skipped (no first name)")
 
         result.log["layer3"] = layer3
+
+        # ── Layer 4: Web search (Tavily) ──────────────────────────────────
+        # Replicates manual "email de empresa" Google search. Only if no verified email yet.
+        layer4: dict = {}
+        if result.email_status != "verified" and first_name and last_name and domain:
+            try:
+                web_result = find_emails_via_web_search(
+                    first_name=first_name,
+                    last_name=last_name,
+                    company_name=company.name,
+                    domain=domain,
+                    role=contact.role,
+                    bad_emails=bad_emails,
+                )
+                if web_result.email:
+                    result.email = web_result.email
+                    result.email_status = "verified"
+                    result.email_source = web_result.source
+                    layer4["found_email"] = web_result.email
+                    layer4["source"] = web_result.source
+                    layer4["confidence"] = web_result.confidence
+                    logger.info(f"{label} — ✅ web search: {web_result.email} ({web_result.confidence})")
+                else:
+                    layer4["result"] = "no email found"
+                    logger.info(f"{label} — Layer 4: no web email found")
+                if web_result.log:
+                    layer4["debug"] = web_result.log
+            except Exception as e:
+                layer4["exception"] = str(e)
+                logger.warning(f"Layer 4 failed for contact {contact_id}: {e}")
+        else:
+            if result.email_status == "verified":
+                layer4["skipped"] = "already verified"
+            elif not first_name or not last_name:
+                layer4["skipped"] = "missing name"
+            elif not domain:
+                layer4["skipped"] = "missing domain"
+            logger.info(f"{label} — Layer 4 skipped")
+
+        result.log["layer4"] = layer4
 
         # ── Fallback: real published generic inbox ─────────────────────────
         # A generic address scraped off the site (info@, contacto@, …) is real and

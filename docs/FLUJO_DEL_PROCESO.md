@@ -36,6 +36,7 @@
    ╔═══════════════════════════════════════════════════════════════════════════════╗
    ║  ENRIQUECIMIENTO DE CONTACTOS (busca el email real)                            ║
    ║  Capa 0 dominio → Capa 1 scraping → Capa 2 patrón+SMTP → Capa 3 Hunter         ║
+   ║  → Capa 4 web search (solo si no verificado)                                   ║
    ╚═══════════════════════════════════════════════════════════════════════════════╝
                           ▼
                 ┌───────────────────┐      DECISIÓN: ¿hay email confiable
@@ -176,6 +177,16 @@ buscar/inferir su email).
 ### Capa 3 — Hunter.io (fallback)
 - **Decisión por score:** ≥90 → **verificado** · ≥50 → **probable**.
 
+### Capa 4 — Web search (Tavily) — **solo si no verificado aún**
+- **Gatillo:** corre si el email no quedó `verified` tras las Capas 1–3 (es decir, `probable`/`pattern_unverified`/`catch_all`/`not_found`).
+- **Procesamiento:** replica búsquedas manuales ("email de [empresa] [persona]" en Google): genera queries dirigidas (nombre + empresa + rol), extrae emails de snippets, filtra por dominio/reputación, puntúa por coincidencia de nombre.
+- **Decisiones por hallazgo:**
+  - Email nominal que **coincide con el nombre** → `verified` · `web_search` (alta confianza)
+  - Email que **confirma el `probable` anterior** (consenso de 2 fuentes) → sube a `verified`
+  - Só**lo buzón genérico** (`info@`, `contacto@`) → `verified` · `web_search_generic`
+  - Nada útil → queda como estaba (sin regresión)
+- **Nota de costo:** Tavily ya existe en la infraestructura; Capa 4 solo corre en casos dudosos (bajo overhead). Sin SMTP confirm en v1 (precision > costo).
+
 ### Decisión final — qué email gana (precedencia)
 1. **Email nominal verificado** (coincidencia de nombre, SMTP válido, o Hunter ≥90).
 2. **Buzón genérico publicado** (`info@`/`contacto@` real del sitio) — gana sobre cualquier conjetura porque no rebota.
@@ -251,7 +262,8 @@ lógica determinística (umbrales/condiciones) · `🌐 API ext.` = veredicto de
 | D3 | Score de la empresa | ≥70 / ≥40 / <40 | ⚙️ Reglas | quick_win / strategic / low_priority |
 | D4 | ¿Contacto con nombre? | sí / no | ⚙️ Reglas | Sin nombre se descarta |
 | D5 | ¿Empresa tiene dominio? | sí / resolver / no | ⚙️ Reglas + 🌐 búsqueda web | Define si el enriquecimiento puede seguir |
-| D6 | Email encontrado | nominal verif. / genérico / conjetura / nada | ⚙️ Reglas (precedencia) | Qué dirección se usa |
+| D6 | Email encontrado (Capas 1–3) | nominal verif. / genérico / conjetura / nada | ⚙️ Reglas (precedencia) | Qué dirección se usa |
+| D6-bis | ¿Buscar en web (Capa 4)? | sí (no verificado) / no (ya verificado) | ⚙️ Reglas (gatillo) | Se ejecuta Layer 4 si email aún no verificado |
 | D7 | ¿Email confiable? | verified / probable / not_found | 🌐 API ext. → ⚙️ Reglas | Elegible o no para envío |
 | D8 | ¿Ya contactada/empujada? | sí / no | ⚙️ Reglas | Evita outreach duplicado |
 | D9 | ¿Llegó correo a la casilla? | rebote / respuesta / OOO / nada | 🌐 casilla + ⚙️ Reglas (asunto/fecha) | Recuperar / cerrar / pausar / seguir |
@@ -369,7 +381,10 @@ flowchart TD
         RES --> L1["⚙️ Capa1 scraping"]:::rule
         L1 --> L2["🌐 Capa2 patrón + SMTP"]:::ext
         L2 --> L3["🌐 Capa3 Hunter"]:::ext
-        L3 --> D6{"Email que gana<br/>(precedencia)"}:::rule
+        L3 --> D6B{"¿Email ya<br/>verificado?"}:::rule
+        D6B -->|No| L4["🌐 Capa4 web search<br/>(Tavily)"]:::ext
+        D6B -->|Sí| D6
+        L4 --> D6{"Email que gana<br/>(precedencia)"}:::rule
     end
 
     D6 --> D7{"¿Email confiable?<br/>verified/probable"}:::rule
