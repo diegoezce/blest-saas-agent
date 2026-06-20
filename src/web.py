@@ -769,6 +769,8 @@ def create_app() -> Flask:
                     "email": c.email,
                     "role": c.role,
                     "linkedin_url": c.linkedin_url,
+                    "email_source": c.email_source,
+                    "is_primary": bool(c.is_primary),
                 }
                 for c in contacts
             ]
@@ -996,12 +998,34 @@ def create_app() -> Flask:
                 # Prefer email channel over LinkedIn
                 companies_seen[company] = d
 
+        # Build company_name → primary contact email mapping for this run
+        from src.database.models import Company, Opportunity, Contact
+        primary_emails: dict[str, str] = {}
+        with get_session() as session:
+            run_company_ids = [
+                o.company_id for o in
+                session.query(Opportunity).filter_by(run_id=run_id).all()
+            ]
+            run_companies = session.query(Company).filter(Company.id.in_(run_company_ids)).all()
+            company_name_by_id = {c.id: c.name for c in run_companies}
+            primary_contacts = (
+                session.query(Contact)
+                .filter(Contact.company_id.in_(run_company_ids))
+                .filter(Contact.is_primary.is_(True))
+                .filter(Contact.email.isnot(None))
+                .all()
+            )
+            for ct in primary_contacts:
+                cname = company_name_by_id.get(ct.company_id)
+                if cname:
+                    primary_emails[cname] = ct.email
+
         created = 0
         skipped = 0
         errors = []
         pushed_company_names: list[str] = []
         for company_name, draft in companies_seen.items():
-            to_address = draft.get("contact_email")
+            to_address = primary_emails.get(company_name) or draft.get("contact_email")
             if not to_address:
                 skipped += 1
                 continue
@@ -1129,6 +1153,61 @@ def create_app() -> Flask:
             c.email_status = "verified"
             c.email_source = "manual"
         return jsonify({"ok": True, "email": email})
+
+    @app.route("/contact/<int:contact_id>/set-primary", methods=["POST"])
+    @_require_auth
+    def set_primary_contact(contact_id):
+        """Mark this contact as the primary recipient for its company's drafts."""
+        from src.database.session import get_session
+        from src.database.models import Contact
+        with get_session() as db:
+            c = db.get(Contact, contact_id)
+            if not c:
+                return jsonify({"error": "contacto no encontrado"}), 404
+            db.query(Contact).filter_by(company_id=c.company_id).update({"is_primary": False})
+            c.is_primary = True
+        return jsonify({"ok": True})
+
+    @app.route("/company/<int:company_id>/add-email", methods=["POST"])
+    @_require_auth
+    def add_company_email(company_id):
+        """Add a manual email address for a company (creates a minimal Contact row)."""
+        from src.database.session import get_session
+        from src.database.models import Company, Contact
+        data = request.get_json(silent=True) or {}
+        email = (data.get("email") or "").strip().lower()
+        if not email or "@" not in email or "." not in email.split("@")[-1]:
+            return jsonify({"error": "email inválido"}), 400
+        with get_session() as db:
+            company = db.get(Company, company_id)
+            if not company:
+                return jsonify({"error": "empresa no encontrada"}), 404
+            contact = Contact(
+                company_id=company_id,
+                email=email,
+                email_status="verified",
+                email_source="manual",
+                is_primary=False,
+            )
+            db.add(contact)
+            db.flush()
+            contact_id_new = contact.id
+        return jsonify({"ok": True, "contact": {"id": contact_id_new, "email": email}})
+
+    @app.route("/contact/<int:contact_id>/delete-manual", methods=["POST"])
+    @_require_auth
+    def delete_manual_contact(contact_id):
+        """Delete a manually-added contact (email_source='manual', never enriched)."""
+        from src.database.session import get_session
+        from src.database.models import Contact
+        with get_session() as db:
+            c = db.get(Contact, contact_id)
+            if not c:
+                return jsonify({"error": "contacto no encontrado"}), 404
+            if c.email_source != "manual" or c.enriched_at is not None:
+                return jsonify({"error": "solo se pueden eliminar contactos agregados manualmente"}), 400
+            db.delete(c)
+        return jsonify({"ok": True})
 
     @app.route("/run/<int:run_id>/enrich-all", methods=["POST"])
     @_require_auth
@@ -1443,7 +1522,7 @@ def create_app() -> Flask:
                 db.query(Contact, Company)
                 .join(Company, Contact.company_id == Company.id)
                 .filter(Contact.company_id.in_(company_ids))
-                .order_by(Contact.confidence_score.desc().nullslast())
+                .order_by(Contact.is_primary.desc().nullslast(), Contact.confidence_score.desc().nullslast())
                 .all()
             )
 

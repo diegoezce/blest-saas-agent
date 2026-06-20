@@ -29,7 +29,7 @@ RULES (the user's follow-up policy):
   confidence in English in real business situations (calls, emails, meetings, presentations).
 - Exactly ONE clear, low-friction call-to-action (e.g. a 15-minute call, or offering to send
   one short example). Make it easy to say yes.
-- Warm sign-off from {agent_name}.
+- Do NOT include any closing, sign-off, or signature. End the message right after the CTA.
 
 GROUNDING (breaking these ruins the message):
 - State ONLY facts present in COMPANY DATA or the offer block. Never invent clients, products,

@@ -264,14 +264,14 @@ def _run_push_phase(db) -> int:
         logger.info("Zoho push: nothing to do (no pending opportunities)")
         return 0
 
-    # Best contact per company (highest confidence, must have verified/probable email)
+    # Best contact per company: primary contact first, then highest confidence
     company_ids = [opp.company_id for opp, *_ in best_opps]
     contacts_raw = (
         db.query(Contact)
         .filter(Contact.company_id.in_(company_ids))
         .filter(Contact.email.isnot(None))
         .filter(Contact.email_status.in_(["verified", "probable"]))
-        .order_by(Contact.confidence_score.desc())
+        .order_by(Contact.is_primary.desc().nullslast(), Contact.confidence_score.desc())
         .all()
     )
     # One contact per company (best)
