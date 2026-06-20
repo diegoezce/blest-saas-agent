@@ -817,6 +817,17 @@ def create_app() -> Flask:
 
     # ── Profile Management ───────────────────────────────────────────────────
 
+    @app.route("/api/profiles", methods=["GET"])
+    @_require_auth
+    def api_profiles():
+        """Return active profiles as JSON for modals/dropdowns."""
+        from src.database.session import get_session
+        from src.database.models import Profile
+
+        with get_session() as session:
+            profiles = session.query(Profile).filter_by(active=True).order_by(Profile.name).all()
+            return jsonify({"profiles": [{"id": p.id, "name": p.name} for p in profiles]})
+
     @app.route("/profiles")
     @_require_auth
     def profile_list():
