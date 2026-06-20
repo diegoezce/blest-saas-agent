@@ -608,6 +608,19 @@
   </div>
 </div>
 
+<!-- ── Notification Modal ───────────────────────────────────────────── -->
+<div id="notification-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:400;align-items:center;justify-content:center">
+  <div class="card" style="width:100%;max-width:380px;padding:1.75rem;border-radius:12px">
+    <div style="margin-bottom:1rem">
+      <div id="notification-icon" style="font-size:2rem;text-align:center;margin-bottom:0.5rem">ℹ️</div>
+      <div id="notification-message" style="text-align:center;color:var(--text);font-size:0.95rem;line-height:1.5"></div>
+    </div>
+    <div style="display:flex;gap:0.5rem">
+      <button onclick="closeNotification()" style="flex:1;background:var(--accent);color:#0f172a;font-weight:700;border:none;padding:0.6rem;border-radius:6px;cursor:pointer;font-size:0.9rem">OK</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── Draft Modal ───────────────────────────────────────────────────── -->
 <div id="draft-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:300;align-items:center;justify-content:center">
   <div id="draft-modal-inner" class="card" style="width:100%;max-width:480px;padding:1.75rem;max-height:90vh;overflow-y:auto">
@@ -658,6 +671,27 @@
 <script>
 let _currentView = 'cards';
 let _currentSort = { column: null, direction: 'asc' };
+
+function showNotification(message, type = 'info') {
+  const modal = document.getElementById('notification-modal');
+  const msgEl = document.getElementById('notification-message');
+  const iconEl = document.getElementById('notification-icon');
+
+  const icons = {
+    'success': '✅',
+    'error': '❌',
+    'warning': '⚠️',
+    'info': 'ℹ️'
+  };
+
+  iconEl.textContent = icons[type] || icons.info;
+  msgEl.textContent = message;
+  modal.style.display = 'flex';
+}
+
+function closeNotification() {
+  document.getElementById('notification-modal').style.display = 'none';
+}
 
 function switchView(view) {
   _currentView = view;
@@ -821,12 +855,12 @@ function createDraft() {
   const draftType = document.querySelector('input[name="draft-type"]:checked').value;
 
   if (!profileId) {
-    alert('Por favor selecciona un perfil');
+    showNotification('Por favor selecciona un perfil', 'warning');
     return;
   }
 
   if (!_currentDraftCompanyId || !_currentDraftContactId) {
-    alert('Error: empresa o contacto no especificado');
+    showNotification('Error: empresa o contacto no especificado', 'error');
     return;
   }
 
@@ -844,16 +878,16 @@ function createDraft() {
     .then(r => r.json())
     .then(data => {
       if (data.error) {
-        alert('Error: ' + data.error);
+        showNotification('Error: ' + data.error, 'error');
       } else if (data.ok || data.has_existing) {
-        alert('Draft creado/actualizado exitosamente');
+        showNotification('Draft creado/actualizado exitosamente', 'success');
         closeDraftModal();
         window.location.reload();
       }
     })
     .catch(err => {
       console.error(err);
-      alert('Error al crear el draft: ' + err.message);
+      showNotification('Error al crear el draft: ' + err.message, 'error');
     });
 }
 
@@ -935,7 +969,7 @@ async function checkBounces(btn) {
   try {
     const r = await fetch('/bounces/scan');
     const d = await r.json();
-    if (d.error) { alert('Error: ' + d.error); btn.disabled = false; btn.textContent = '📭 Chequear rebotes'; return; }
+    if (d.error) { showNotification('Error: ' + d.error, 'error'); btn.disabled = false; btn.textContent = '📭 Chequear rebotes'; return; }
     _bounceScanData = d;
 
     let msg = `Mensajes revisados: ${d.checked}\n`
@@ -953,7 +987,7 @@ async function checkBounces(btn) {
     confirmBtn.textContent = 'Marcar ' + d.new_count + ' como rebotado' + (d.new_count !== 1 ? 's' : '');
     document.getElementById('bounce-modal').style.display = 'flex';
   } catch (e) {
-    alert('Error: ' + e);
+    showNotification('Error: ' + e, 'error');
     btn.disabled = false;
     btn.textContent = '📭 Chequear rebotes';
   }
@@ -976,7 +1010,7 @@ async function applyBounces() {
     document.getElementById('bounce-modal-actions').innerHTML =
       '<button onclick="location.reload()" style="flex:1;background:var(--accent);color:#0f172a;font-weight:700;border:none;padding:0.6rem;border-radius:6px;cursor:pointer;font-size:0.9rem">Actualizar página</button>';
   } catch (e) {
-    alert('Error: ' + e);
+    showNotification('Error: ' + e, 'error');
     confirmBtn.disabled = false;
   }
 }
@@ -996,7 +1030,7 @@ async function saveEmail(contactId) {
   const inp = document.getElementById('se-input-' + contactId);
   if (!inp) return;
   const email = inp.value.trim();
-  if (!email || !email.includes('@')) { alert('Email inválido'); return; }
+  if (!email || !email.includes('@')) { showNotification('Email inválido', 'warning'); return; }
   try {
     const r = await fetch('/contact/' + contactId + '/set-email', {
       method: 'POST',
@@ -1007,7 +1041,7 @@ async function saveEmail(contactId) {
     if (d.error) { alert('Error: ' + d.error); return; }
     location.reload();
   } catch (e) {
-    alert('Error: ' + e);
+    showNotification('Error: ' + e, 'error');
   }
 }
 </script>
