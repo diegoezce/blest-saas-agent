@@ -351,7 +351,7 @@
         <label style="font-size: 0.85rem; color: var(--muted); display: block; margin-bottom: 0.35rem; font-weight: 600;">Tipo de contenido</label>
         <div style="display:flex;flex-direction:column;gap:0.4rem;font-size:0.87rem">
           <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer">
-            <input type="radio" name="global-draft-type" value="existing" style="accent-color:var(--accent)" checked> Usar draft existente
+            <input type="radio" name="global-draft-type" value="use_existing" style="accent-color:var(--accent)" checked> Usar draft existente
           </label>
           <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer">
             <input type="radio" name="global-draft-type" value="ai" style="accent-color:var(--accent)"> Generar con IA
@@ -444,6 +444,46 @@
     var _currentCompanyId = null;
     var _currentCompanyData = null;
     var _editMode = false;
+    var _currentDraftCompanyId = null;
+    var _currentDraftContactId = null;
+
+    // Generic notification function (can be overridden by page-specific implementations)
+    function showNotification(message, type) {
+      type = type || 'info';
+      console.log('[' + type.toUpperCase() + '] ' + message);
+      // If page has a custom notification modal, use it; otherwise use alert
+      if (typeof _showCustomNotification === 'function') {
+        _showCustomNotification(message, type);
+      } else {
+        alert(message);
+      }
+    }
+
+    function openDraftModalFromContact(companyId, contactId) {
+      _currentDraftCompanyId = companyId;
+      _currentDraftContactId = contactId;
+      var modal = document.getElementById('global-draft-modal');
+      var profileSelect = document.getElementById('global-draft-profile');
+
+      if (profileSelect.options.length <= 1) {
+        fetch('/api/profiles')
+          .then(function(r) { return r.json(); })
+          .then(function(data) {
+            if (data && data.profiles) {
+              data.profiles.forEach(function(p) {
+                var opt = document.createElement('option');
+                opt.value = p.id;
+                opt.textContent = p.name;
+                profileSelect.appendChild(opt);
+              });
+            }
+          })
+          .catch(function(e) { console.error('Error fetching profiles:', e); });
+      }
+
+      document.querySelector('input[name="global-draft-type"][value="use_existing"]').checked = true;
+      modal.style.display = 'flex';
+    }
 
     function openCompanyModal(companyId) {
       _currentCompanyId = companyId;
@@ -694,36 +734,6 @@
     function closeCompanyModal() {
       var modal = document.getElementById('company-modal');
       modal.classList.remove('open');
-    }
-
-    var _currentDraftCompanyId = null;
-    var _currentDraftContactId = null;
-
-    function openDraftModalFromContact(companyId, contactId) {
-      _currentDraftCompanyId = companyId;
-      _currentDraftContactId = contactId;
-      var modal = document.getElementById('global-draft-modal');
-      var profileSelect = document.getElementById('global-draft-profile');
-
-      // Fetch active profiles if not already loaded
-      if (profileSelect.options.length <= 1) {
-        fetch('/api/profiles')
-          .then(function(r) { return r.json(); })
-          .then(function(data) {
-            if (data && data.profiles) {
-              data.profiles.forEach(function(p) {
-                var opt = document.createElement('option');
-                opt.value = p.id;
-                opt.textContent = p.name;
-                profileSelect.appendChild(opt);
-              });
-            }
-          })
-          .catch(function(e) { console.error('Error fetching profiles:', e); });
-      }
-
-      document.querySelector('input[name="global-draft-type"][value="existing"]').checked = true;
-      modal.style.display = 'flex';
     }
 
     function closeGlobalDraftModal() {
