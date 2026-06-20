@@ -447,6 +447,18 @@
     var _currentDraftCompanyId = null;
     var _currentDraftContactId = null;
 
+    // Generic notification function (can be overridden by page-specific implementations)
+    function showNotification(message, type) {
+      type = type || 'info';
+      console.log('[' + type.toUpperCase() + '] ' + message);
+      // If page has a custom notification modal, use it; otherwise use alert
+      if (typeof _showCustomNotification === 'function') {
+        _showCustomNotification(message, type);
+      } else {
+        alert(message);
+      }
+    }
+
     function openDraftModalFromContact(companyId, contactId) {
       _currentDraftCompanyId = companyId;
       _currentDraftContactId = contactId;

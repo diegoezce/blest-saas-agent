@@ -674,7 +674,7 @@
 let _currentView = 'cards';
 let _currentSort = { column: null, direction: 'asc' };
 
-function showNotification(message, type = 'info') {
+function _showCustomNotification(message, type = 'info') {
   const modal = document.getElementById('notification-modal');
   const msgEl = document.getElementById('notification-message');
   const iconEl = document.getElementById('notification-icon');
@@ -690,6 +690,9 @@ function showNotification(message, type = 'info') {
   msgEl.textContent = message;
   modal.style.display = 'flex';
 }
+
+// Override base.html's generic showNotification with our custom modal version
+showNotification = _showCustomNotification;
 
 function closeNotification() {
   document.getElementById('notification-modal').style.display = 'none';
