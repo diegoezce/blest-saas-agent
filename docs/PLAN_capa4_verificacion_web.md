@@ -78,6 +78,12 @@ Bright Data). No hace falta SERP API dedicada: **Tavily ya integrado cumple ese 
 - https://github.com/HasData/extract-emails-from-google-search
 - https://www.scrapingdog.com/blog/best-serp-apis/
 
-## Decisión pendiente para arrancar
+## Decisión: confirmación SMTP en v1
 
-- ¿`ENRICH_WEB_SEARCH_SMTP_CONFIRM` activado o no en v1?
+**Resolución: `ENRICH_WEB_SEARCH_SMTP_CONFIRM = false` (desactivado)**
+
+**Razonamiento:**
+- Un email publicado en el sitio oficial (LinkedIn, About Us, footer) es intrínsecamente más confiable que una conjetura `probable`.
+- Pasar cada email web hallado por SMTP verification quemaría créditos para todos los casos, no solo los problemáticos.
+- La v1 enfatiza **precisión sin overhead de costo**; si la métrica de rebotes post-web-search sube más de lo esperado en producción, iteramos en v1.1 agregando la confirmación.
+- El doble filtro (dominio válido + match de nombre) ya proporciona confianza razonable sin SMTP.
