@@ -444,6 +444,34 @@
     var _currentCompanyId = null;
     var _currentCompanyData = null;
     var _editMode = false;
+    var _currentDraftCompanyId = null;
+    var _currentDraftContactId = null;
+
+    function openDraftModalFromContact(companyId, contactId) {
+      _currentDraftCompanyId = companyId;
+      _currentDraftContactId = contactId;
+      var modal = document.getElementById('global-draft-modal');
+      var profileSelect = document.getElementById('global-draft-profile');
+
+      if (profileSelect.options.length <= 1) {
+        fetch('/api/profiles')
+          .then(function(r) { return r.json(); })
+          .then(function(data) {
+            if (data && data.profiles) {
+              data.profiles.forEach(function(p) {
+                var opt = document.createElement('option');
+                opt.value = p.id;
+                opt.textContent = p.name;
+                profileSelect.appendChild(opt);
+              });
+            }
+          })
+          .catch(function(e) { console.error('Error fetching profiles:', e); });
+      }
+
+      document.querySelector('input[name="global-draft-type"][value="use_existing"]').checked = true;
+      modal.style.display = 'flex';
+    }
 
     function openCompanyModal(companyId) {
       _currentCompanyId = companyId;
@@ -694,36 +722,6 @@
     function closeCompanyModal() {
       var modal = document.getElementById('company-modal');
       modal.classList.remove('open');
-    }
-
-    var _currentDraftCompanyId = null;
-    var _currentDraftContactId = null;
-
-    function openDraftModalFromContact(companyId, contactId) {
-      _currentDraftCompanyId = companyId;
-      _currentDraftContactId = contactId;
-      var modal = document.getElementById('global-draft-modal');
-      var profileSelect = document.getElementById('global-draft-profile');
-
-      // Fetch active profiles if not already loaded
-      if (profileSelect.options.length <= 1) {
-        fetch('/api/profiles')
-          .then(function(r) { return r.json(); })
-          .then(function(data) {
-            if (data && data.profiles) {
-              data.profiles.forEach(function(p) {
-                var opt = document.createElement('option');
-                opt.value = p.id;
-                opt.textContent = p.name;
-                profileSelect.appendChild(opt);
-              });
-            }
-          })
-          .catch(function(e) { console.error('Error fetching profiles:', e); });
-      }
-
-      document.querySelector('input[name="global-draft-type"][value="use_existing"]').checked = true;
-      modal.style.display = 'flex';
     }
 
     function closeGlobalDraftModal() {
