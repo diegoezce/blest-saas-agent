@@ -201,7 +201,8 @@
   }
   .cr-table td a { color: var(--accent); text-decoration: none; }
   .cr-table td a:hover { text-decoration: underline; }
-  .cr-table .cr-company-name { font-weight: 600; }
+  .cr-table .cr-company-name { font-weight: 600; cursor: pointer; }
+  .cr-table .cr-company-name:hover { color: var(--accent); }
   .cr-table .cr-status-tag {
     display: inline-block; padding: 0.2rem 0.4rem; border-radius: 4px;
     font-size: 0.75rem; font-weight: 600;
@@ -209,6 +210,14 @@
   .cr-table .cr-status-tag.bounced { background: #7f1d1d; color: #fecaca; }
   .cr-table .cr-status-tag.success { background: #15803d; color: #dcfce7; }
   .cr-table .cr-status-tag.pending { background: #92400e; color: #fef3c7; }
+  .cr-btn-feedback {
+    padding: 0.3rem 0.6rem; font-size: 0.75rem; border-radius: 4px;
+    background: rgba(56,189,248,0.15); color: var(--accent); border: 1px solid rgba(56,189,248,0.3);
+    cursor: pointer; font-weight: 600; transition: all 0.12s;
+  }
+  .cr-btn-feedback:hover {
+    background: rgba(56,189,248,0.25); border-color: var(--accent);
+  }
 
   @media (max-width: 600px) {
     .lead-grid { grid-template-columns: 1fr; }
@@ -461,7 +470,10 @@
           data-company-name="{{ d.name }}"
           data-company-email="{{ d.contacts[0].email if d.contacts else '' }}"
           data-company-id="{{ d.id }}">
-          <td class="cr-company-name" onclick="openFeedbackModal({{ d.id }}, '{{ d.name|replace("'", "\\'")|e }}')">{{ d.name }}</td>
+          <td style="display:flex;align-items:center;gap:0.5rem">
+            <span class="cr-company-name" onclick="openCompanyModal({{ d.id }})">{{ d.name }}</span>
+            <button class="cr-btn-feedback" onclick="openFeedbackModal({{ d.id }}, '{{ d.name|replace("'", "\\'")|e }}')">💬</button>
+          </td>
           <td>{{ profile_name }}</td>
           <td>{{ d.location }}</td>
           <td>{{ d.contacted_at }}</td>
