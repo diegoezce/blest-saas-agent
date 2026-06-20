@@ -668,6 +668,8 @@
   </div>
 </div>
 
+{% endblock %}
+
 <script>
 let _currentView = 'cards';
 let _currentSort = { column: null, direction: 'asc' };
@@ -834,8 +836,6 @@ document.getElementById('feedback-modal').addEventListener('click', function(e) 
   if (e.target === this) closeFeedbackModal();
 });
 
-let _currentDraftCompanyId = null;
-let _currentDraftContactId = null;
 function openDraftModal(companyId, companyName) {
   _currentDraftCompanyId = companyId;
   // Get contact ID from the clicked card
@@ -1048,5 +1048,3 @@ async function saveEmail(contactId) {
   }
 }
 </script>
-
-{% endblock %}
