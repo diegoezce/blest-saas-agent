@@ -1780,9 +1780,10 @@ def create_app() -> Flask:
             )
 
             if not pairs:
+                profiles = db.query(Profile).filter_by(active=True).order_by(Profile.name).all()
                 return render_template(
                     "contacts_report.html",
-                    by_profile={}, profiles_order=[], total=0, needs_follow_up=0, overdue=0,
+                    by_profile={}, profiles_order=[], profiles=profiles, total=0, needs_follow_up=0, overdue=0,
                     bounced_count=0, success_count=0,
                 )
 
@@ -1954,10 +1955,14 @@ def create_app() -> Flask:
             bounced_count = sum(1 for d in companies_data if d["has_bounced"])
             success_count = sum(1 for d in companies_data if d["is_success"])
 
+        # Fetch all profiles for the draft modal
+        profiles = db.query(Profile).filter_by(active=True).order_by(Profile.name).all()
+
         return render_template(
             "contacts_report.html",
             by_profile=by_profile,
             profiles_order=profiles_order,
+            profiles=profiles,
             total=total,
             needs_follow_up=needs_follow_up,
             overdue=overdue,

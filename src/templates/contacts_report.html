@@ -295,6 +295,11 @@
       onclick="openFeedbackModal({{ d.id }}, '{{ d.name|replace("'", "\\'")|e }}')">
       💬 Feedback
     </button>
+    <button class="btn-action"
+      onclick="openDraftModal({{ d.id }}, '{{ d.name|replace("'", "\\'")|e }}')"
+      style="color:var(--accent);border-color:rgba(56,189,248,0.3)">
+      ✉️ Draft
+    </button>
     <form method="POST" action="/company/{{ d.id }}/toggle-contact" style="flex:1;display:contents">
       <button type="submit" class="btn-action btn-unmark"
         onclick="return confirm('¿Desmarcar {{ d.name|replace("'","\\'")|e }} como contactada?')">
@@ -601,6 +606,53 @@
   </div>
 </div>
 
+<!-- ── Draft Modal ───────────────────────────────────────────────────── -->
+<div id="draft-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:300;align-items:center;justify-content:center">
+  <div id="draft-modal-inner" class="card" style="width:100%;max-width:480px;padding:1.75rem;max-height:90vh;overflow-y:auto">
+    <div class="flex items-center justify-between" style="margin-bottom:1.25rem">
+      <h2 style="font-size:1.15rem;font-weight:700">Crear Draft</h2>
+      <button onclick="closeDraftModal()" style="background:none;border:none;color:var(--muted);font-size:1.3rem;cursor:pointer;padding:0.25rem">&times;</button>
+    </div>
+
+    <div style="margin-bottom:1.25rem">
+      <label style="font-size:0.85rem;color:var(--muted);display:block;margin-bottom:0.35rem;font-weight:600">Perfil</label>
+      <select id="draft-profile-select"
+        style="width:100%;padding:0.6rem 0.75rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.9rem">
+        <option value="">— Seleccionar perfil —</option>
+        {% for profile in profiles %}
+        <option value="{{ profile.id }}">{{ profile.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div style="margin-bottom:1.25rem">
+      <label style="font-size:0.85rem;color:var(--muted);display:block;margin-bottom:0.35rem;font-weight:600">Tipo de contenido</label>
+      <div style="display:flex;flex-direction:column;gap:0.4rem;font-size:0.87rem">
+        <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer">
+          <input type="radio" name="draft-type" value="existing" style="accent-color:var(--accent)" checked> Usar draft existente
+        </label>
+        <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer">
+          <input type="radio" name="draft-type" value="ai" style="accent-color:var(--accent)"> Generar con IA
+        </label>
+        <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer">
+          <input type="radio" name="draft-type" value="empty" style="accent-color:var(--accent)"> Vacío
+        </label>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:0.75rem;border-top:1px solid var(--border);padding-top:1rem">
+      <button type="button" onclick="createDraft()"
+        style="flex:1;background:#38bdf8;color:#0f172a;font-weight:700;border:none;padding:0.6rem;border-radius:6px;cursor:pointer;font-size:0.9rem">
+        Crear
+      </button>
+      <button type="button" onclick="closeDraftModal()"
+        style="flex:1;background:var(--surface-hover);color:var(--text);border:1px solid var(--border);padding:0.6rem;border-radius:6px;cursor:pointer;font-size:0.9rem">
+        Cancelar
+      </button>
+    </div>
+  </div>
+</div>
+
 <script>
 let _currentView = 'cards';
 let _currentSort = { column: null, direction: 'asc' };
@@ -742,6 +794,72 @@ function closeFeedbackModal() {
 document.getElementById('feedback-modal').addEventListener('click', function(e) {
   if (e.target === this) closeFeedbackModal();
 });
+
+let _currentDraftCompanyId = null;
+function openDraftModal(companyId, companyName) {
+  _currentDraftCompanyId = companyId;
+  document.getElementById('draft-modal').style.display = 'flex';
+  document.getElementById('draft-profile-select').value = '';
+  document.querySelector('input[name="draft-type"][value="existing"]').checked = true;
+}
+function closeDraftModal() {
+  document.getElementById('draft-modal').style.display = 'none';
+  _currentDraftCompanyId = null;
+}
+document.getElementById('draft-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeDraftModal();
+});
+
+function createDraft() {
+  const profileId = document.getElementById('draft-profile-select').value;
+  const draftType = document.querySelector('input[name="draft-type"]:checked').value;
+
+  if (!profileId) {
+    alert('Por favor selecciona un perfil');
+    return;
+  }
+
+  if (!_currentDraftCompanyId) {
+    alert('Error: empresa no especificada');
+    return;
+  }
+
+  // Fetch contact for the company (get first contact)
+  fetch('/company/' + _currentDraftCompanyId)
+    .then(r => r.json())
+    .then(data => {
+      if (!data || !data.contacts || data.contacts.length === 0) {
+        alert('La empresa no tiene contactos');
+        return;
+      }
+      const contact = data.contacts[0];
+      const payload = {
+        contact_id: contact.id,
+        action: draftType,
+        profile_id: profileId
+      };
+
+      return fetch('/company/' + _currentDraftCompanyId + '/create-manual-draft', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload)
+      });
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.error) {
+        alert('Error: ' + data.error);
+      } else if (data.ok) {
+        alert('Draft creado exitosamente');
+        closeDraftModal();
+        window.location.reload();
+      }
+    })
+    .catch(err => {
+      console.error(err);
+      alert('Error al crear el draft');
+    });
+}
 
 function applyFilter(filter, btn) {
   // Highlight active pill
