@@ -1194,6 +1194,149 @@ def create_app() -> Flask:
             contact_id_new = contact.id
         return jsonify({"ok": True, "contact": {"id": contact_id_new, "email": email}})
 
+    @app.route("/company/<int:company_id>/create-manual-draft", methods=["POST"])
+    @_require_auth
+    def create_manual_draft(company_id):
+        """Create a Zoho draft for a manually-added email using an existing outreach draft or IA."""
+        from src.database.session import get_session
+        from src.database.models import Company, Contact, Opportunity
+        from src.integrations.zoho_mail import create_draft, is_configured
+
+        if not is_configured():
+            return jsonify({"error": "Zoho Mail no configurado"}), 503
+
+        data = request.get_json(silent=True) or {}
+        contact_id = data.get("contact_id")
+        action = data.get("action")  # "use_existing", "empty", "ai", "manual"
+        manual_content = data.get("content")
+        manual_subject = data.get("subject")
+
+        if not contact_id:
+            return jsonify({"error": "contact_id requerido"}), 400
+
+        with get_session() as db:
+            company = db.get(Company, company_id)
+            if not company:
+                return jsonify({"error": "Empresa no encontrada"}), 404
+
+            contact = db.get(Contact, contact_id)
+            if not contact or not contact.email:
+                return jsonify({"error": "Contacto sin email"}), 404
+
+            opp = (
+                db.query(Opportunity)
+                .filter_by(company_id=company_id)
+                .filter(Opportunity.outreach_draft.isnot(None))
+                .filter(Opportunity.outreach_subject.isnot(None))
+                .first()
+            )
+
+            # If no action specified, check if existing draft available
+            if not action:
+                if opp:
+                    return jsonify({"ok": True, "has_existing": True, "subject": opp.outreach_subject, "body": opp.outreach_draft})
+                else:
+                    return jsonify({"ok": False, "no_draft": True, "company_name": company.name})
+
+            # Handle requested action
+            subject = None
+            body = None
+
+            if action == "use_existing":
+                if not opp:
+                    return jsonify({"error": "No hay draft existente"}), 404
+                subject = opp.outreach_subject
+                body = opp.outreach_draft
+
+            elif action == "empty":
+                subject = f"Outreach — {company.name}"
+                body = ""
+
+            elif action == "manual":
+                if not manual_subject or not manual_content:
+                    return jsonify({"error": "Asunto y contenido requeridos"}), 400
+                subject = manual_subject
+                body = manual_content
+
+            elif action == "ai":
+                from src.database.models import Profile
+                from src.config import get_settings
+                import json
+                import anthropic
+                import instructor
+                from src.prompts.outreach import build_outreach_prompt
+                from src.schemas.outputs import CompanyOutreach
+
+                profile = db.query(Profile).filter_by(active=True).first()
+                po = {
+                    "agent_company_name": profile.agent_company_name if profile else "Blest",
+                    "agent_description": profile.agent_description if profile else "",
+                    "search_focus_terms": profile.search_focus_terms if profile else "",
+                    "outreach_instructions": profile.outreach_instructions if profile else "",
+                    "outreach_tone": profile.outreach_tone if profile else "warm",
+                    "outreach_language": profile.outreach_language if profile else "es",
+                }
+
+                payload = {
+                    "company_name": company.name,
+                    "website": company.website_url,
+                    "industry": company.industry,
+                    "size": company.size_estimate,
+                    "location": company.location,
+                    "description": company.description,
+                    "signals": [],
+                }
+
+                try:
+                    cfg = get_settings()
+                    client = instructor.from_anthropic(anthropic.Anthropic(api_key=cfg.anthropic_api_key))
+
+                    custom = (po.get("outreach_instructions") or "").strip()
+                    custom_block = (
+                        f"\nWHAT {po['agent_company_name'].upper()} OFFERS & HOW TO PITCH "
+                        f"(use only what is relevant; never contradict COMPANY DATA):\n{custom}\n"
+                        if custom else ""
+                    )
+
+                    result = client.messages.create(
+                        model=cfg.outreach_model,
+                        max_tokens=1024,
+                        messages=[{
+                            "role": "user",
+                            "content": build_outreach_prompt(
+                                agent_name=po["agent_company_name"],
+                                agent_description=po["agent_description"],
+                                outreach_service_description=po.get("search_focus_terms") or "improve their business",
+                                outreach_tone=po.get("outreach_tone", "warm"),
+                                company_and_insight_json=json.dumps(payload, ensure_ascii=False, indent=2),
+                                custom_instructions_block=custom_block,
+                                outreach_language=po.get("outreach_language", "es"),
+                            ),
+                        }],
+                        response_model=CompanyOutreach,
+                    )
+                    if result.drafts:
+                        subject = result.drafts[0].subject_line or f"Outreach — {company.name}"
+                        body = result.drafts[0].body or ""
+                    else:
+                        subject = f"Outreach — {company.name}"
+                        body = ""
+                except Exception as e:
+                    logger.warning(f"IA draft generation failed: {e}")
+                    return jsonify({"error": f"Error generando con IA: {str(e)}"}), 500
+
+            if not subject or body is None:
+                return jsonify({"error": "No se pudo determinar asunto/contenido"}), 400
+
+            try:
+                create_draft(to_address=contact.email, subject=subject, content=body)
+                from src.tools.db_tools import mark_company_contacted
+                mark_company_contacted(db, company_id, method="email")
+                return jsonify({"ok": True})
+            except Exception as e:
+                logger.warning(f"Manual draft creation failed for contact {contact_id}: {e}")
+                return jsonify({"error": str(e)}), 500
+
     @app.route("/contact/<int:contact_id>/delete-manual", methods=["POST"])
     @_require_auth
     def delete_manual_contact(contact_id):
@@ -1908,6 +2051,7 @@ def create_app() -> Flask:
                 .all()
             )
             drafted = [{
+                "company_id": opp.company_id,
                 "company": company.name or "",
                 "display_url": _disp_url(company),
                 "profile_name": profile.name if profile else "Default",
@@ -1926,6 +2070,7 @@ def create_app() -> Flask:
                 .all()
             )
             replied = [{
+                "company_id": company.id,
                 "contact_id": contact.id,
                 "company": company.name or "",
                 "contact_name": contact.name or "",
