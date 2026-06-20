@@ -644,7 +644,7 @@
       <label style="font-size:0.85rem;color:var(--muted);display:block;margin-bottom:0.35rem;font-weight:600">Tipo de contenido</label>
       <div style="display:flex;flex-direction:column;gap:0.4rem;font-size:0.87rem">
         <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer">
-          <input type="radio" name="draft-type" value="existing" style="accent-color:var(--accent)" checked> Usar draft existente
+          <input type="radio" name="draft-type" value="use_existing" style="accent-color:var(--accent)" checked> Usar draft existente
         </label>
         <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer">
           <input type="radio" name="draft-type" value="ai" style="accent-color:var(--accent)"> Generar con IA
@@ -840,7 +840,7 @@ function openDraftModal(companyId, companyName) {
   _currentDraftContactId = card ? card.dataset.firstContactId : null;
   document.getElementById('draft-modal').style.display = 'flex';
   document.getElementById('draft-profile-select').value = '';
-  document.querySelector('input[name="draft-type"][value="existing"]').checked = true;
+  document.querySelector('input[name="draft-type"][value="use_existing"]').checked = true;
 }
 function closeDraftModal() {
   document.getElementById('draft-modal').style.display = 'none';

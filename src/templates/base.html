@@ -351,7 +351,7 @@
         <label style="font-size: 0.85rem; color: var(--muted); display: block; margin-bottom: 0.35rem; font-weight: 600;">Tipo de contenido</label>
         <div style="display:flex;flex-direction:column;gap:0.4rem;font-size:0.87rem">
           <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer">
-            <input type="radio" name="global-draft-type" value="existing" style="accent-color:var(--accent)" checked> Usar draft existente
+            <input type="radio" name="global-draft-type" value="use_existing" style="accent-color:var(--accent)" checked> Usar draft existente
           </label>
           <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer">
             <input type="radio" name="global-draft-type" value="ai" style="accent-color:var(--accent)"> Generar con IA
@@ -722,7 +722,7 @@
           .catch(function(e) { console.error('Error fetching profiles:', e); });
       }
 
-      document.querySelector('input[name="global-draft-type"][value="existing"]').checked = true;
+      document.querySelector('input[name="global-draft-type"][value="use_existing"]').checked = true;
       modal.style.display = 'flex';
     }
 
