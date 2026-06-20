@@ -240,18 +240,51 @@ estas fases en orden; también hay equivalentes manuales en la web/CLI.
 
 ## 7. Cuadro de decisiones (resumen)
 
-| # | Punto de decisión | Opciones | Efecto |
-|---|---|---|---|
-| D1 | ¿Perfil activo? | sí / no | Entra o no a la agenda |
-| D2 | ¿Empresa ya conocida / contactada? | sí / no | Se descarta (leads neto-nuevos) |
-| D3 | Score de la empresa | ≥70 / ≥40 / <40 | quick_win / strategic / low_priority |
-| D4 | ¿Contacto con nombre? | sí / no | Sin nombre se descarta |
-| D5 | ¿Empresa tiene dominio? | sí / resolver / no | Define si el enriquecimiento puede seguir |
-| D6 | Email encontrado | nominal verif. / genérico / conjetura / nada | Precedencia de qué dirección se usa |
-| D7 | ¿Email confiable? | verified / probable / not_found | Elegible o no para envío |
-| D8 | ¿Ya contactada/empujada? | sí / no | Evita outreach duplicado |
-| D9 | ¿Llegó correo a la casilla? | rebote / respuesta / OOO / nada | Recuperar / cerrar / pausar / seguir |
-| D10 | ¿Cuántos follow-ups van? | 0 / 1 / 2 | Define próximo toque o fin de cadencia |
+Columna **Quién decide**: `🧠 IA` = decisión de juicio tomada por un modelo · `⚙️ Reglas` =
+lógica determinística (umbrales/condiciones) · `🌐 API ext.` = veredicto de un servicio externo
+(verificador SMTP / Hunter / casilla de Zoho) · `👤 Humano` = decisión de la persona.
+
+| # | Punto de decisión | Opciones | Quién decide | Efecto |
+|---|---|---|---|---|
+| D1 | ¿Perfil activo? | sí / no | 👤 Humano + ⚙️ Reglas | Entra o no a la agenda |
+| D2 | ¿Empresa ya conocida / contactada? | sí / no | ⚙️ Reglas | Se descarta (leads neto-nuevos) |
+| D3 | Score de la empresa | ≥70 / ≥40 / <40 | ⚙️ Reglas | quick_win / strategic / low_priority |
+| D4 | ¿Contacto con nombre? | sí / no | ⚙️ Reglas | Sin nombre se descarta |
+| D5 | ¿Empresa tiene dominio? | sí / resolver / no | ⚙️ Reglas + 🌐 búsqueda web | Define si el enriquecimiento puede seguir |
+| D6 | Email encontrado | nominal verif. / genérico / conjetura / nada | ⚙️ Reglas (precedencia) | Qué dirección se usa |
+| D7 | ¿Email confiable? | verified / probable / not_found | 🌐 API ext. → ⚙️ Reglas | Elegible o no para envío |
+| D8 | ¿Ya contactada/empujada? | sí / no | ⚙️ Reglas | Evita outreach duplicado |
+| D9 | ¿Llegó correo a la casilla? | rebote / respuesta / OOO / nada | 🌐 casilla + ⚙️ Reglas (asunto/fecha) | Recuperar / cerrar / pausar / seguir |
+| D10 | ¿Cuántos follow-ups van? | 0 / 1 / 2 | ⚙️ Reglas (cadencia) | Define próximo toque o fin de cadencia |
+
+> **Observación clave de proceso:** **ninguna de las decisiones de bifurcación (D1–D10) la toma
+> la IA.** Todos los "gates" del flujo son por reglas, umbrales o veredictos de APIs externas. La
+> IA no decide a quién contactar ni si un lead avanza — eso lo hace lógica determinística.
+
+---
+
+## 7-bis. Dónde decide la IA (vs. reglas)
+
+La IA **no actúa como portero del flujo**; actúa como **generador y extractor** dentro de algunas
+etapas. Son decisiones de *contenido/selección*, siempre acotadas por reglas posteriores.
+
+| Etapa | ¿Usa IA? | Modelo | Qué "decide" la IA | Qué la acota después |
+|---|---|---|---|---|
+| Generar consultas de búsqueda | 🧠 **Sí** | Haiku | Qué términos/ángulos de búsqueda generar a partir del perfil | Las consultas solo alimentan la búsqueda web |
+| Extraer empresas de resultados | 🧠 **Sí** | Haiku | Qué empresas candidatas reconocer en el texto de resultados | Dedup + filtro "neto-nuevos" (D2) por reglas |
+| Puntuar oportunidades | ⚙️ No | — | (Score 100% por reglas, sin IA) | — |
+| Buscar contactos | 🧠 **Sí** | Haiku | Qué personas con nombre/rol son decisores según los `target_roles` | Se descartan sin-nombre (D4) por reglas |
+| Insights | ⏸ Desactivado | — | (No corre) | — |
+| Redactar outreach | 🧠 **Sí** | Outreach (Sonnet por defecto) | El ángulo/gancho y la redacción del email | **Reglas de veracidad** + forma fija del mensaje |
+| Armar reporte / Persistir | ⚙️ No | — | (Sin IA) | — |
+| Enriquecimiento (capas 0–3) | ⚙️ No | — | Scraping, patrones, SMTP y Hunter son reglas/APIs, **sin IA** | Precedencia de email (D6) por reglas |
+| Detección rebote/respuesta/OOO | ⚙️ No | — | Match por remitente/asunto/fecha, **sin IA** | — |
+| Redactar follow-up | 🧠 **Sí** | Outreach (Sonnet) / Haiku | La redacción del "Re:" | Cadencia (D10) y elegibilidad por reglas |
+
+**Lectura de automatización:** la IA toca **4 puntos** del flujo (generar consultas, extraer
+empresas, identificar contactos, redactar mensajes). Todo lo demás —incluyendo **todas las
+decisiones de avanzar/descartar y el email**— es determinístico. Esto es deliberado: contiene el
+costo de IA (~$0.12 por corrida) y mantiene predecible el comportamiento del embudo.
 
 ---
 
@@ -285,6 +318,127 @@ DESCUBIERTO ─► PUNTUADO ─► CON CONTACTO ─► CON BORRADOR ─► ENRIQ
                                      ├─► REBOTÓ ─► (recuperación) ─► re-enriquecido ─► reintento
                                      ├─► RESPONDIÓ ─► CERRADO (fuera de cadencia)
                                      └─► SIN RESPUESTA ─► FOLLOW-UP 1 ─► FOLLOW-UP 2 ─► fin de cadencia
+```
+
+---
+
+## 10. Versión visual (diagramas)
+
+> Estos diagramas se **renderizan automáticamente en GitHub** (formato Mermaid).
+> Código de color: 🟦 **IA** · ⬜ **Reglas** · 🟨 **API/servicio externo** · 🟩 **Humano** · 🟥 **estado de salida**.
+
+### 10.1 Flujo de punta a punta
+
+```mermaid
+flowchart TD
+    subgraph CONFIG[" "]
+        P["👤 Perfil de producto<br/>quién, dónde, tono, qué ofrece"]:::human
+    end
+
+    P --> TRIG{"Disparador"}:::rule
+    TRIG -->|Agenda diaria| PIPE
+    TRIG -->|Quick Run| PIPE
+    TRIG -->|Trigger manual| PIPE
+
+    subgraph PIPE["PIPELINE DE DESCUBRIMIENTO"]
+        direction TB
+        Q["🧠 Generar consultas"]:::ai --> W["🌐 Búsqueda web"]:::ext
+        W --> EX["🧠 Extraer empresas"]:::ai
+        EX --> D2{"¿Ya conocida<br/>o contactada?"}:::rule
+        D2 -->|Sí| DROP["🟥 Descartada"]:::out
+        D2 -->|No| SC["⚙️ Puntuar (reglas)"]:::rule
+        SC --> D3{"Score"}:::rule
+        D3 -->|≥70| QW["quick_win"]:::rule
+        D3 -->|≥40| ST["strategic"]:::rule
+        D3 -->|<40| LP["low_priority"]:::rule
+        QW --> CT
+        ST --> CT
+        LP --> CT
+        CT["🧠 Buscar contactos"]:::ai --> D4{"¿Con nombre?"}:::rule
+        D4 -->|No| DROP2["🟥 Descartado"]:::out
+        D4 -->|Sí| OUT["🧠 Redactar outreach<br/>(reglas de veracidad)"]:::ai
+        OUT --> PER["⚙️ Persistir + dedup"]:::rule
+    end
+
+    PER --> ENR
+
+    subgraph ENR["ENRIQUECIMIENTO (sin IA)"]
+        direction TB
+        D5{"¿Tiene dominio?"}:::rule -->|No| RES["🌐 Resolver dominio"]:::ext
+        D5 -->|Sí| L1
+        RES --> L1["⚙️ Capa1 scraping"]:::rule
+        L1 --> L2["🌐 Capa2 patrón + SMTP"]:::ext
+        L2 --> L3["🌐 Capa3 Hunter"]:::ext
+        L3 --> D6{"Email que gana<br/>(precedencia)"}:::rule
+    end
+
+    D6 --> D7{"¿Email confiable?<br/>verified/probable"}:::rule
+    D7 -->|No| HOLD["🟥 Queda en base,<br/>no se envía"]:::out
+    D7 -->|Sí| D8{"¿Ya contactada<br/>o empujada?"}:::rule
+    D8 -->|Sí| SKIP["🟥 Se saltea<br/>(no duplica)"]:::out
+    D8 -->|No| PUSH["🌐 Push borrador a Zoho<br/>marca contactado"]:::ext
+
+    PUSH --> POST
+
+    subgraph POST["POST-ENVÍO (lee la casilla)"]
+        direction TB
+        D9{"¿Llegó correo<br/>a la casilla?"}:::ext
+        D9 -->|Rebote| REC["⚙️ Recuperación<br/>blocklist + re-enriquecer"]:::rule
+        D9 -->|Respuesta| CLOSE["🟥 Cerrado<br/>(fuera de cadencia)"]:::out
+        D9 -->|OOO| OOO["⚙️ Confirma entrega<br/>+ reinicia reloj"]:::rule
+        D9 -->|Nada| D10{"¿Follow-ups?"}:::rule
+        D10 -->|0 → 1 → 2| FUP["🧠 Redactar follow-up<br/>+ push Re:"]:::ai
+        D10 -->|"= 2"| END["🟥 Fin de cadencia"]:::out
+    end
+
+    REC -.re-enriquecer.-> ENR
+    OOO -.reinicia.-> D10
+    FUP -.próximo toque.-> D9
+
+    classDef ai fill:#1f6feb,stroke:#0d2a66,color:#fff;
+    classDef rule fill:#f6f8fa,stroke:#57606a,color:#24292f;
+    classDef ext fill:#fff8c5,stroke:#9a6700,color:#24292f;
+    classDef human fill:#dafbe1,stroke:#1a7f37,color:#24292f;
+    classDef out fill:#ffebe9,stroke:#cf222e,color:#24292f;
+```
+
+### 10.2 Dónde decide la IA (mapa de calor del flujo)
+
+```mermaid
+flowchart LR
+    A["Generar consultas"]:::ai --> B["Extraer empresas"]:::ai --> C["Puntuar"]:::rule --> D["Buscar contactos"]:::ai --> E["Redactar outreach"]:::ai --> F["Persistir"]:::rule --> G["Enriquecer email"]:::rule --> H["Push Zoho"]:::ext --> I["Rebote/Respuesta/OOO"]:::rule --> J["Redactar follow-up"]:::ai
+
+    classDef ai fill:#1f6feb,stroke:#0d2a66,color:#fff;
+    classDef rule fill:#f6f8fa,stroke:#57606a,color:#24292f;
+    classDef ext fill:#fff8c5,stroke:#9a6700,color:#24292f;
+```
+
+🟦 = IA (Haiku/Sonnet) · ⬜ = Reglas · 🟨 = API externa.
+**La IA aparece en 4 cajas (generar consultas, extraer empresas, buscar contactos, redactar
+mensajes). Las decisiones de avanzar/descartar y el email nunca son IA.**
+
+### 10.3 Ciclo de vida de un lead (estados)
+
+```mermaid
+stateDiagram-v2
+    [*] --> Descubierto
+    Descubierto --> Puntuado
+    Puntuado --> ConContacto
+    ConContacto --> ConBorrador
+    ConBorrador --> Enriquecido
+    Enriquecido --> EnBase: email no confiable
+    Enriquecido --> Contactado: email confiable
+    Contactado --> Rebotado: rebote
+    Contactado --> Cerrado: respondió
+    Contactado --> Followup1: sin respuesta
+    Rebotado --> Enriquecido: recuperación
+    Followup1 --> Followup2
+    Followup1 --> Cerrado: respondió
+    Followup2 --> FinCadencia
+    Followup2 --> Cerrado: respondió
+    Cerrado --> [*]
+    FinCadencia --> [*]
+    EnBase --> [*]
 ```
 
 ---
