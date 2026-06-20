@@ -413,7 +413,8 @@
       data-followup="true"
       data-success="{{ 'true' if d.is_success else 'false' }}"
       data-company-name="{{ d.name }}"
-      data-company-email="{{ d.contacts[0].email if d.contacts else '' }}">
+      data-company-email="{{ d.contacts[0].email if d.contacts else '' }}"
+      data-first-contact-id="{{ d.contacts[0].id if d.contacts else '' }}">
       {{ _card_body(d) }}
     </div>
     {% endfor %}
@@ -431,7 +432,8 @@
       data-followup="false"
       data-success="{{ 'true' if d.is_success else 'false' }}"
       data-company-name="{{ d.name }}"
-      data-company-email="{{ d.contacts[0].email if d.contacts else '' }}">
+      data-company-email="{{ d.contacts[0].email if d.contacts else '' }}"
+      data-first-contact-id="{{ d.contacts[0].id if d.contacts else '' }}">
       {{ _card_body(d) }}
     </div>
     {% endfor %}
@@ -796,8 +798,12 @@ document.getElementById('feedback-modal').addEventListener('click', function(e) 
 });
 
 let _currentDraftCompanyId = null;
+let _currentDraftContactId = null;
 function openDraftModal(companyId, companyName) {
   _currentDraftCompanyId = companyId;
+  // Get contact ID from the clicked card
+  const card = event.target.closest('.lead-card') || event.target.closest('[data-company-name]');
+  _currentDraftContactId = card ? card.dataset.firstContactId : null;
   document.getElementById('draft-modal').style.display = 'flex';
   document.getElementById('draft-profile-select').value = '';
   document.querySelector('input[name="draft-type"][value="existing"]').checked = true;
@@ -819,45 +825,35 @@ function createDraft() {
     return;
   }
 
-  if (!_currentDraftCompanyId) {
-    alert('Error: empresa no especificada');
+  if (!_currentDraftCompanyId || !_currentDraftContactId) {
+    alert('Error: empresa o contacto no especificado');
     return;
   }
 
-  // Fetch contact for the company (get first contact)
-  fetch('/company/' + _currentDraftCompanyId)
-    .then(r => r.json())
-    .then(data => {
-      if (!data || !data.contacts || data.contacts.length === 0) {
-        alert('La empresa no tiene contactos');
-        return;
-      }
-      const contact = data.contacts[0];
-      const payload = {
-        contact_id: contact.id,
-        action: draftType,
-        profile_id: profileId
-      };
+  const payload = {
+    contact_id: _currentDraftContactId,
+    action: draftType,
+    profile_id: profileId
+  };
 
-      return fetch('/company/' + _currentDraftCompanyId + '/create-manual-draft', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(payload)
-      });
-    })
+  fetch('/company/' + _currentDraftCompanyId + '/create-manual-draft', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload)
+  })
     .then(r => r.json())
     .then(data => {
       if (data.error) {
         alert('Error: ' + data.error);
-      } else if (data.ok) {
-        alert('Draft creado exitosamente');
+      } else if (data.ok || data.has_existing) {
+        alert('Draft creado/actualizado exitosamente');
         closeDraftModal();
         window.location.reload();
       }
     })
     .catch(err => {
       console.error(err);
-      alert('Error al crear el draft');
+      alert('Error al crear el draft: ' + err.message);
     });
 }
 
