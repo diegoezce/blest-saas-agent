@@ -2,22 +2,6 @@
 {% block title %}Contactados — Blest Lead Discovery{% endblock %}
 {% block content %}
 
-<script>
-// Declare functions early so onclick handlers can find them
-// Full implementations are at the end of the page
-function switchView(view) {}
-function applyFilter(filter, btn) {}
-function applySearch() {}
-function openDraftModal(companyId, companyName) {}
-function closeDraftModal() {}
-function checkBounces(btn) {}
-function openFeedbackModal(companyId, companyName) {}
-function closeFeedbackModal() {}
-function toggleSetEmail(contactId) {}
-function saveEmail(contactId) {}
-function openCompanyModal(companyId) {}
-</script>
-
 <style>
   .cr-stats { display: flex; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
   .cr-stat {
@@ -684,8 +668,6 @@ function openCompanyModal(companyId) {}
   </div>
 </div>
 
-{% endblock %}
-
 <script>
 let _currentView = 'cards';
 let _currentSort = { column: null, direction: 'asc' };
@@ -1064,3 +1046,5 @@ async function saveEmail(contactId) {
   }
 }
 </script>
+
+{% endblock %}
