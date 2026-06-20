@@ -459,8 +459,9 @@
           data-success="{{ 'true' if d.is_success else 'false' }}"
           data-followup-needed="{{ 'true' if d.needs_followup else 'false' }}"
           data-company-name="{{ d.name }}"
-          data-company-email="{{ d.contacts[0].email if d.contacts else '' }}">
-          <td class="cr-company-name" onclick="openCompanyModal({{ d.id }})">{{ d.name }}</td>
+          data-company-email="{{ d.contacts[0].email if d.contacts else '' }}"
+          data-company-id="{{ d.id }}">
+          <td class="cr-company-name" onclick="openFeedbackModal({{ d.id }}, '{{ d.name|replace("'", "\\'")|e }}')">{{ d.name }}</td>
           <td>{{ profile_name }}</td>
           <td>{{ d.location }}</td>
           <td>{{ d.contacted_at }}</td>
@@ -615,14 +616,23 @@ function switchView(view) {
 
 function applySearch() {
   const query = document.getElementById('cr-search-input').value.toLowerCase().trim();
+  const activeFilter = document.querySelector('.cr-filter.active');
+  const filter = activeFilter ? activeFilter.dataset.filter : 'all';
 
   if (_currentView === 'cards') {
     // Filter cards view
     document.querySelectorAll('.lead-card').forEach(card => {
       const companyName = (card.dataset.companyName || '').toLowerCase();
       const companyEmail = (card.dataset.companyEmail || '').toLowerCase();
-      const matches = companyName.includes(query) || companyEmail.includes(query) || query === '';
-      card.style.display = matches ? '' : 'none';
+      const matchesSearch = companyName.includes(query) || companyEmail.includes(query) || query === '';
+
+      // Apply active filter
+      let matchesFilter = true;
+      if (filter === 'bounced')  matchesFilter = card.dataset.bounced  === 'true';
+      if (filter === 'followup') matchesFilter = card.dataset.followup === 'true';
+      if (filter === 'success')  matchesFilter = card.dataset.success  === 'true';
+
+      card.style.display = (matchesSearch && matchesFilter) ? '' : 'none';
     });
 
     // Update profile section visibility and counts
@@ -638,9 +648,15 @@ function applySearch() {
     // Filter list view
     document.querySelectorAll('.cr-list-row').forEach(row => {
       const company = (row.dataset.company || '').toLowerCase();
-      const allText = company;
-      const matches = allText.includes(query) || query === '';
-      row.style.display = matches ? '' : 'none';
+      const matchesSearch = company.includes(query) || query === '';
+
+      // Apply active filter
+      let matchesFilter = true;
+      if (filter === 'bounced')  matchesFilter = row.dataset.bounced  === 'true';
+      if (filter === 'followup') matchesFilter = row.dataset.followupNeeded === 'true';
+      if (filter === 'success')  matchesFilter = row.dataset.success  === 'true';
+
+      row.style.display = (matchesSearch && matchesFilter) ? '' : 'none';
     });
   }
 }
@@ -721,8 +737,10 @@ function applyFilter(filter, btn) {
   btn.classList.add('active');
 
   const query = document.getElementById('cr-search-input').value.toLowerCase().trim();
-  const cards = document.querySelectorAll('.lead-card');
+  const query_lower = query.toLowerCase();
 
+  // Apply filter to cards (if in cards view)
+  const cards = document.querySelectorAll('.lead-card');
   cards.forEach(card => {
     let show = true;
     if (filter === 'bounced')  show = card.dataset.bounced  === 'true';
@@ -732,9 +750,24 @@ function applyFilter(filter, btn) {
     // Also apply search filter
     const companyName = (card.dataset.companyName || '').toLowerCase();
     const companyEmail = (card.dataset.companyEmail || '').toLowerCase();
-    const matchesSearch = companyName.includes(query) || companyEmail.includes(query) || query === '';
+    const matchesSearch = companyName.includes(query_lower) || companyEmail.includes(query_lower) || query === '';
 
     card.style.display = (show && matchesSearch) ? '' : 'none';
+  });
+
+  // Apply filter to list rows (if in list view)
+  const rows = document.querySelectorAll('.cr-list-row');
+  rows.forEach(row => {
+    let show = true;
+    if (filter === 'bounced')  show = row.dataset.bounced  === 'true';
+    if (filter === 'followup') show = row.dataset.followupNeeded === 'true';
+    if (filter === 'success')  show = row.dataset.success  === 'true';
+
+    // Also apply search filter
+    const companyName = (row.dataset.company || '').toLowerCase();
+    const matchesSearch = companyName.includes(query_lower) || query === '';
+
+    row.style.display = (show && matchesSearch) ? '' : 'none';
   });
 
   // Hide subsection labels when no visible cards under them
