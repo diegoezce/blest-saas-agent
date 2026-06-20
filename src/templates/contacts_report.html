@@ -134,6 +134,82 @@
   }
   .cr-filter.active .cr-filter-count { background: rgba(0,0,0,0.2); }
 
+  /* Search & View Controls */
+  .cr-controls {
+    display: flex; gap: 0.75rem; margin-bottom: 1.5rem; flex-wrap: wrap;
+    align-items: center;
+  }
+  .cr-search-wrap {
+    flex: 1; min-width: 220px; position: relative;
+    display: flex; align-items: center;
+  }
+  .cr-search-input {
+    width: 100%; padding: 0.5rem 0.8rem 0.5rem 2.2rem;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; color: var(--text); font-size: 0.85rem;
+    font-family: inherit;
+  }
+  .cr-search-input::placeholder { color: var(--muted); }
+  .cr-search-icon {
+    position: absolute; left: 0.7rem; color: var(--muted);
+    pointer-events: none; font-size: 0.9rem;
+  }
+
+  .cr-view-toggle {
+    display: flex; gap: 0.3rem;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.3rem;
+  }
+  .cr-view-btn {
+    padding: 0.4rem 0.65rem; border: none; background: transparent;
+    cursor: pointer; font-size: 0.8rem; border-radius: 6px;
+    color: var(--muted); transition: all 0.12s; font-weight: 600;
+  }
+  .cr-view-btn:hover { color: var(--text); }
+  .cr-view-btn.active {
+    background: var(--accent); color: #0f172a;
+  }
+
+  /* List View */
+  .cr-table-wrap {
+    overflow-x: auto; border: 1px solid var(--border); border-radius: 8px;
+    margin-bottom: 1.5rem;
+  }
+  .cr-table {
+    width: 100%; border-collapse: collapse; font-size: 0.85rem;
+  }
+  .cr-table thead {
+    background: var(--surface); border-bottom: 1px solid var(--border);
+  }
+  .cr-table th {
+    padding: 0.65rem 0.75rem; text-align: left; font-weight: 700;
+    color: var(--text); cursor: pointer; user-select: none;
+    transition: background 0.12s;
+  }
+  .cr-table th:hover { background: var(--surface-hover); }
+  .cr-table th.sortable::after {
+    content: ' ↕'; font-size: 0.7rem; color: var(--muted); opacity: 0.5;
+  }
+  .cr-table th.sort-asc::after { content: ' ↑'; opacity: 1; }
+  .cr-table th.sort-desc::after { content: ' ↓'; opacity: 1; }
+  .cr-table tbody tr {
+    border-bottom: 1px solid var(--border); transition: background 0.12s;
+  }
+  .cr-table tbody tr:hover { background: var(--surface); }
+  .cr-table td {
+    padding: 0.65rem 0.75rem; color: var(--text);
+  }
+  .cr-table td a { color: var(--accent); text-decoration: none; }
+  .cr-table td a:hover { text-decoration: underline; }
+  .cr-table .cr-company-name { font-weight: 600; }
+  .cr-table .cr-status-tag {
+    display: inline-block; padding: 0.2rem 0.4rem; border-radius: 4px;
+    font-size: 0.75rem; font-weight: 600;
+  }
+  .cr-table .cr-status-tag.bounced { background: #7f1d1d; color: #fecaca; }
+  .cr-table .cr-status-tag.success { background: #15803d; color: #dcfce7; }
+  .cr-table .cr-status-tag.pending { background: #92400e; color: #fef3c7; }
+
   @media (max-width: 600px) {
     .lead-grid { grid-template-columns: 1fr; }
     .cr-stats { gap: 0.4rem; }
@@ -219,12 +295,30 @@
   </div>
 {% endmacro %}
 
-<div style="margin-bottom:1.25rem;display:flex;align-items:center;justify-content:space-between;gap:0.75rem;flex-wrap:wrap">
+<div style="margin-bottom:0.75rem;display:flex;align-items:center;justify-content:space-between;gap:0.75rem;flex-wrap:wrap">
   <h1 style="font-size:1.2rem;font-weight:800">📋 Empresas Contactadas</h1>
   <button id="bounce-btn" onclick="checkBounces(this)"
     style="background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:0.5rem 0.9rem;cursor:pointer;font-size:0.85rem;font-weight:600">
     📭 Chequear rebotes
   </button>
+</div>
+
+<!-- Search & View Controls -->
+<div class="cr-controls">
+  <div class="cr-search-wrap">
+    <span class="cr-search-icon">🔍</span>
+    <input type="text" id="cr-search-input" class="cr-search-input"
+      placeholder="Buscar por nombre, dominio, contacto, email…"
+      onkeyup="applySearch()">
+  </div>
+  <div class="cr-view-toggle">
+    <button class="cr-view-btn active" id="view-cards" data-view="cards" onclick="switchView('cards')">
+      🗂️ Cards
+    </button>
+    <button class="cr-view-btn" id="view-list" data-view="list" onclick="switchView('list')">
+      📊 List
+    </button>
+  </div>
 </div>
 
 <!-- Stats -->
@@ -279,9 +373,11 @@
 </div>
 {% endif %}
 
+<!-- Cards View -->
+<div id="cr-cards-view" style="display:block">
 {% for profile_name in profiles_order %}
 {% set group = by_profile[profile_name] %}
-<details class="profile-section" data-profile="{{ loop.index }}">
+<details class="profile-section" data-profile="{{ loop.index }}" data-view-type="cards">
   <summary>
     <h2>{{ profile_name }}</h2>
     <span class="badge badge-muted cr-profile-visible-count">{{ group | length }}</span>
@@ -301,7 +397,9 @@
     <div class="lead-card {{ card_class }}"
       data-bounced="{{ 'true' if d.has_bounced else 'false' }}"
       data-followup="true"
-      data-success="{{ 'true' if d.is_success else 'false' }}">
+      data-success="{{ 'true' if d.is_success else 'false' }}"
+      data-company-name="{{ d.name }}"
+      data-company-email="{{ d.contacts[0].email if d.contacts else '' }}">
       {{ _card_body(d) }}
     </div>
     {% endfor %}
@@ -317,7 +415,9 @@
     <div class="lead-card"
       data-bounced="{{ 'true' if d.has_bounced else 'false' }}"
       data-followup="false"
-      data-success="{{ 'true' if d.is_success else 'false' }}">
+      data-success="{{ 'true' if d.is_success else 'false' }}"
+      data-company-name="{{ d.name }}"
+      data-company-email="{{ d.contacts[0].email if d.contacts else '' }}">
       {{ _card_body(d) }}
     </div>
     {% endfor %}
@@ -326,6 +426,66 @@
 
 </details>
 {% endfor %}
+</div>
+
+<!-- List View -->
+<div id="cr-list-view" style="display:none">
+<div class="cr-table-wrap">
+  <table class="cr-table">
+    <thead>
+      <tr>
+        <th class="sortable" data-sort="company">Empresa</th>
+        <th class="sortable" data-sort="profile">Perfil</th>
+        <th class="sortable" data-sort="location">Ubicación</th>
+        <th class="sortable" data-sort="contacted">Contactada</th>
+        <th class="sortable" data-sort="method">Método</th>
+        <th class="sortable" data-sort="response">Respuesta</th>
+        <th class="sortable" data-sort="followup">Seguimiento</th>
+      </tr>
+    </thead>
+    <tbody id="cr-list-tbody">
+      {% for profile_name in profiles_order %}
+        {% set group = by_profile[profile_name] %}
+        {% for d in group %}
+        <tr class="cr-list-row"
+          data-company="{{ d.name }}"
+          data-profile="{{ profile_name }}"
+          data-location="{{ d.location }}"
+          data-contacted="{{ d.contacted_at }}"
+          data-method="{{ d.contact_method }}"
+          data-response="{{ d.response }}"
+          data-followup="{{ d.follow_up_date_display }}"
+          data-bounced="{{ 'true' if d.has_bounced else 'false' }}"
+          data-success="{{ 'true' if d.is_success else 'false' }}"
+          data-followup-needed="{{ 'true' if d.needs_followup else 'false' }}"
+          data-company-name="{{ d.name }}"
+          data-company-email="{{ d.contacts[0].email if d.contacts else '' }}">
+          <td class="cr-company-name" onclick="openCompanyModal({{ d.id }})">{{ d.name }}</td>
+          <td>{{ profile_name }}</td>
+          <td>{{ d.location }}</td>
+          <td>{{ d.contacted_at }}</td>
+          <td>
+            {% if d.contact_method %}<span class="cr-status-tag">{{ d.contact_method }}</span>{% endif %}
+          </td>
+          <td>
+            {% if d.has_bounced %}<span class="cr-status-tag bounced">REBOTÓ</span>
+            {% elif d.is_success %}<span class="cr-status-tag success">✓ {{ d.response | replace('_', ' ') }}</span>
+            {% elif d.response %}<span class="cr-status-tag pending">{{ d.response | replace('_', ' ') }}</span>
+            {% else %}<span style="color:var(--muted)">—</span>{% endif %}
+          </td>
+          <td>
+            {% if d.follow_up_overdue %}<span style="color:var(--red);font-weight:600">⚠ {{ d.follow_up_date_display }}</span>
+            {% elif d.follow_up_today %}<span style="color:var(--amber);font-weight:600">📅 Hoy</span>
+            {% elif d.follow_up_date %}<span>{{ d.follow_up_date_display }}</span>
+            {% else %}<span style="color:var(--muted)">—</span>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+</div>
 
 <!-- ── Bounce Modal ─────────────────────────────────────────────────── -->
 <div id="bounce-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:300;align-items:center;justify-content:center">
@@ -429,6 +589,102 @@
 </div>
 
 <script>
+let _currentView = 'cards';
+let _currentSort = { column: null, direction: 'asc' };
+
+function switchView(view) {
+  _currentView = view;
+  const cardsView = document.getElementById('cr-cards-view');
+  const listView = document.getElementById('cr-list-view');
+  const btnCards = document.getElementById('view-cards');
+  const btnList = document.getElementById('view-list');
+
+  if (view === 'cards') {
+    cardsView.style.display = 'block';
+    listView.style.display = 'none';
+    btnCards.classList.add('active');
+    btnList.classList.remove('active');
+  } else {
+    cardsView.style.display = 'none';
+    listView.style.display = 'block';
+    btnCards.classList.remove('active');
+    btnList.classList.add('active');
+    applySearch();
+  }
+}
+
+function applySearch() {
+  const query = document.getElementById('cr-search-input').value.toLowerCase().trim();
+
+  if (_currentView === 'cards') {
+    // Filter cards view
+    document.querySelectorAll('.lead-card').forEach(card => {
+      const companyName = (card.dataset.companyName || '').toLowerCase();
+      const companyEmail = (card.dataset.companyEmail || '').toLowerCase();
+      const matches = companyName.includes(query) || companyEmail.includes(query) || query === '';
+      card.style.display = matches ? '' : 'none';
+    });
+
+    // Update profile section visibility and counts
+    document.querySelectorAll('.profile-section').forEach(section => {
+      const visibleCards = section.querySelectorAll('.lead-card:not([style*="display: none"])');
+      const isEmpty = visibleCards.length === 0;
+      section.style.display = isEmpty ? 'none' : '';
+
+      const badge = section.querySelector('.cr-profile-visible-count');
+      if (badge) badge.textContent = visibleCards.length;
+    });
+  } else {
+    // Filter list view
+    document.querySelectorAll('.cr-list-row').forEach(row => {
+      const company = (row.dataset.company || '').toLowerCase();
+      const allText = company;
+      const matches = allText.includes(query) || query === '';
+      row.style.display = matches ? '' : 'none';
+    });
+  }
+}
+
+function sortColumn(column) {
+  const direction = _currentSort.column === column && _currentSort.direction === 'asc' ? 'desc' : 'asc';
+  _currentSort = { column, direction };
+
+  // Update header styling
+  document.querySelectorAll('.cr-table th.sortable').forEach(th => {
+    th.classList.remove('sort-asc', 'sort-desc');
+    if (th.dataset.sort === column) {
+      th.classList.add(direction === 'asc' ? 'sort-asc' : 'sort-desc');
+    }
+  });
+
+  // Sort rows
+  const tbody = document.getElementById('cr-list-tbody');
+  const rows = Array.from(tbody.querySelectorAll('.cr-list-row:not([style*="display: none"])'));
+
+  rows.sort((a, b) => {
+    let aVal = a.dataset[column] || '';
+    let bVal = b.dataset[column] || '';
+
+    // Handle numeric columns
+    if (column === 'contacted' || column === 'followup') {
+      aVal = new Date(aVal || '0');
+      bVal = new Date(bVal || '0');
+    }
+
+    const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+    return direction === 'asc' ? cmp : -cmp;
+  });
+
+  rows.forEach(row => tbody.appendChild(row));
+}
+
+// Add click handlers to sortable headers
+document.addEventListener('DOMContentLoaded', function() {
+  document.querySelectorAll('.cr-table th.sortable').forEach(th => {
+    th.onclick = () => sortColumn(th.dataset.sort);
+  });
+});
+
 function openFeedbackModal(companyId, companyName) {
   const modal = document.getElementById('feedback-modal');
   const form  = document.getElementById('feedback-form');
@@ -464,13 +720,21 @@ function applyFilter(filter, btn) {
   document.querySelectorAll('.cr-filter').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
 
+  const query = document.getElementById('cr-search-input').value.toLowerCase().trim();
   const cards = document.querySelectorAll('.lead-card');
+
   cards.forEach(card => {
     let show = true;
     if (filter === 'bounced')  show = card.dataset.bounced  === 'true';
     if (filter === 'followup') show = card.dataset.followup === 'true';
     if (filter === 'success')  show = card.dataset.success  === 'true';
-    card.style.display = show ? '' : 'none';
+
+    // Also apply search filter
+    const companyName = (card.dataset.companyName || '').toLowerCase();
+    const companyEmail = (card.dataset.companyEmail || '').toLowerCase();
+    const matchesSearch = companyName.includes(query) || companyEmail.includes(query) || query === '';
+
+    card.style.display = (show && matchesSearch) ? '' : 'none';
   });
 
   // Hide subsection labels when no visible cards under them
