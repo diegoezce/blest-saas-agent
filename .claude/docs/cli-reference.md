@@ -25,7 +25,7 @@ python run.py --setup                # Initialize/migrate database tables
 ## Contact Enrichment
 
 ```bash
-python run.py --enrich-run <ID>      # Enrich all contacts for a run (Layer 0-3)
+python run.py --enrich-run <ID>      # Enrich all contacts for a run (Layer 0-4)
 python run.py --recover-bounced [N]  # Retry bounced contacts (blocklist + re-enrich); N max (default 50)
 ```
 

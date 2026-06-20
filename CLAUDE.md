@@ -641,10 +641,11 @@ when it first connects. See `worker/README.md` for the full runbook.
 | `src/tools/followups.py` | Follow-up agent: detect replies + select due/upcoming leads + generate/push follow-up drafts + bring-forward (`push_followup_now`) (shared by worker phase 4, `/follow-ups`, `--detect-replies`/`--follow-ups`) |
 | `src/prompts/followup.py` | Follow-up email prompt (`build_followup_prompt`); reuses outreach language directives |
 | `src/enrichment/domain_resolver.py` | Layer 0 — resolve a missing company domain (email derive + official-site web search) |
-| `src/enrichment/pipeline.py` | Enrichment orchestrator (Layer 0 domain resolution + 3 layers + attempt counter) |
+| `src/enrichment/pipeline.py` | Enrichment orchestrator (Layer 0 domain resolution + 4 layers + attempt counter) |
 | `src/enrichment/scraper.py` | Site scraper (Layer 1) |
 | `src/enrichment/patterns.py` | Email pattern generation (Layer 2) |
 | `src/enrichment/providers/` | `base.py`, `million_verifier.py`, `neverbounce.py`, `local_filter.py` (free MX/syntax pre-filter + `ChainVerifier`), `hunter.py`; `__init__.py` → `get_verifier()` factory |
+| `src/enrichment/web_email_finder.py` | Web search email finder (Layer 4 — Tavily fallback if not verified after L0–L3) |
 | `src/tools/recovery.py` | Bounced-email recovery: blocklist bad address + re-enrich (worker phase 1b, `--recover-bounced`) |
 | `src/integrations/zoho_mail.py` | Zoho Mail OAuth2 + draft creation |
 | `src/dashboard.py` | Rich terminal dashboard, `_enrich_drafts_from_db()` |

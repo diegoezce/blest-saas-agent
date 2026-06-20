@@ -71,7 +71,7 @@ Quick reference for what each major file/module does.
 
 | File | Purpose |
 |---|---|
-| `src/enrichment/pipeline.py` | Enrichment orchestrator (Layer 0–3 + attempt counter) |
+| `src/enrichment/pipeline.py` | Enrichment orchestrator (Layer 0–4 + attempt counter) |
 | `src/enrichment/domain_resolver.py` | Layer 0 — resolve missing company domain (email derive + web search) |
 | `src/enrichment/scraper.py` | Layer 1 — site scraper (pages, emails, phone/WhatsApp) |
 | `src/enrichment/patterns.py` | Layer 2 — email permutation generation |
@@ -81,6 +81,7 @@ Quick reference for what each major file/module does.
 | `src/enrichment/providers/millionverifier.py` | MillionVerifier SMTP verification |
 | `src/enrichment/providers/local_filter.py` | Free MX/syntax pre-filter + `ChainVerifier` |
 | `src/enrichment/providers/hunter.py` | Hunter.io email finder fallback |
+| `src/enrichment/web_email_finder.py` | Layer 4 — web search via Tavily (fallback if email not verified after L0–L3) |
 
 ## Integrations
 
@@ -109,7 +110,7 @@ Quick reference for what each major file/module does.
 | `CLAUDE.md` | Root project documentation (high-level overview, gotchas, subdirectory guide) |
 | `src/config/CLAUDE.md` | Profile system + workflow tuning details |
 | `src/graph/CLAUDE.md` | DAG nodes + AI usage + scoring |
-| `src/enrichment/CLAUDE.md` | Email enrichment pipeline (Layer 0–3) |
+| `src/enrichment/CLAUDE.md` | Email enrichment pipeline (Layer 0–4) |
 | `src/integrations/CLAUDE.md` | Zoho Mail OAuth + bounce/reply detection |
 | `src/tools/CLAUDE.md` | Company/contact dedup, bounces, follow-ups |
 | `src/database/CLAUDE.md` | Models + migrations |

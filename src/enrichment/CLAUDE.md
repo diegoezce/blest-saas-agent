@@ -1,8 +1,8 @@
-# Email Enrichment Pipeline (Layer 0–3)
+# Email Enrichment Pipeline (Layer 0–4)
 
 Finds verified email addresses for discovered contacts. Runs sequentially: Layer 0 
 (domain resolution) → Layer 1 (site scraping) → Layer 2 (SMTP verification) → 
-Layer 3 (Hunter.io fallback).
+Layer 3 (Hunter.io fallback) → Layer 4 (web search, conditional).
 
 ## Layer 0: Domain Resolution
 
@@ -54,6 +54,24 @@ Calls Hunter.io email finder API (`HUNTER_API_KEY`). Score ≥ 90 → `verified`
 
 **Module**: `src/enrichment/providers/hunter.py`
 
+## Layer 4: Web Search (Tavily) — Conditional
+
+Only runs if email still not `verified` after Layers 0–3. Replicates manual 
+"empresa email" Google search: builds 4 queries (`"{name}" "{company}" email`, etc.), 
+extracts emails from Tavily snippet results, filters by domain/reputation.
+
+**Ranking logic:**
+1. Named match (first/last in local part) → `web_search` (high confidence)
+2. Email confirms an earlier `probable` → bumps to `verified` (consensus from 2 sources)
+3. Generic inbox only (`info@`, `contacto@`) → `web_search_generic`
+4. No useful result → email unchanged (no regression)
+
+**v1 design:** No SMTP confirmation of web-found emails (precision-over-cost tradeoff). 
+If post-production metrics show high bounce rates on `web_search` source, v1.1 can add 
+SMTP validation.
+
+**Module**: `src/enrichment/web_email_finder.py`
+
 ## Email Precedence (Winner)
 
 After all layers, the contact's email is chosen in this order:
@@ -68,7 +86,7 @@ This prevents pushing invented `first.last@` when real `info@` sits on the compa
 | Field | Values |
 |---|---|
 | `email_status` | `verified`, `probable`, `not_found` (final); `bounced` (set by bounce check) |
-| `email_source` | `site_scrape`, `site_scrape_generic`, `pattern_verified`, `pattern_unverified`, `hunter` |
+| `email_source` | `site_scrape`, `site_scrape_generic`, `pattern_verified`, `pattern_unverified`, `hunter`, `web_search`, `web_search_generic` |
 | `phone_whatsapp` | nullable |
 | `enriched_at` | datetime |
 | `enrichment_log` | JSONB — per-layer attempt log + `attempts` (retry counter) + `bad_emails` (blocklist) |
@@ -87,4 +105,5 @@ to find alternatives. Pipeline reads `bad_emails` and skips them in all layers.
 - **Web UI**: "Enrich" per contact or "⚡ Enrich All" (async, sequential, 2s delay)
 - **CLI**: `python run.py --enrich-run <run_id>`
 - Both skip already-enriched contacts; 3-minute hard cap per contact
-- Each contact: ~15–70s (scrape + SMTP + Hunter)
+- Each contact: ~15–90s (scrape + SMTP + Hunter + web search if needed)
+  - Layer 4 (web search) only runs if email not yet verified; adds ~10–20s when triggered

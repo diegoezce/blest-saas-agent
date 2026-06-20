@@ -13,7 +13,7 @@ No local data storage; worker only reads/writes shared DB. Full runbook: `worker
 
 **Phase 1 — Enrichment** (`WORKER_ENRICH_BATCH`, default 15):
 - Picks contacts where `enriched_at IS NULL`
-- Runs full Layer 0–3 pipeline (domain resolve → scrape → SMTP → Hunter)
+- Runs full Layer 0–4 pipeline (domain resolve → scrape → SMTP → Hunter → web search if needed)
 - If `WORKER_RETRY_FAILED` on: also retries previously-failed *named* contacts 
   up to `WORKER_MAX_ATTEMPTS` (stored in `enrichment_log.attempts`)
 - 2s delay between contacts (avoid rate-limiting)
