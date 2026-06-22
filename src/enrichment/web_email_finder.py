@@ -156,9 +156,18 @@ def find_emails_via_web_search(
                     # Reject if domain is blocked or doesn't match company domain.
                     if not at_domain_norm or _host_blocked(at_domain_norm):
                         continue
-                    if at_domain_norm != _normalize_domain(domain):
-                        # Allow close matches (subdomains), but only if explicitly the company domain.
-                        if not (at_domain_norm.endswith("." + _normalize_domain(domain))):
+                    domain_norm = _normalize_domain(domain)
+                    if at_domain_norm != domain_norm:
+                        # Allow subdomains of the stored domain.
+                        if at_domain_norm.endswith("." + domain_norm):
+                            pass
+                        # For nameless searches: accept alternate TLDs sharing the same
+                        # brand name (e.g. southerncode.us when stored as southerncode.com).
+                        elif not (first_name or last_name) and company_name:
+                            brand = domain_norm.split(".")[0].lower()
+                            if brand and brand not in at_domain_norm:
+                                continue
+                        else:
                             continue
 
                     is_generic = _is_generic_inbox(local)

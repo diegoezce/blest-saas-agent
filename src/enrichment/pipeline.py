@@ -306,10 +306,10 @@ def enrich_contact(contact_id: int) -> EnrichmentResult:
 
         # ── Layer 4: Web search (Tavily) ──────────────────────────────────
         # Replicates manual "email de empresa" Google search. Only if no verified email yet.
-        # Skipped for nameless placeholders: Layer 1 generic scrape already covers that case
-        # and Layer 4 would run 6+ Tavily queries that can hang without a name to anchor on.
+        # Also runs for nameless placeholders (generic company search) — domain filter is
+        # relaxed so emails at alternate TLDs (e.g. .us vs .com) are accepted.
         layer4: dict = {}
-        if result.email_status != "verified" and domain and first:
+        if result.email_status != "verified" and domain:
             try:
                 web_result = find_emails_via_web_search(
                     first_name=first,
