@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 _trigger_lock = threading.Lock()
 _trigger_running = False
-_scheduler_paused = False
+_scheduler_paused = True  # Start paused; activate manually from web UI
 _scheduler = None  # set by start_web_server
 _schedule_profile_name = ""  # runtime override for which profile the scheduler uses
 _quick_run_state: dict[int, dict] = {}  # run_id → {phase, enrich, error}
