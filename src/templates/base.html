@@ -683,8 +683,10 @@
         }).then(function(r) { return r.json(); })
       ];
 
-      // Save contact emails
-      var contactInputs = document.querySelectorAll('[data-contact-id]');
+      // Save contact emails — scope to modal-body to avoid capturing
+      // data-contact-id elements from other parts of the page (e.g. run.html buttons)
+      var modalBody = document.getElementById('modal-body');
+      var contactInputs = (modalBody || document).querySelectorAll('[data-contact-id]');
       contactInputs.forEach(function(input) {
         var contactId = input.getAttribute('data-contact-id');
         var email = input.value.trim();
