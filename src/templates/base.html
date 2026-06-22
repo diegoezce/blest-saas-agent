@@ -289,6 +289,54 @@
       transition: color 0.15s;
     }
     .company-name-link:hover { color: var(--accent); }
+
+    /* Toast notifications */
+    #toast-container {
+      position: fixed;
+      top: 1rem;
+      right: 1rem;
+      z-index: 9000;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      pointer-events: none;
+      max-width: 340px;
+      width: calc(100vw - 2rem);
+    }
+    .toast {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.6rem;
+      padding: 0.75rem 1rem;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      font-size: 0.88rem;
+      line-height: 1.4;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+      pointer-events: all;
+      cursor: pointer;
+      animation: toast-in 0.2s ease-out;
+      border-left-width: 3px;
+    }
+    .toast.success { border-left-color: var(--green); }
+    .toast.error   { border-left-color: var(--red); }
+    .toast.warning { border-left-color: var(--amber); }
+    .toast.info    { border-left-color: var(--accent); }
+    .toast-icon { font-size: 1rem; flex-shrink: 0; margin-top: 0.05rem; }
+    .toast-msg  { flex: 1; }
+    .toast-dismiss { flex-shrink: 0; color: var(--muted); font-size: 1rem; line-height: 1; }
+    .toast-dismiss:hover { color: var(--text); }
+    @keyframes toast-in {
+      from { opacity: 0; transform: translateX(1.5rem); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+    @keyframes toast-out {
+      from { opacity: 1; transform: translateX(0); max-height: 80px; margin: 0; }
+      to   { opacity: 0; transform: translateX(1.5rem); max-height: 0; margin: -0.5rem 0 0; }
+    }
+    .toast.removing { animation: toast-out 0.2s ease-in forwards; }
   </style>
 </head>
 <body>
@@ -447,16 +495,26 @@
     var _currentDraftCompanyId = null;
     var _currentDraftContactId = null;
 
-    // Generic notification function (can be overridden by page-specific implementations)
     function showNotification(message, type) {
       type = type || 'info';
       console.log('[' + type.toUpperCase() + '] ' + message);
-      // If page has a custom notification modal, use it; otherwise use alert
-      if (typeof _showCustomNotification === 'function') {
-        _showCustomNotification(message, type);
-      } else {
-        alert(message);
-      }
+      var icons = { success: '✅', error: '❌', warning: '⚠️', info: 'ℹ️' };
+      var icon = icons[type] || icons.info;
+      var container = document.getElementById('toast-container');
+      if (!container) return;
+      var toast = document.createElement('div');
+      toast.className = 'toast ' + type;
+      toast.innerHTML = '<span class="toast-icon">' + icon + '</span>' +
+        '<span class="toast-msg">' + message + '</span>' +
+        '<span class="toast-dismiss">&times;</span>';
+      var dismiss = function() {
+        toast.classList.add('removing');
+        setTimeout(function() { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 220);
+      };
+      toast.addEventListener('click', dismiss);
+      container.appendChild(toast);
+      var delay = (type === 'error' || type === 'warning') ? 6000 : 4000;
+      setTimeout(dismiss, delay);
     }
 
     function openDraftModalFromContact(companyId, contactId) {
@@ -723,13 +781,13 @@
             editBtn.style.display = 'block';
             actions.style.display = 'none';
             renderCompanyFields(_currentCompanyData, false);
-            alert('✅ Cambios guardados exitosamente');
+            showNotification('Cambios guardados exitosamente', 'success');
           } else {
-            alert('⚠️ Algunos cambios no se pudieron guardar');
+            showNotification('Algunos cambios no se pudieron guardar', 'warning');
           }
         })
         .catch(function(e) {
-          alert('Error al guardar: ' + e);
+          showNotification('Error al guardar: ' + e, 'error');
         });
     }
 
@@ -798,10 +856,10 @@
             }
             renderCompanyFields(_currentCompanyData, true);
           } else {
-            alert('Error al marcar como principal: ' + (d.error || 'desconocido'));
+            showNotification('Error al marcar como principal: ' + (d.error || 'desconocido'), 'error');
           }
         })
-        .catch(function(e) { alert('Error: ' + e); });
+        .catch(function(e) { showNotification('Error: ' + e, 'error'); });
     }
 
     function _deleteManualContact(contactId) {
@@ -818,10 +876,10 @@
             var row = document.getElementById('modal-contact-row-' + contactId);
             if (row) row.remove();
           } else {
-            alert('Error al eliminar: ' + (d.error || 'desconocido'));
+            showNotification('Error al eliminar: ' + (d.error || 'desconocido'), 'error');
           }
         })
-        .catch(function(e) { alert('Error: ' + e); });
+        .catch(function(e) { showNotification('Error: ' + e, 'error'); });
     }
 
     function _addCompanyEmail() {
@@ -829,7 +887,7 @@
       if (!input) return;
       var email = input.value.trim().toLowerCase();
       if (!email || !email.includes('@') || !email.split('@')[1].includes('.')) {
-        alert('Email inválido'); return;
+        showNotification('Email inválido', 'warning'); return;
       }
       fetch('/company/' + _currentCompanyId + '/add-email', {
         method: 'POST',
@@ -852,10 +910,10 @@
             }
             input.value = '';
           } else {
-            alert('Error al agregar: ' + (d.error || 'desconocido'));
+            showNotification('Error al agregar: ' + (d.error || 'desconocido'), 'error');
           }
         })
-        .catch(function(e) { alert('Error: ' + e); });
+        .catch(function(e) { showNotification('Error: ' + e, 'error'); });
     }
 
     function _createManualDraft(companyId, contactId) {
@@ -871,10 +929,10 @@
           } else if (d.no_draft) {
             _showDraftOptionsModal(companyId, contactId, d.company_name);
           } else if (d.error) {
-            alert('Error: ' + d.error);
+            showNotification('Error: ' + d.error, 'error');
           }
         })
-        .catch(function(e) { alert('Error: ' + e); });
+        .catch(function(e) { showNotification('Error: ' + e, 'error'); });
     }
 
     function _showDraftOptionsModal(companyId, contactId, companyName) {
@@ -913,7 +971,7 @@
       var subject = document.getElementById('manual-draft-subject').value.trim();
       var content = document.getElementById('manual-draft-content').value.trim();
       if (!subject || !content) {
-        alert('Asunto y contenido son obligatorios');
+        showNotification('Asunto y contenido son obligatorios', 'warning');
         return;
       }
       _createDraftInZoho(companyId, contactId, 'manual', subject, content);
@@ -938,10 +996,10 @@
         .then(function(r) { return r.json(); })
         .then(function(d) {
           if (d.ok) {
-            alert('✅ Draft creado en Zoho. Revísalo en Mail para completar/enviar.');
+            showNotification('Draft creado en Zoho. Revísalo en Mail para completar/enviar.', 'success');
             closeCompanyModal();
           } else {
-            alert('Error: ' + (d.error || 'desconocido'));
+            showNotification('Error: ' + (d.error || 'desconocido'), 'error');
           }
           if (button) {
             button.disabled = false;
@@ -949,7 +1007,7 @@
           }
         })
         .catch(function(e) {
-          alert('Error: ' + e);
+          showNotification('Error: ' + e, 'error');
           if (button) {
             button.disabled = false;
             button.textContent = '✓ Crear draft';
@@ -1017,14 +1075,14 @@
         .then(function(r) { return r.json(); })
         .then(function(result) {
           if (result.success) {
-            alert('✅ Guardado exitosamente!');
+            showNotification('Guardado exitosamente', 'success');
             closeCompanyModal();
           } else {
-            alert('❌ Error al guardar');
+            showNotification('Error al guardar', 'error');
           }
         })
         .catch(function(e) {
-          alert('Error: ' + e);
+          showNotification('Error: ' + e, 'error');
         });
     }
 
@@ -1042,5 +1100,7 @@
       }
     });
   </script>
+
+  <div id="toast-container"></div>
 </body>
 </html>
