@@ -1584,7 +1584,34 @@ def create_app() -> Flask:
                         desc = desc[:90] + "…"
                     cs = contact_statuses.get(co.id)
                     is_pushed = opp.zoho_pushed_at is not None
-                    for ct in ctcs_by_co.get(co.id, []):
+                    company_contacts = ctcs_by_co.get(co.id, [])
+
+                    # If company has no contacts, show a placeholder row
+                    if not company_contacts:
+                        contacts_data.append({
+                            "company_name": co.name,
+                            "company_id": co.id,
+                            "location": co.location or "",
+                            "description": desc,
+                            "score": opp.score or 0,
+                            "contact_id": None,
+                            "contact_name": "(sin contactos encontrados)",
+                            "contact_role": "",
+                            "email": "",
+                            "email_status": "",
+                            "linkedin_url": "",
+                            "enriched": False,
+                            "subject": draft.get("subject_line", ""),
+                            "body": draft.get("body", ""),
+                            "is_contacted": cs is not None,
+                            "is_pushed": is_pushed,
+                            "eligible": False,
+                            "reason": "sin contactos",
+                            "contacted_at": str(cs.contacted_at)[:10] if cs and cs.contacted_at else "",
+                        })
+                        continue
+
+                    for ct in company_contacts:
                         # Skip contacts from previous runs (only show new ones from this run)
                         if fresh_ids is not None and ct.id not in fresh_ids:
                             continue
