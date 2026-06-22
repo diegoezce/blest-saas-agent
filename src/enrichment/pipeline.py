@@ -306,15 +306,16 @@ def enrich_contact(contact_id: int) -> EnrichmentResult:
 
         # ── Layer 4: Web search (Tavily) ──────────────────────────────────
         # Replicates manual "email de empresa" Google search. Only if no verified email yet.
+        # Works with or without named contact (searches generically for nameless placeholders).
         layer4: dict = {}
-        if result.email_status != "verified" and first and last and domain:
+        if result.email_status != "verified" and domain:
             try:
                 web_result = find_emails_via_web_search(
                     first_name=first,
                     last_name=last,
                     company_name=company.name,
                     domain=domain,
-                    role=contact.role,
+                    role=contact.role if contact.role and contact.role != "Unknown" else None,
                     bad_emails=bad_emails,
                 )
                 if web_result.email:
@@ -336,8 +337,6 @@ def enrich_contact(contact_id: int) -> EnrichmentResult:
         else:
             if result.email_status == "verified":
                 layer4["skipped"] = "already verified"
-            elif not first or not last:
-                layer4["skipped"] = "missing name"
             elif not domain:
                 layer4["skipped"] = "missing domain"
             logger.info(f"{label} — Layer 4 skipped")
