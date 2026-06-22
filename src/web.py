@@ -1453,6 +1453,81 @@ def create_app() -> Flask:
         progress = _enrich_progress.get(run_id, {})
         return jsonify(progress)
 
+    # ── Enrich companies without contacts ────────────────────────────────────
+
+    _missing_contacts_progress: dict = {}  # single global state (one job at a time)
+
+    @app.route("/enrich-missing-contacts", methods=["POST"])
+    @_require_auth
+    def enrich_missing_contacts():
+        from src.database.session import get_session
+        from src.database.models import Company, Contact, Opportunity
+        from src.enrichment.pipeline import enrich_contact
+        from datetime import datetime, timezone
+
+        if _missing_contacts_progress.get("running"):
+            return jsonify({"error": "already_running", "progress": _missing_contacts_progress}), 409
+
+        with get_session() as db:
+            # Companies that have at least one opportunity but zero contacts
+            contacted_company_ids = {o.company_id for o in db.query(Opportunity.company_id).all()}
+            companies_with_contacts = {c.company_id for c in db.query(Contact.company_id).distinct().all()}
+            missing = [
+                db.get(Company, cid) for cid in contacted_company_ids - companies_with_contacts
+                if db.get(Company, cid) and db.get(Company, cid).domain
+            ]
+            if not missing:
+                return jsonify({"error": "no companies without contacts found"}), 404
+
+            # Create placeholder contacts
+            contact_ids = []
+            contact_names = {}
+            for co in missing:
+                placeholder = Contact(
+                    company_id=co.id,
+                    name=None,
+                    role="Unknown",
+                    role_category="other",
+                    confidence_score=0.3,
+                    source="missing_contacts_enrich",
+                )
+                db.add(placeholder)
+                db.flush()
+                contact_ids.append(placeholder.id)
+                contact_names[placeholder.id] = co.name
+            db.commit()
+
+        _missing_contacts_progress.update({
+            "done": 0, "total": len(contact_ids), "failed": 0,
+            "running": True, "current_name": None,
+        })
+
+        def _run(ids, names):
+            for i, cid in enumerate(ids):
+                _missing_contacts_progress["current_name"] = names.get(cid, "")
+                try:
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                        pool.submit(enrich_contact, cid).result(timeout=180)
+                except concurrent.futures.TimeoutError:
+                    logger.warning(f"enrich-missing timed out for contact {cid}")
+                    _missing_contacts_progress["failed"] += 1
+                except Exception as e:
+                    logger.warning(f"enrich-missing failed for contact {cid}: {e}")
+                    _missing_contacts_progress["failed"] += 1
+                _missing_contacts_progress["done"] += 1
+                if i < len(ids) - 1:
+                    time.sleep(2)
+            _missing_contacts_progress["running"] = False
+            _missing_contacts_progress["current_name"] = None
+
+        threading.Thread(target=_run, args=(contact_ids, contact_names), daemon=True).start()
+        return jsonify({"started": True, "total": len(contact_ids)}), 202
+
+    @app.route("/enrich-missing-contacts/status")
+    @_require_auth
+    def enrich_missing_contacts_status():
+        return jsonify(_missing_contacts_progress)
+
     # ── Quick Run ─────────────────────────────────────────────────────────────
 
     @app.route("/quick-run", methods=["GET", "POST"])

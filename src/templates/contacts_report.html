@@ -311,11 +311,18 @@
 
 <div style="margin-bottom:0.75rem;display:flex;align-items:center;justify-content:space-between;gap:0.75rem;flex-wrap:wrap">
   <h1 style="font-size:1.2rem;font-weight:800">📋 Empresas Contactadas</h1>
-  <button id="bounce-btn" onclick="checkBounces(this)"
-    style="background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:0.5rem 0.9rem;cursor:pointer;font-size:0.85rem;font-weight:600">
-    📭 Chequear rebotes
-  </button>
+  <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center">
+    <button id="bounce-btn" onclick="checkBounces(this)"
+      style="background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:0.5rem 0.9rem;cursor:pointer;font-size:0.85rem;font-weight:600">
+      📭 Chequear rebotes
+    </button>
+    <button id="enrich-missing-btn" onclick="enrichMissingContacts()"
+      style="background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:0.5rem 0.9rem;cursor:pointer;font-size:0.85rem;font-weight:600">
+      🔍 Buscar emails faltantes
+    </button>
+  </div>
 </div>
+<div id="enrich-missing-status" style="display:none;margin-bottom:0.75rem;padding:0.6rem 0.9rem;background:var(--surface);border:1px solid var(--border);border-radius:8px;font-size:0.83rem;color:var(--muted)"></div>
 
 <!-- Search & View Controls -->
 <div class="cr-controls">
@@ -960,6 +967,45 @@ function closeBounceModal() {
     _bounceCheckBtn.disabled = false;
     _bounceCheckBtn.textContent = '📭 Chequear rebotes';
     _bounceCheckBtn = null;
+  }
+}
+
+let _enrichMissingInterval = null;
+
+async function enrichMissingContacts() {
+  const btn = document.getElementById('enrich-missing-btn');
+  const statusEl = document.getElementById('enrich-missing-status');
+  btn.disabled = true;
+  btn.textContent = '⏳ Iniciando…';
+  statusEl.style.display = 'block';
+  statusEl.textContent = 'Creando placeholders y arrancando enriquecimiento…';
+  try {
+    const r = await fetch('/enrich-missing-contacts', { method: 'POST' });
+    const d = await r.json();
+    if (!r.ok) {
+      statusEl.textContent = 'Error: ' + (d.error || r.status);
+      btn.disabled = false;
+      btn.textContent = '🔍 Buscar emails faltantes';
+      return;
+    }
+    statusEl.textContent = `Enriqueciendo ${d.total} empresa(s) sin contacto…`;
+    _enrichMissingInterval = setInterval(async () => {
+      const sr = await fetch('/enrich-missing-contacts/status');
+      const sd = await sr.json();
+      if (!sd.running) {
+        clearInterval(_enrichMissingInterval);
+        btn.disabled = false;
+        btn.textContent = '🔍 Buscar emails faltantes';
+        statusEl.textContent = `✅ Listo — ${sd.done} empresa(s) procesadas, ${sd.failed} fallidas. Recargá para ver resultados.`;
+      } else {
+        const name = sd.current_name ? ` (${sd.current_name})` : '';
+        statusEl.textContent = `Enriqueciendo ${sd.done}/${sd.total}${name}…`;
+      }
+    }, 3000);
+  } catch (e) {
+    statusEl.textContent = 'Error: ' + e;
+    btn.disabled = false;
+    btn.textContent = '🔍 Buscar emails faltantes';
   }
 }
 
