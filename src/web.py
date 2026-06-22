@@ -134,14 +134,20 @@ def _do_quick_run(run_id: int, pid: int | None, profile: dict | None) -> None:
     # Phase 2: auto-enrich all contacts found in this run
     state["phase"] = "enriching"
     try:
+        from sqlalchemy import or_
         with get_session() as db:
             opp_company_ids = [
                 o.company_id for o in db.query(Opportunity).filter_by(run_id=run_id).all()
             ]
+            # Enrich contacts that: never been enriched, OR have no email yet (not_found/None)
             contacts = (
                 db.query(Contact)
                 .filter(Contact.company_id.in_(opp_company_ids))
-                .filter(Contact.enriched_at.is_(None))
+                .filter(or_(
+                    Contact.enriched_at.is_(None),  # never enriched
+                    Contact.email_status.is_(None),  # no enrichment attempt yet
+                    Contact.email_status == "not_found"  # tried but failed
+                ))
                 .all()
             ) if opp_company_ids else []
             contact_ids = [c.id for c in contacts]

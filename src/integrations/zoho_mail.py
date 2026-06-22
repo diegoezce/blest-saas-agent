@@ -193,13 +193,29 @@ _OOO_SUBJECTS = (
 )
 
 
-def _is_bounce(msg: dict) -> bool:
-    """True if a message looks like a hard bounce (excludes 'delay' notifications)."""
+def _is_bounce(msg: dict, body: str = "") -> bool:
+    """True if a message looks like a hard bounce (excludes 'delay' notifications).
+
+    Checks: sender (mailer-daemon/postmaster), subject keywords, OR body keywords.
+    Rejects if subject/body says 'delay' but the action is not 'failed'.
+    """
     frm = (msg.get("fromAddress") or msg.get("sender") or "").lower()
     subj = (msg.get("subject") or "").lower()
-    if "delay" in subj:  # delivery delay ≠ bounce; mail may still arrive
+    body_lower = body.lower()
+
+    # If subject explicitly says "delay" and the action is "delayed" (not "failed"), skip it
+    action = (msg.get("action") or "").lower()
+    if "delay" in subj and action == "delayed":
         return False
-    return any(s in frm for s in _BOUNCE_SENDERS) or any(s in subj for s in _BOUNCE_SUBJECTS)
+
+    # Check sender
+    is_bounce_sender = any(s in frm for s in _BOUNCE_SENDERS)
+    # Check subject keywords
+    is_bounce_subject = any(s in subj for s in _BOUNCE_SUBJECTS)
+    # Check body keywords (permanent error, could not be delivered, etc.)
+    is_bounce_body = "permanent error" in body_lower or any(s in body_lower for s in _BOUNCE_SUBJECTS)
+
+    return is_bounce_sender or is_bounce_subject or is_bounce_body
 
 
 def _is_ooo(msg: dict) -> bool:
@@ -252,15 +268,18 @@ def scan_bounced_addresses(max_messages: int = 200) -> dict:
             break
         for m in batch:
             checked += 1
-            if not _is_bounce(m):
-                continue
-            bounce_messages += 1
             mid = m.get("messageId")
+            # Fetch body to check bounce keywords + extract emails
             cr = requests.get(f"{base}/folders/{folder_id}/messages/{mid}/content",
                               headers=headers, timeout=20)
             if cr.status_code != 200:
                 continue
             body = (cr.json().get("data", {}) or {}).get("content", "") or ""
+            # Now check if it's a bounce (can inspect body)
+            if not _is_bounce(m, body):
+                continue
+            bounce_messages += 1
+            # Extract emails from body
             for raw in _EMAIL_RE.findall(body):
                 em = raw.lower()
                 if own_domain and own_domain in em:
