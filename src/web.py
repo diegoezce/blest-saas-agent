@@ -1294,7 +1294,11 @@ def create_app() -> Flask:
                 from src.prompts.outreach import build_outreach_prompt
                 from src.schemas.outputs import CompanyOutreach
 
-                profile = db.query(Profile).filter_by(active=True).first()
+                req_profile_id = data.get("profile_id")
+                if req_profile_id:
+                    profile = db.get(Profile, int(req_profile_id)) or db.query(Profile).filter_by(active=True).first()
+                else:
+                    profile = db.query(Profile).filter_by(active=True).first()
                 po = {
                     "agent_company_name": profile.agent_company_name if profile else "Blest",
                     "agent_description": profile.agent_description if profile else "",
