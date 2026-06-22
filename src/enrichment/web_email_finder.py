@@ -6,6 +6,7 @@ filters by domain/reputation, and scores by name match.
 """
 import logging
 import re
+import time
 from dataclasses import dataclass
 
 from src.tools.search import search
@@ -100,27 +101,44 @@ def find_emails_via_web_search(
         log["error"] = "missing domain or company_name"
         return WebEmailCandidateResult(log=log)
 
-    # Build search queries (4 variants, ordered by specificity).
+    # Build search queries (ordered by specificity: named → company+role → generic company).
     queries = []
+
+    # High specificity: named contact + company
     if first_name and last_name:
         queries.append(f'"{first_name} {last_name}" "{company_name}" email')
         queries.append(f'"{first_name} {last_name}" {domain} correo')
+
+    # Medium specificity: company + role/context
     if role:
-        queries.append(f'"{company_name}" {role} contacto email')
+        queries.append(f'"{company_name}" {role} email')
+        queries.append(f'"{company_name}" {role} contacto')
+
+    # Company + generic terms (captures "The Functionary email" style)
+    queries.append(f'"{company_name}" email')
+    queries.append(f'"{company_name}" employees email')
+    queries.append(f'"{company_name}" team email')
+    queries.append(f'"{company_name}" staff email')
+
+    # Spanish variants
     queries.append(f'"{company_name}" contacto email')
+    queries.append(f'"{company_name}" empleados email')
 
     log["queries"] = queries
 
     # Collect candidates with metadata.
     candidates: dict[str, dict] = {}  # email -> {domain, is_generic, matches_name, query}
 
-    for query in queries:
+    for i, query in enumerate(queries):
         try:
             results = search(query, max_results=5)
             log.setdefault("search_results", []).append({
                 "query": query,
                 "count": len(results),
             })
+            # Small delay between queries to avoid Tavily rate-limiting
+            if i < len(queries) - 1:
+                time.sleep(0.2)
 
             for r in results:
                 # Extract emails from title and content (snippet).
