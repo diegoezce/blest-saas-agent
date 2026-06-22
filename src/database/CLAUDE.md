@@ -15,6 +15,8 @@ on startup via `_run_migrations()` in `src/database/session.py` — uses
 - One row per graph invocation
 - `profile_id` — which profile this run used
 - Tracks: created_at, duration, status, error messages, report JSON
+- `enriched_contact_ids` (JSONB) — persists contact IDs enriched during this run; 
+  allows recovery of enrichment state after page reload
 
 **`Company`**
 - Deduplicated by domain/normalized name (one row per real business)
@@ -48,6 +50,7 @@ on startup via `_run_migrations()` in `src/database/session.py` — uses
 ## Current Migrations
 
 - `discovery_runs.profile_id`
+- `discovery_runs.enriched_contact_ids` (JSONB, default `{}`)
 - `profiles.outreach_instructions`, `profiles.outreach_language`
 - Enrichment columns: `contacts.email`, `email_status`, `email_source`, 
   `phone_whatsapp`, `enriched_at`, `enrichment_log`

@@ -57,8 +57,14 @@ Calls Hunter.io email finder API (`HUNTER_API_KEY`). Score ≥ 90 → `verified`
 ## Layer 4: Web Search (Tavily) — Conditional
 
 Only runs if email still not `verified` after Layers 0–3. Replicates manual 
-"empresa email" Google search: builds 4 queries (`"{name}" "{company}" email`, etc.), 
-extracts emails from Tavily snippet results, filters by domain/reputation.
+"empresa email" Google search: builds queries in order of specificity:
+1. Named contact + company (`"{first} {last}" "{company}" email`)
+2. Company + role/context (`"{company}" {role} email`)
+3. Generic company terms (`"{company}" email`, `"{company}" employees email`, team, staff)
+4. Spanish variants (`"{company}" contacto email`, `"{company}" empleados email`)
+
+Extracts emails from Tavily snippet results, filters by domain/reputation. Includes 
+0.2s delay between queries to avoid rate-limiting.
 
 **Ranking logic:**
 1. Named match (first/last in local part) → `web_search` (high confidence)

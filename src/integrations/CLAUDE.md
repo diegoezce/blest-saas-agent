@@ -33,10 +33,15 @@ bounces and replies to auto-mark contacts and trigger follow-ups.
 Scans Zoho inbox for bounce notifications (from `mailer-daemon`/`postmaster`; 
 subjects like "Undelivered Mail", "Undeliverable"). Ignores "delay" notices.
 
-Extracts failed recipient addresses from bounce bodies and intersects with `Contact.email`.
+Fetches message bodies to inspect for bounce keywords (e.g., "permanent error", "user unknown") 
+to improve bounce detection accuracy. Extracts failed recipient addresses from bounce bodies 
+and intersects with `Contact.email`.
 
 **Workflow**: `GET /bounces/scan` (preview, read-only) → `POST /bounces/apply` 
 (mark matched contacts `email_status="bounced"`; also drops them from worker's push).
+
+Re-enrichment: Contacts with `email_status=not_found` or `None` are automatically re-enriched 
+when rediscovered in future runs, allowing second chances for leads initially without email.
 
 **Shared logic**: `src/tools/bounces.py` (`scan_and_match`, `mark_bounced`, `apply_bounces`)
 — used by routes + CLI (`python run.py --check-bounces`).

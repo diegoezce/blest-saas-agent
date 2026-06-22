@@ -25,7 +25,9 @@ Follow-ups → Perfiles → Logout. Visual separators.
 - Fast email-hunting workflow: discover → auto-enrich → push to Zoho
 - Discovery + enrichment run sequentially in background
 - Results: flat table with per-row checkboxes, inline draft preview, Zoho push buttons
+- Enrichment strategy: shows all discovered companies, enriches only contacts without email
 - Eligibility-gated: only verified/probable emails, skips already-contacted/pushed
+- Persists enriched contact IDs to DB (`DiscoveryRun.enriched_contact_ids` JSONB) for page reload recovery
 
 **Contacted Companies Report** (`/contacts-report`):
 - Cross-run view of all `ContactStatus` records (follow-up tracking)
@@ -40,7 +42,7 @@ Follow-ups → Perfiles → Logout. Visual separators.
 - "↩ Reactivar" to clear replied detection (override false-positives)
 
 **Routes for Enrichment/Zoho**:
-- `POST /run/<id>/enrich-all` — bulk enrich (async, sequential, 2s delay)
+- `POST /run/<id>/enrich-all` — bulk enrich (async, sequential, 2s delay); re-enriches contacts with no email
 - `GET /run/<id>/enrich-status` — poll progress `{done, total, failed, running, current_name}`
 - `POST /run/<id>/zoho-drafts` — push all outreach drafts to Zoho
 - `POST /contact/<id>/set-email` — manually set email (sets status=verified, source=manual)
@@ -57,7 +59,9 @@ Follow-ups → Perfiles → Logout. Visual separators.
 ## Key Implementation Notes
 
 - **Async enrichment** — `POST /run/<id>/enrich-all` spawns background thread, 
-  polls via JS at 2s interval
+  polls via JS at 2s interval. Saves enriched contact IDs to DB after completion for recovery
+- **Scheduler** — starts paused by default on deploy; must be manually activated from web UI 
+  to prevent accidental automatic runs
 - **Session/login** — basic auth via `WEB_PASSWORD` env var (default: blest2024)
 - **SSE logs** — `GET /logs` streams JSON log events (used by dashboard)
 - **Jinja2 templates** — responsive, mobile-friendly; `data-label` attributes for 
