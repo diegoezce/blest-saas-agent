@@ -92,6 +92,20 @@ def run_contacts_node(state: AgentState) -> AgentState:
                 }],
                 response_model=CompanyContacts,
             )
+
+            # Fallback: if no named contacts found, create placeholder for enrichment
+            if not result.contacts:
+                result.contacts = [{
+                    "name": None,
+                    "role": "Unknown",
+                    "role_category": "other",
+                    "linkedin_url": None,
+                    "email": None,
+                    "confidence": "low",
+                    "notes": "Placeholder: no named contacts found; enrichment will search generically",
+                }]
+                logger.info(f"No named contacts found for {company_name}, created placeholder")
+
             contacts.append(result.model_dump())
             logger.debug(f"Found {len(result.contacts)} contacts for {company_name}")
         except Exception as e:

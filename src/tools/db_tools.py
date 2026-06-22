@@ -169,10 +169,9 @@ def persist_run_node(state: AgentState) -> AgentState:
                     continue
                 for c in contacts_data.get("contacts", []):
                     name = (c.get("name") or "").strip()
-                    # Skip nameless / role-only contacts: they can't be emailed
-                    # (enrichment needs a name) and only dilute the email ratio.
-                    if not name:
-                        continue
+                    # Allow nameless contacts: Layer 4 web search can find emails generically
+                    # for companies where no named contact was discovered. Enrichment will
+                    # search by company name (e.g., "The Functionary email").
                     linkedin = c.get("linkedin_url") or ""
                     # Dedup: match by LinkedIn URL (most reliable) or name within company
                     existing = None
@@ -183,6 +182,11 @@ def persist_run_node(state: AgentState) -> AgentState:
                     if not existing and name:
                         existing = session.query(Contact).filter_by(
                             company_id=cid, name=name
+                        ).first()
+                    # For nameless placeholders, check if one already exists (avoid dupes)
+                    if not existing and not name:
+                        existing = session.query(Contact).filter_by(
+                            company_id=cid, name=None
                         ).first()
                     if existing:
                         # Update fields that may have improved since last run
