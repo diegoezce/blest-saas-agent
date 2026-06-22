@@ -138,20 +138,22 @@ def _do_quick_run(run_id: int, pid: int | None, profile: dict | None) -> None:
             opp_company_ids = [
                 o.company_id for o in db.query(Opportunity).filter_by(run_id=run_id).all()
             ]
-            # For Quick Run: enrich all contacts without email, regardless of prior enrichment
-            # This ensures fresh run gives complete coverage
-            contacts = (
+            # Get ALL contacts from this run's companies (to show in results)
+            all_contacts = (
                 db.query(Contact)
                 .filter(Contact.company_id.in_(opp_company_ids))
-                .filter(Contact.email.is_(None))  # contact has no email yet
                 .all()
             ) if opp_company_ids else []
-            contact_ids = [c.id for c in contacts]
-            contact_names = {c.id: c.name or "" for c in contacts}
+            all_contact_ids = [c.id for c in all_contacts]
+
+            # Enrich only contacts without email (saves API credits)
+            contacts_to_enrich = [c for c in all_contacts if not c.email]
+            contact_ids = [c.id for c in contacts_to_enrich]
+            contact_names = {c.id: c.name or "" for c in contacts_to_enrich}
 
         ep: dict = {"done": 0, "total": len(contact_ids), "failed": 0, "running": True, "current_name": None}
         state["enrich"] = ep
-        state["fresh_contact_ids"] = set(contact_ids)  # IDs new/unenriched at run start
+        state["fresh_contact_ids"] = set(all_contact_ids)  # ALL contacts from this run
 
         for i, cid in enumerate(contact_ids):
             ep["current_name"] = contact_names.get(cid, "")
@@ -171,13 +173,14 @@ def _do_quick_run(run_id: int, pid: int | None, profile: dict | None) -> None:
         ep["running"] = False
         ep["current_name"] = None
 
-        # Save enriched contact IDs to DB for persistence across page reloads
-        if contact_ids:
+        # Save ALL contact IDs from this run to DB (not just enriched ones)
+        # This ensures all contacts appear in /quick-run/<id> results
+        if all_contact_ids:
             try:
                 with get_session() as db:
                     run = db.get(DiscoveryRun, run_id)
                     if run:
-                        run.enriched_contact_ids = contact_ids
+                        run.enriched_contact_ids = all_contact_ids
                         db.commit()
             except Exception as e:
                 logger.warning(f"Could not save enriched_contact_ids for run {run_id}: {e}")
