@@ -57,20 +57,26 @@ Calls Hunter.io email finder API (`HUNTER_API_KEY`). Score ≥ 90 → `verified`
 ## Layer 4: Web Search (Tavily) — Conditional
 
 Only runs if email still not `verified` after Layers 0–3. Replicates manual 
-"empresa email" Google search: builds queries in order of specificity:
-1. Named contact + company (`"{first} {last}" "{company}" email`)
-2. Company + role/context (`"{company}" {role} email`)
+"empresa email" Google search. Runs for **both named and nameless contacts**.
+
+Queries built in order of specificity:
+1. Named contact + company (`"{first} {last}" "{company}" email`) — only if named
+2. Company + role/context (`"{company}" {role} email`) — only if role known
 3. Generic company terms (`"{company}" email`, `"{company}" employees email`, team, staff)
 4. Spanish variants (`"{company}" contacto email`, `"{company}" empleados email`)
 
 Extracts emails from Tavily snippet results, filters by domain/reputation. Includes 
 0.2s delay between queries to avoid rate-limiting.
 
+**Domain matching**: For named contacts, requires exact domain match (or subdomain).
+For **nameless placeholders**, accepts alternate TLDs sharing the same brand root
+(e.g. `southerncode.us` when stored domain is `southerncode.com`) — companies often
+use a different TLD than what discovery initially captured.
+
 **Ranking logic:**
 1. Named match (first/last in local part) → `web_search` (high confidence)
-2. Email confirms an earlier `probable` → bumps to `verified` (consensus from 2 sources)
-3. Generic inbox only (`info@`, `contacto@`) → `web_search_generic`
-4. No useful result → email unchanged (no regression)
+2. Generic inbox only (`info@`, `contacto@`) → `web_search_generic` (medium)
+3. No useful result → email unchanged (no regression)
 
 **v1 design:** No SMTP confirmation of web-found emails (precision-over-cost tradeoff). 
 If post-production metrics show high bounce rates on `web_search` source, v1.1 can add 
@@ -109,7 +115,8 @@ to find alternatives. Pipeline reads `bad_emails` and skips them in all layers.
 ## Running Enrichment
 
 - **Web UI**: "Enrich" per contact or "⚡ Enrich All" (async, sequential, 2s delay)
+- **Web UI**: "🔍 Buscar emails faltantes" in `/contacts-report` — bulk-enrich all companies with no contacts
 - **CLI**: `python run.py --enrich-run <run_id>`
-- Both skip already-enriched contacts; 3-minute hard cap per contact
+- All skip already-enriched contacts; 3-minute hard cap per contact
 - Each contact: ~15–90s (scrape + SMTP + Hunter + web search if needed)
   - Layer 4 (web search) only runs if email not yet verified; adds ~10–20s when triggered

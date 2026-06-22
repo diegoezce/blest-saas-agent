@@ -8,7 +8,7 @@ The 7-node LangGraph DAG is tuned for **lead volume + low AI spend**.
 |---|---|---|
 | `discover_companies` | ✅ Haiku ×2 | 1 query-generation call + 1 company-extraction call. Slices top 80 Tavily results. |
 | `score_opportunities` | ❌ — | **Pure-Python rule-based scoring** (see Scoring below). No AI call. |
-| `find_contacts` | ✅ Haiku | Finds **named** decision-makers per `target_roles`. Nameless entries dropped at persist. |
+| `find_contacts` | ✅ Haiku | Finds **named** decision-makers per `target_roles`. If no named contacts found, creates a **nameless placeholder** so enrichment can still search generically (Layer 1 + Layer 4). |
 | `generate_insights` | ⏸ disabled | `max_companies_for_insights=0` → returns `[]` immediately. Kept in DAG but no-op. |
 | `generate_outreach` | ✅ Haiku | One call per company (up to `max_companies_for_outreach`). Grounded prompt. |
 | `generate_report` | ❌ — | Assembles the report dict. |

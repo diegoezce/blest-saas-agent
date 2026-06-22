@@ -35,6 +35,8 @@ Follow-ups → Perfiles → Logout. Visual separators.
 - **De-duplicated**: rows for same business merge into one card
 - Card actions: Feedback modal + manual email button + Desmarcar (remove ContactStatus)
 - Stats bar + client-side filter pills (Rebotadas, Seguimiento, Exitosas)
+- **"🔍 Buscar emails faltantes"** button: finds all companies with opportunities but no
+  contacts, creates placeholder contacts, runs enrichment (Layer 1 + Layer 4) on each
 
 **Follow-ups** (`/follow-ups`):
 - Weekly summary: pending/overdue, **upcoming** (eligible, not due), drafted this week, replied
@@ -44,6 +46,8 @@ Follow-ups → Perfiles → Logout. Visual separators.
 **Routes for Enrichment/Zoho**:
 - `POST /run/<id>/enrich-all` — bulk enrich (async, sequential, 2s delay); re-enriches contacts with no email
 - `GET /run/<id>/enrich-status` — poll progress `{done, total, failed, running, current_name}`
+- `POST /enrich-missing-contacts` — creates placeholder contacts for companies with no contacts, runs enrichment async
+- `GET /enrich-missing-contacts/status` — poll progress for the above
 - `POST /run/<id>/zoho-drafts` — push all outreach drafts to Zoho
 - `POST /contact/<id>/set-email` — manually set email (sets status=verified, source=manual)
 
