@@ -59,6 +59,7 @@ class DiscoveryRun(Base):
     error_message = Column(Text, nullable=True)
     search_queries_used = Column(JSONB, nullable=True)
     config_snapshot = Column(JSONB, nullable=True)
+    enriched_contact_ids = Column(JSONB, nullable=True, comment="Quick Run: contact IDs that were enriched in this run")
     created_at = Column(DateTime, server_default=func.now())
 
     profile = relationship("Profile", back_populates="runs")

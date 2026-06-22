@@ -174,6 +174,17 @@ def _do_quick_run(run_id: int, pid: int | None, profile: dict | None) -> None:
 
         ep["running"] = False
         ep["current_name"] = None
+
+        # Save enriched contact IDs to DB for persistence across page reloads
+        if contact_ids:
+            try:
+                with get_session() as db:
+                    run = db.get(DiscoveryRun, run_id)
+                    if run:
+                        run.enriched_contact_ids = contact_ids
+                        db.commit()
+            except Exception as e:
+                logger.warning(f"Could not save enriched_contact_ids for run {run_id}: {e}")
     except Exception as e:
         logger.error(f"Quick run {run_id} enrichment failed: {e}", exc_info=True)
         if "enrich" in state:
@@ -1562,7 +1573,10 @@ def create_app() -> Flask:
                     db.query(ContactStatus).filter(ContactStatus.company_id.in_(company_ids)).all()
                 }
 
-                fresh_ids = state.get("fresh_contact_ids")  # None if old run / state lost after restart
+                # Get enriched contact IDs from DB (persisted after enrichment phase)
+                fresh_ids = None
+                if run:
+                    fresh_ids = set(run.enriched_contact_ids) if run.enriched_contact_ids else None
 
                 for opp, co in opps_cos:
                     draft = email_drafts.get(co.name, {})

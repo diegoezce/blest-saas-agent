@@ -199,3 +199,18 @@ def _run_migrations() -> None:
                     logger.info(f"Migration: added contacts.{col_name}")
     except Exception as e:
         logger.info(f"Migration note (non-fatal): {e}")
+
+    # Quick Run enriched_contact_ids column
+    try:
+        engine = get_engine()
+        inspector = inspect(engine)
+        discovery_cols = {c["name"] for c in inspector.get_columns("discovery_runs")}
+        if "enriched_contact_ids" not in discovery_cols:
+            with engine.connect() as conn:
+                conn.execute(text(
+                    "ALTER TABLE discovery_runs ADD COLUMN IF NOT EXISTS enriched_contact_ids JSONB"
+                ))
+                conn.commit()
+                logger.info("Migration: added discovery_runs.enriched_contact_ids")
+    except Exception as e:
+        logger.info(f"Migration note (non-fatal): {e}")
