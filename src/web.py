@@ -1600,7 +1600,7 @@ def create_app() -> Flask:
                             "email": "",
                             "email_status": "",
                             "linkedin_url": "",
-                            "enriched": False,
+                            "enriched": phase in ("done", "error"),
                             "subject": draft.get("subject_line", ""),
                             "body": draft.get("body", ""),
                             "is_contacted": cs is not None,
