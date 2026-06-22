@@ -1,0 +1,243 @@
+{% extends "base.html" %}
+{% block title %}Reporte — Blest{% endblock %}
+
+{% block content %}
+<style>
+  .rep-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 0.75rem; }
+  .kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1rem 1.1rem; }
+  .kpi .num { font-size: 1.7rem; font-weight: 800; line-height: 1.1; }
+  .kpi .lbl { font-size: 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin-top: 0.15rem; }
+  .kpi .sub { font-size: 0.78rem; color: var(--muted); margin-top: 0.25rem; }
+
+  .funnel-row { display: flex; align-items: center; gap: 0.85rem; margin-bottom: 0.55rem; }
+  .funnel-label { width: 210px; flex-shrink: 0; font-size: 0.88rem; }
+  .funnel-bar-wrap { flex: 1; background: var(--bg); border-radius: 6px; height: 26px; overflow: hidden; border: 1px solid var(--border); }
+  .funnel-bar { height: 100%; background: linear-gradient(90deg, #0ea5e9, #38bdf8); display: flex; align-items: center; padding-left: 0.5rem; font-size: 0.78rem; font-weight: 700; color: #04263a; min-width: fit-content; white-space: nowrap; transition: width 0.4s ease; }
+  .funnel-val { width: 110px; flex-shrink: 0; text-align: right; font-size: 0.85rem; color: var(--muted); }
+  .funnel-val b { color: var(--text); }
+
+  .rate-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 0.75rem; }
+  .rate { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 0.85rem 1rem; }
+  .rate .v { font-size: 1.5rem; font-weight: 800; }
+  .rate .l { font-size: 0.78rem; color: var(--muted); margin-top: 0.1rem; }
+
+  .qbar { display: flex; height: 30px; border-radius: 6px; overflow: hidden; border: 1px solid var(--border); }
+  .qseg { display: flex; align-items: center; justify-content: center; font-size: 0.72rem; font-weight: 700; color: #04263a; min-width: 0; }
+  .qlegend { display: flex; flex-wrap: wrap; gap: 0.75rem 1.25rem; margin-top: 0.75rem; font-size: 0.8rem; }
+  .qdot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 0.4rem; vertical-align: middle; }
+
+  .seg-green { background: #4ade80; }
+  .seg-amber { background: #fbbf24; }
+  .seg-red   { background: #f87171; }
+  .seg-muted { background: #475569; }
+
+  table.rep { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+  table.rep th { text-align: left; color: var(--muted); font-weight: 600; font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.04em; padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--border); }
+  table.rep td { padding: 0.55rem 0.6rem; border-bottom: 1px solid var(--border); }
+  table.rep tr:last-child td { border-bottom: none; }
+  table.rep td.n { text-align: right; font-variant-numeric: tabular-nums; }
+
+  .insight { border: 1px solid var(--border); border-left-width: 3px; border-radius: 8px; padding: 0.85rem 1rem; background: var(--bg); }
+  .insight h4 { font-size: 0.95rem; margin-bottom: 0.25rem; }
+  .insight p { font-size: 0.84rem; color: var(--muted); }
+  .insight .act { display: inline-block; margin-top: 0.5rem; font-size: 0.82rem; font-weight: 600; }
+  .sev-high { border-left-color: var(--red); }
+  .sev-med  { border-left-color: var(--amber); }
+  .sev-low  { border-left-color: var(--accent); }
+  .sev-ok   { border-left-color: var(--green); }
+
+  .act-spark { display: flex; align-items: flex-end; gap: 4px; height: 90px; }
+  .act-bar { flex: 1; background: var(--surface-hover); border-radius: 3px 3px 0 0; min-height: 3px; position: relative; }
+  .act-bar:hover { background: var(--accent); }
+  .act-bar span { position: absolute; bottom: -1.3rem; left: 50%; transform: translateX(-50%); font-size: 0.62rem; color: var(--muted); white-space: nowrap; }
+
+  @media (max-width: 640px) {
+    .funnel-label { width: 130px; font-size: 0.8rem; }
+    .funnel-val { width: 70px; font-size: 0.78rem; }
+  }
+</style>
+
+<div class="flex items-center justify-between mt-2" style="margin-bottom:1.25rem;flex-wrap:wrap;gap:0.75rem">
+  <div>
+    <h1 style="font-size:1.5rem;font-weight:700">📊 Reporte</h1>
+    <p class="text-muted mt-1" style="font-size:0.9rem">
+      Cómo viene el pipeline y qué conviene mejorar
+      {% if kpis.last_run_date %}· último run: <span class="text-accent">{{ kpis.last_run_date }}</span>{% endif %}
+    </p>
+  </div>
+  <div class="flex gap-2" style="gap:0.5rem">
+    <a href="/" style="background:var(--surface);border:1px solid var(--border);padding:0.45rem 0.9rem;border-radius:8px;font-size:0.85rem;color:var(--text)">Runs</a>
+    <a href="/contacts-report" style="background:var(--surface);border:1px solid var(--border);padding:0.45rem 0.9rem;border-radius:8px;font-size:0.85rem;color:var(--text)">Contactados</a>
+  </div>
+</div>
+
+<!-- KPIs -->
+<div class="rep-grid">
+  <div class="kpi">
+    <div class="num">{{ kpis.company_total }}</div>
+    <div class="lbl">Empresas</div>
+    <div class="sub">{{ kpis.opp_companies }} scoreadas</div>
+  </div>
+  <div class="kpi">
+    <div class="num text-accent">{{ kpis.with_email }}</div>
+    <div class="lbl">Con email</div>
+    <div class="sub">{{ rates.enrichment }}% enriquecimiento</div>
+  </div>
+  <div class="kpi">
+    <div class="num">{{ kpis.reached }}</div>
+    <div class="lbl">Contactadas</div>
+    <div class="sub">{{ rates.reply }}% respuesta</div>
+  </div>
+  <div class="kpi">
+    <div class="num text-green">{{ kpis.replied }}</div>
+    <div class="lbl">Respondieron</div>
+    <div class="sub">{{ kpis.qw }} leads calientes</div>
+  </div>
+  <div class="kpi">
+    <div class="num">{{ kpis.runs_completed }}</div>
+    <div class="lbl">Runs OK</div>
+    <div class="sub">{{ kpis.avg_companies }} empresas/run{% if kpis.runs_failed %} · <span class="text-red">{{ kpis.runs_failed }} fallidos</span>{% endif %}</div>
+  </div>
+  <div class="kpi">
+    <div class="num">{{ kpis.avg_score }}</div>
+    <div class="lbl">Score prom.</div>
+    <div class="sub">{{ kpis.contacts_total }} contactos</div>
+  </div>
+</div>
+
+<!-- Funnel -->
+<div class="card mt-3">
+  <div class="section-title">Embudo de conversión</div>
+  {% for f in funnel %}
+  <div class="funnel-row">
+    <div class="funnel-label">{{ f.label }}</div>
+    <div class="funnel-bar-wrap">
+      <div class="funnel-bar" style="width: {{ f.pct if f.pct > 4 else 4 }}%">{{ f.n }}</div>
+    </div>
+    <div class="funnel-val"><b>{{ f.pct }}%</b> del total</div>
+  </div>
+  {% endfor %}
+  <p class="text-muted" style="font-size:0.78rem;margin-top:0.75rem">% calculado sobre el total de empresas descubiertas. La caída entre etapas marca dónde se pierde el pipeline.</p>
+</div>
+
+<!-- Rates -->
+<div class="card mt-3">
+  <div class="section-title">Tasas clave</div>
+  <div class="rate-grid">
+    <div class="rate">
+      <div class="v {% if rates.enrichment >= 60 %}text-green{% elif rates.enrichment >= 40 %}text-amber{% else %}text-red{% endif %}">{{ rates.enrichment }}%</div>
+      <div class="l">Enriquecimiento<br>(email usable / con contacto)</div>
+    </div>
+    <div class="rate">
+      <div class="v {% if rates.email_of_scored >= 50 %}text-green{% elif rates.email_of_scored >= 30 %}text-amber{% else %}text-red{% endif %}">{{ rates.email_of_scored }}%</div>
+      <div class="l">Cobertura de email<br>(email / scoreadas)</div>
+    </div>
+    <div class="rate">
+      <div class="v {% if rates.reply >= 10 %}text-green{% elif rates.reply >= 3 %}text-amber{% else %}text-muted{% endif %}">{{ rates.reply }}%</div>
+      <div class="l">Respuesta<br>(respondieron / contactadas)</div>
+    </div>
+    <div class="rate">
+      <div class="v {% if rates.bounce < 5 %}text-green{% elif rates.bounce < 10 %}text-amber{% else %}text-red{% endif %}">{{ rates.bounce }}%</div>
+      <div class="l">Rebote<br>(rebotados / enviables)</div>
+    </div>
+  </div>
+</div>
+
+<!-- Email quality -->
+<div class="card mt-3">
+  <div class="section-title">Calidad de emails ({{ kpis.contacts_total }} contactos)</div>
+  {% set total_contacts = kpis.contacts_total or 1 %}
+  <div class="qbar">
+    {% for q in email_quality %}
+      {% if q.n %}
+      <div class="qseg seg-{{ q.cls }}" style="width: {{ (100.0 * q.n / total_contacts) }}%" title="{{ q.label }}: {{ q.n }}">{% if (100.0 * q.n / total_contacts) > 7 %}{{ q.n }}{% endif %}</div>
+      {% endif %}
+    {% endfor %}
+  </div>
+  <div class="qlegend">
+    {% for q in email_quality %}
+    <span><span class="qdot seg-{{ q.cls }}"></span>{{ q.label }}: <b>{{ q.n }}</b></span>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="grid-2 mt-3">
+  <!-- Pipeline by score -->
+  <div class="card">
+    <div class="section-title">Pipeline por prioridad</div>
+    <table class="rep">
+      <tr><td><span class="badge badge-green">Quick win</span> <span class="text-muted" style="font-size:0.78rem">score ≥ 70</span></td><td class="n"><b>{{ kpis.qw }}</b></td></tr>
+      <tr><td><span class="badge badge-amber">Estratégico</span> <span class="text-muted" style="font-size:0.78rem">40–69</span></td><td class="n"><b>{{ kpis.strat }}</b></td></tr>
+      <tr><td><span class="badge badge-muted">Baja prioridad</span> <span class="text-muted" style="font-size:0.78rem">&lt; 40</span></td><td class="n"><b>{{ kpis.low }}</b></td></tr>
+    </table>
+  </div>
+
+  <!-- Outcomes -->
+  <div class="card">
+    <div class="section-title">Resultados registrados</div>
+    {% if response_counts %}
+    <table class="rep">
+      {% for resp, n in response_counts.items() %}
+      <tr><td>{{ resp }}</td><td class="n"><b>{{ n }}</b></td></tr>
+      {% endfor %}
+    </table>
+    {% else %}
+    <p class="text-muted" style="font-size:0.85rem">Todavía no hay resultados marcados en empresas contactadas. Registrá respuestas desde <a href="/contacts-report">Contactados</a> para medir conversión.</p>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Per-profile performance -->
+{% if profile_perf %}
+<div class="card mt-3">
+  <div class="section-title">Rendimiento por perfil</div>
+  <div style="overflow-x:auto">
+    <table class="rep">
+      <thead>
+        <tr><th>Perfil</th><th style="text-align:right">Runs</th><th style="text-align:right">Empresas</th><th style="text-align:right">Oport.</th><th style="text-align:right">Calientes</th><th style="text-align:right">Enviadas</th></tr>
+      </thead>
+      <tbody>
+        {% for p in profile_perf %}
+        <tr>
+          <td><b>{{ p.name }}</b></td>
+          <td class="n">{{ p.runs }}</td>
+          <td class="n">{{ p.companies }}</td>
+          <td class="n">{{ p.opps }}</td>
+          <td class="n">{{ p.hot }}</td>
+          <td class="n">{{ p.pushed }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<!-- Activity -->
+{% if activity %}
+<div class="card mt-3">
+  <div class="section-title">Actividad (últimos {{ activity|length }} runs)</div>
+  <div class="act-spark" style="margin-bottom:1.5rem">
+    {% for a in activity %}
+    <div class="act-bar" style="height: {{ a.pct if a.pct > 2 else 2 }}%" title="{{ a.date }} · {{ a.profile }}: {{ a.count }} empresas">
+      <span>{{ a.date }}</span>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<!-- Insights -->
+<div class="card mt-3" style="margin-bottom:2rem">
+  <div class="section-title">🛠 Qué conviene mejorar</div>
+  <div class="flex flex-col" style="gap:0.75rem">
+    {% for i in insights %}
+    <div class="insight sev-{{ i.sev }}">
+      <h4>{{ i.title }}</h4>
+      <p>{{ i.body }}</p>
+      {% if i.action and i.href %}<a class="act" href="{{ i.href }}">{{ i.action }} →</a>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

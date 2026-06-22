@@ -2265,6 +2265,275 @@ def create_app() -> Flask:
         flash(res["message"], "success" if res["ok"] else "error")
         return redirect(url_for("follow_ups"))
 
+    @app.route("/reporting")
+    @_require_auth
+    def reporting():
+        """Health dashboard: pipeline funnel, conversion rates, quality
+        breakdowns, per-profile performance and auto-derived 'what to improve'
+        insights. Data volume is modest, so we pull thin rows and aggregate in
+        Python for clarity and accuracy."""
+        from sqlalchemy import func
+        from src.database.session import get_session
+        from src.database.models import (
+            Company, Contact, Opportunity, DiscoveryRun, Profile, ContactStatus,
+        )
+        from datetime import date
+
+        today = date.today()
+        SUCCESS = ("replied", "interested", "meeting_scheduled")
+
+        def pct(num, den):
+            return round(100.0 * num / den, 1) if den else 0.0
+
+        with get_session() as db:
+            profiles = db.query(Profile).order_by(Profile.name).all()
+            profile_name_map = {p.id: p.name for p in profiles}
+
+            company_total = db.query(func.count(Company.id)).scalar() or 0
+
+            run_rows = db.query(
+                DiscoveryRun.id, DiscoveryRun.profile_id, DiscoveryRun.status,
+                DiscoveryRun.run_date, DiscoveryRun.companies_found,
+            ).all()
+            opp_rows = db.query(
+                Opportunity.company_id, Opportunity.score,
+                Opportunity.zoho_pushed_at, Opportunity.run_id,
+            ).all()
+            contact_rows = db.query(
+                Contact.company_id, Contact.email_status,
+                Contact.enriched_at, Contact.replied_at,
+            ).all()
+            cs_rows = db.query(
+                ContactStatus.company_id, ContactStatus.response_received,
+                ContactStatus.follow_up_date,
+            ).all()
+
+            # ── Runs ──
+            runs_total = len(run_rows)
+            runs_completed = sum(1 for r in run_rows if r.status == "completed")
+            runs_failed = sum(1 for r in run_rows if r.status == "failed")
+            completed_runs = sorted(
+                [r for r in run_rows if r.status == "completed" and r.run_date],
+                key=lambda r: r.run_date,
+            )
+            last_run_date = str(completed_runs[-1].run_date) if completed_runs else None
+            cf_vals = [r.companies_found or 0 for r in completed_runs]
+            avg_companies = round(sum(cf_vals) / len(cf_vals), 1) if cf_vals else 0.0
+            run_profile = {r.id: r.profile_id for r in run_rows}
+
+            # Activity: last 14 completed runs (oldest→newest)
+            recent = completed_runs[-14:]
+            max_cf = max([r.companies_found or 0 for r in recent], default=0)
+            activity = [{
+                "date": r.run_date.strftime("%d/%m"),
+                "count": r.companies_found or 0,
+                "pct": pct(r.companies_found or 0, max_cf),
+                "profile": profile_name_map.get(r.profile_id, "Default"),
+            } for r in recent]
+
+            # ── Opportunities ──
+            opp_company_ids = set()
+            pushed_company_ids = set()
+            score_by_company = {}
+            score_sum = score_n = 0
+            for company_id, score, pushed, run_id in opp_rows:
+                opp_company_ids.add(company_id)
+                if pushed:
+                    pushed_company_ids.add(company_id)
+                if score is not None:
+                    score_sum += score
+                    score_n += 1
+                    if score > score_by_company.get(company_id, -1):
+                        score_by_company[company_id] = score
+            avg_score = round(score_sum / score_n, 1) if score_n else 0.0
+            qw = sum(1 for s in score_by_company.values() if s >= 70)
+            strat = sum(1 for s in score_by_company.values() if 40 <= s < 70)
+            low = sum(1 for s in score_by_company.values() if s < 40)
+            hot_companies = {cid for cid, s in score_by_company.items() if s >= 70}
+
+            # ── Contacts / email quality ──
+            contacts_total = len(contact_rows)
+            status_counts = {"verified": 0, "probable": 0, "catch_all": 0,
+                             "not_found": 0, "bounced": 0, "none": 0}
+            enriched = 0
+            companies_with_contacts = set()
+            companies_with_email = set()
+            replied_company_ids = set()
+            for company_id, status, enriched_at, replied_at in contact_rows:
+                companies_with_contacts.add(company_id)
+                key = status if status in status_counts else "none"
+                status_counts[key] += 1
+                if status in ("verified", "probable"):
+                    companies_with_email.add(company_id)
+                if enriched_at:
+                    enriched += 1
+                if replied_at:
+                    replied_company_ids.add(company_id)
+
+            # ── Contact status / outcomes ──
+            contacted_company_ids = set()
+            responded_company_ids = set()
+            response_counts = {}
+            overdue_followups = 0
+            for company_id, resp, fud in cs_rows:
+                contacted_company_ids.add(company_id)
+                if resp:
+                    response_counts[resp] = response_counts.get(resp, 0) + 1
+                    if resp in SUCCESS:
+                        responded_company_ids.add(company_id)
+                if fud and fud < today:
+                    overdue_followups += 1
+
+            reached = pushed_company_ids | contacted_company_ids
+            all_replied = replied_company_ids | responded_company_ids
+
+            # ── Funnel ──
+            funnel = [
+                {"label": "Empresas descubiertas", "n": company_total, "pct": 100.0},
+                {"label": "Oportunidades scoreadas", "n": len(opp_company_ids),
+                 "pct": pct(len(opp_company_ids), company_total)},
+                {"label": "Con contacto identificado", "n": len(companies_with_contacts),
+                 "pct": pct(len(companies_with_contacts), company_total)},
+                {"label": "Con email usable", "n": len(companies_with_email),
+                 "pct": pct(len(companies_with_email), company_total)},
+                {"label": "Contactadas", "n": len(reached),
+                 "pct": pct(len(reached), company_total)},
+                {"label": "Respondieron", "n": len(all_replied),
+                 "pct": pct(len(all_replied), company_total)},
+            ]
+
+            # ── Headline rates ──
+            rates = {
+                "enrichment": pct(len(companies_with_email), len(companies_with_contacts)),
+                "email_of_scored": pct(len(companies_with_email), len(opp_company_ids)),
+                "reply": pct(len(all_replied), len(reached)),
+                "bounce": pct(status_counts["bounced"],
+                              status_counts["verified"] + status_counts["probable"]
+                              + status_counts["bounced"]),
+            }
+
+            email_quality = [
+                {"label": "Verificado", "key": "verified", "n": status_counts["verified"], "cls": "green"},
+                {"label": "Probable", "key": "probable", "n": status_counts["probable"], "cls": "amber"},
+                {"label": "Catch-all", "key": "catch_all", "n": status_counts["catch_all"], "cls": "muted"},
+                {"label": "No encontrado", "key": "not_found", "n": status_counts["not_found"], "cls": "muted"},
+                {"label": "Rebotado", "key": "bounced", "n": status_counts["bounced"], "cls": "red"},
+                {"label": "Sin estado", "key": "none", "n": status_counts["none"], "cls": "muted"},
+            ]
+
+            # ── Per-profile performance ──
+            prof = {}
+            def _pbucket(pid):
+                name = profile_name_map.get(pid, "Default")
+                if name not in prof:
+                    prof[name] = {"runs": 0, "companies": set(), "opps": 0,
+                                  "pushed": set(), "hot": set()}
+                return prof[name]
+            for r in run_rows:
+                _pbucket(r.profile_id)["runs"] += 1
+            for company_id, score, pushed, run_id in opp_rows:
+                b = _pbucket(run_profile.get(run_id))
+                b["companies"].add(company_id)
+                b["opps"] += 1
+                if pushed:
+                    b["pushed"].add(company_id)
+                if score is not None and score >= 70:
+                    b["hot"].add(company_id)
+            profile_perf = sorted([
+                {"name": name, "runs": d["runs"], "companies": len(d["companies"]),
+                 "opps": d["opps"], "pushed": len(d["pushed"]), "hot": len(d["hot"])}
+                for name, d in prof.items()
+            ], key=lambda x: x["companies"], reverse=True)
+
+            # ── "Qué mejorar" — actionable insights ──
+            scored_no_contact = len([cid for cid, s in score_by_company.items()
+                                     if s >= 40 and cid not in companies_with_contacts])
+            contact_no_email = len(companies_with_contacts - companies_with_email)
+            hot_not_reached = len(hot_companies - reached)
+            waiting_no_reply = len(reached - all_replied)
+
+            insights = []
+            if hot_not_reached:
+                insights.append({
+                    "sev": "high",
+                    "title": f"{hot_not_reached} leads calientes sin contactar",
+                    "body": "Empresas con score ≥70 que todavía no recibieron outreach ni se marcaron como contactadas. Son la prioridad #1.",
+                    "action": "Ver oportunidades", "href": "/",
+                })
+            if scored_no_contact:
+                insights.append({
+                    "sev": "high",
+                    "title": f"{scored_no_contact} oportunidades sin contacto identificado",
+                    "body": "Empresas scoreadas (≥40) sin ninguna persona/contacto cargado. La búsqueda de contactos o el enriquecimiento se está quedando corto acá.",
+                    "action": "Buscar emails faltantes", "href": "/contacts-report",
+                })
+            if rates["enrichment"] < 50 and companies_with_contacts:
+                insights.append({
+                    "sev": "med",
+                    "title": f"Tasa de enriquecimiento baja ({rates['enrichment']}%)",
+                    "body": f"Solo {len(companies_with_email)} de {len(companies_with_contacts)} empresas con contacto tienen un email usable (verificado/probable). Revisar las capas de enriquecimiento (SMTP/Hunter/Tavily).",
+                    "action": None, "href": None,
+                })
+            if contact_no_email:
+                insights.append({
+                    "sev": "med",
+                    "title": f"{contact_no_email} empresas con contacto pero sin email",
+                    "body": "Tienen una persona identificada pero no se pudo conseguir un correo confiable. Candidatas a re-enriquecer o completar manualmente.",
+                    "action": "Ver contactados", "href": "/contacts-report",
+                })
+            if rates["bounce"] >= 10 and status_counts["bounced"]:
+                insights.append({
+                    "sev": "high",
+                    "title": f"Tasa de rebote alta ({rates['bounce']}%)",
+                    "body": f"{status_counts['bounced']} correos rebotaron. Conviene endurecer la verificación antes de enviar y correr la recuperación de rebotados.",
+                    "action": None, "href": None,
+                })
+            if overdue_followups:
+                insights.append({
+                    "sev": "med",
+                    "title": f"{overdue_followups} follow-ups vencidos",
+                    "body": "Hay seguimientos cuya fecha ya pasó. No dejes que se enfríen.",
+                    "action": "Ir a follow-ups", "href": "/follow-ups",
+                })
+            if waiting_no_reply and not all_replied:
+                insights.append({
+                    "sev": "low",
+                    "title": f"{waiting_no_reply} empresas contactadas, aún sin respuesta",
+                    "body": "Todavía no se registraron respuestas. Si ya pasó más de una semana, activá la cadencia de follow-ups.",
+                    "action": "Ir a follow-ups", "href": "/follow-ups",
+                })
+            if not insights:
+                insights.append({
+                    "sev": "ok",
+                    "title": "Todo en orden ✅",
+                    "body": "No se detectaron cuellos de botella evidentes en el pipeline. Seguí monitoreando la tasa de respuesta.",
+                    "action": None, "href": None,
+                })
+
+            kpis = {
+                "runs_total": runs_total,
+                "runs_completed": runs_completed,
+                "runs_failed": runs_failed,
+                "last_run_date": last_run_date,
+                "avg_companies": avg_companies,
+                "company_total": company_total,
+                "opp_companies": len(opp_company_ids),
+                "with_email": len(companies_with_email),
+                "reached": len(reached),
+                "replied": len(all_replied),
+                "contacts_total": contacts_total,
+                "enriched": enriched,
+                "avg_score": avg_score,
+                "qw": qw, "strat": strat, "low": low,
+            }
+
+        return render_template(
+            "reporting.html",
+            kpis=kpis, funnel=funnel, rates=rates, email_quality=email_quality,
+            response_counts=response_counts, profile_perf=profile_perf,
+            activity=activity, insights=insights,
+        )
+
     @app.route("/contact/<int:contact_id>/clear-replied", methods=["POST"])
     @_require_auth
     def contact_clear_replied(contact_id: int):
