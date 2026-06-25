@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} — Blest{% endblock %}
+
+{% block content %}
+<style>
+  .insight-table { width: 100%; border-collapse: collapse; font-size: 0.87rem; }
+  .insight-table th { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 2px solid var(--border); color: var(--muted); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; }
+  .insight-table td { padding: 0.55rem 0.75rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  .insight-table tr:last-child td { border-bottom: none; }
+  .insight-table tr:hover td { background: var(--surface-hover); }
+  .score-badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 4px; font-weight: 700; font-size: 0.8rem; }
+  .score-hot { background: rgba(239,68,68,0.15); color: #ef4444; }
+  .score-med { background: rgba(234,179,8,0.15); color: #ca8a04; }
+  .score-low { background: rgba(100,116,139,0.15); color: var(--muted); }
+  .back-link { display: inline-flex; align-items: center; gap: 0.35rem; color: var(--muted); font-size: 0.85rem; text-decoration: none; margin-bottom: 1.25rem; }
+  .back-link:hover { color: var(--text); }
+</style>
+
+<div style="max-width: 860px; margin: 0 auto; padding: 1.5rem 1rem;">
+  <a class="back-link" href="/reporting">← Volver al reporte</a>
+  <h2 style="margin: 0 0 0.3rem; font-size: 1.25rem;">{{ title }}</h2>
+  <p style="color: var(--muted); font-size: 0.87rem; margin: 0 0 1.5rem;">{{ rows|length }} empresa{% if rows|length != 1 %}s{% endif %}</p>
+
+  {% if rows %}
+  <div style="background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden;">
+    <table class="insight-table">
+      <thead>
+        <tr>
+          <th>Empresa</th>
+          <th>Dominio</th>
+          {% if slug == "bounced" %}
+          <th>Email rebotado</th>
+          {% else %}
+          <th>Score</th>
+          {% endif %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td><strong>{{ r.name }}</strong></td>
+          <td>
+            {% if r.domain %}
+            <a href="https://{{ r.domain }}" target="_blank" style="color: var(--accent); font-size: 0.82rem;">{{ r.domain }} ↗</a>
+            {% else %}
+            <span style="color: var(--muted);">—</span>
+            {% endif %}
+          </td>
+          {% if slug == "bounced" %}
+          <td style="color: #ef4444; font-size: 0.83rem;">{{ r.email }}</td>
+          {% else %}
+          <td>
+            {% if r.score is defined %}
+            <span class="score-badge {% if r.score >= 70 %}score-hot{% elif r.score >= 40 %}score-med{% else %}score-low{% endif %}">
+              {{ r.score }}
+            </span>
+            {% endif %}
+          </td>
+          {% endif %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div style="color: var(--muted); padding: 2rem; text-align: center; background: var(--surface); border: 1px solid var(--border); border-radius: 10px;">
+    No hay empresas en esta categoría.
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

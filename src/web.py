@@ -2464,35 +2464,35 @@ def create_app() -> Flask:
                     "sev": "high",
                     "title": f"{hot_not_reached} leads calientes sin contactar",
                     "body": "Empresas con score ≥70 que todavía no recibieron outreach ni se marcaron como contactadas. Son la prioridad #1.",
-                    "action": "Ver oportunidades", "href": "/",
+                    "action": "Ver listado", "href": "/reporting/insight/hot_no_contact",
                 })
             if scored_no_contact:
                 insights.append({
                     "sev": "high",
                     "title": f"{scored_no_contact} oportunidades sin contacto identificado",
                     "body": "Empresas scoreadas (≥40) sin ninguna persona/contacto cargado. La búsqueda de contactos o el enriquecimiento se está quedando corto acá.",
-                    "action": "Buscar emails faltantes", "href": "/contacts-report",
+                    "action": "Ver listado", "href": "/reporting/insight/no_contact_found",
                 })
             if rates["enrichment"] < 50 and companies_with_contacts:
                 insights.append({
                     "sev": "med",
                     "title": f"Tasa de enriquecimiento baja ({rates['enrichment']}%)",
                     "body": f"Solo {len(companies_with_email)} de {len(companies_with_contacts)} empresas con contacto tienen un email usable (verificado/probable). Revisar las capas de enriquecimiento (SMTP/Hunter/Tavily).",
-                    "action": None, "href": None,
+                    "action": "Ver listado", "href": "/reporting/insight/contact_no_email",
                 })
             if contact_no_email:
                 insights.append({
                     "sev": "med",
                     "title": f"{contact_no_email} empresas con contacto pero sin email",
                     "body": "Tienen una persona identificada pero no se pudo conseguir un correo confiable. Candidatas a re-enriquecer o completar manualmente.",
-                    "action": "Ver contactados", "href": "/contacts-report",
+                    "action": "Ver listado", "href": "/reporting/insight/contact_no_email",
                 })
             if rates["bounce"] >= 10 and status_counts["bounced"]:
                 insights.append({
                     "sev": "high",
                     "title": f"Tasa de rebote alta ({rates['bounce']}%)",
                     "body": f"{status_counts['bounced']} correos rebotaron. Conviene endurecer la verificación antes de enviar y correr la recuperación de rebotados.",
-                    "action": None, "href": None,
+                    "action": "Ver rebotados", "href": "/reporting/insight/bounced",
                 })
             if overdue_followups:
                 insights.append({
@@ -2538,6 +2538,103 @@ def create_app() -> Flask:
             kpis=kpis, funnel=funnel, rates=rates, email_quality=email_quality,
             response_counts=response_counts, profile_perf=profile_perf,
             activity=activity, insights=insights,
+        )
+
+    @app.route("/reporting/insight/<slug>")
+    @_require_auth
+    def reporting_insight(slug: str):
+        """List the exact companies behind each reporting insight."""
+        from sqlalchemy import func
+        from src.database.session import get_session
+        from src.database.models import Company, Contact, Opportunity, ContactStatus
+        from datetime import date
+
+        VALID = {
+            "hot_no_contact": "Leads calientes sin contactar",
+            "no_contact_found": "Oportunidades sin contacto identificado",
+            "contact_no_email": "Empresas con contacto pero sin email",
+            "bounced": "Correos rebotados",
+        }
+        if slug not in VALID:
+            abort(404)
+
+        today = date.today()
+        SUCCESS = ("replied", "interested", "meeting_scheduled")
+
+        with get_session() as db:
+            opp_rows = db.query(
+                Opportunity.company_id, Opportunity.score, Opportunity.zoho_pushed_at,
+            ).all()
+            contact_rows = db.query(
+                Contact.company_id, Contact.email_status, Contact.email,
+            ).all()
+            cs_rows = db.query(ContactStatus.company_id, ContactStatus.response_received).all()
+            companies_map = {c.id: c for c in db.query(Company).all()}
+
+        score_by_company = {}
+        pushed_company_ids = set()
+        for cid, score, pushed in opp_rows:
+            if score is not None and score > score_by_company.get(cid, -1):
+                score_by_company[cid] = score
+            if pushed:
+                pushed_company_ids.add(cid)
+
+        companies_with_contacts = set()
+        companies_with_email = set()
+        bounced_contacts: list[dict] = []
+        for cid, status, email in contact_rows:
+            companies_with_contacts.add(cid)
+            if status in ("verified", "probable"):
+                companies_with_email.add(cid)
+            if status == "bounced" and email:
+                c = companies_map.get(cid)
+                bounced_contacts.append({
+                    "company": c.name if c else f"#{cid}",
+                    "domain": c.domain if c else "",
+                    "email": email,
+                })
+
+        contacted_ids = set()
+        for cid, resp in cs_rows:
+            contacted_ids.add(cid)
+
+        reached = pushed_company_ids | contacted_ids
+        hot_companies = {cid for cid, s in score_by_company.items() if s >= 70}
+
+        title = VALID[slug]
+        rows = []
+
+        if slug == "hot_no_contact":
+            company_ids = hot_companies - reached
+            for cid in sorted(company_ids, key=lambda c: -score_by_company.get(c, 0)):
+                co = companies_map.get(cid)
+                if co:
+                    rows.append({"name": co.name, "domain": co.domain or "",
+                                 "score": score_by_company.get(cid, 0)})
+
+        elif slug == "no_contact_found":
+            company_ids = {cid for cid, s in score_by_company.items()
+                           if s >= 40 and cid not in companies_with_contacts}
+            for cid in sorted(company_ids, key=lambda c: -score_by_company.get(c, 0)):
+                co = companies_map.get(cid)
+                if co:
+                    rows.append({"name": co.name, "domain": co.domain or "",
+                                 "score": score_by_company.get(cid, 0)})
+
+        elif slug == "contact_no_email":
+            company_ids = companies_with_contacts - companies_with_email
+            for cid in sorted(company_ids, key=lambda c: -score_by_company.get(c, 0)):
+                co = companies_map.get(cid)
+                if co:
+                    rows.append({"name": co.name, "domain": co.domain or "",
+                                 "score": score_by_company.get(cid, 0)})
+
+        elif slug == "bounced":
+            rows = sorted(bounced_contacts, key=lambda r: r["company"])
+
+        return render_template(
+            "reporting_insight.html",
+            title=title, slug=slug, rows=rows,
         )
 
     @app.route("/contact/<int:contact_id>/clear-replied", methods=["POST"])
