@@ -640,7 +640,7 @@
       var contactRole = esc(contact.role);
       var contactEmail = esc(contact.email);
       var contactLinkedIn = esc(contact.linkedin_url);
-      var isManual = contact.email_source === 'manual' && !contact.name && !contact.role;
+      var isManual = contact.email_source === 'manual';
       var isPrimary = contact.is_primary === true;
       var row = '<div id="modal-contact-row-' + contact.id + '" style="padding: 0.6rem; border: 1px solid var(--border); border-radius: 6px; background: rgba(255,255,255,0.02)">';
       if (editMode) {
