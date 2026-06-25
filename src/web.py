@@ -863,6 +863,7 @@ def create_app() -> Flask:
                     "name": p.name,
                     "description": p.description,
                     "active": p.active,
+                    "is_default": p.is_default,
                     "target_industries_count": ind_count,
                     "target_cities_count": city_count,
                     "employee_range": emp_range,
