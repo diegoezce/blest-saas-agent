@@ -2474,6 +2474,7 @@ def create_app() -> Flask:
                                      if s >= 40 and cid not in companies_with_contacts])
             contact_no_email = len(companies_with_contacts - companies_with_email)
             hot_not_reached = len(hot_companies - reached)
+            email_not_reached = len(companies_with_email - reached)
             waiting_no_reply = len(reached - all_replied)
 
             insights = []
@@ -2483,6 +2484,13 @@ def create_app() -> Flask:
                     "title": f"{hot_not_reached} leads calientes sin contactar",
                     "body": "Empresas con score ≥70 que todavía no recibieron outreach ni se marcaron como contactadas. Son la prioridad #1.",
                     "action": "Ver listado", "href": "/reporting/insight/hot_no_contact",
+                })
+            if email_not_reached:
+                insights.append({
+                    "sev": "med",
+                    "title": f"{email_not_reached} empresas con email listas para contactar",
+                    "body": f"Tienen email verificado o probable pero todavía no recibieron outreach. {len(companies_with_email)} empresas en total con email — solo {len(reached)} contactadas.",
+                    "action": "Ver listado", "href": "/reporting/insight/email_not_reached",
                 })
             if scored_no_contact:
                 insights.append({
@@ -2571,6 +2579,7 @@ def create_app() -> Flask:
             "hot_no_contact": "Leads calientes sin contactar",
             "no_contact_found": "Oportunidades sin contacto identificado",
             "contact_no_email": "Empresas con contacto pero sin email",
+            "email_not_reached": "Empresas con email listas para contactar",
             "bounced": "Correos rebotados",
         }
         if slug not in VALID:
@@ -2645,6 +2654,14 @@ def create_app() -> Flask:
 
         elif slug == "contact_no_email":
             company_ids = companies_with_contacts - companies_with_email
+            for cid in sorted(company_ids, key=lambda c: -score_by_company.get(c, 0)):
+                co = companies_map.get(cid)
+                if co:
+                    rows.append({"id": co["id"], "name": co["name"], "domain": co["domain"] or "",
+                                 "score": score_by_company.get(cid, 0)})
+
+        elif slug == "email_not_reached":
+            company_ids = companies_with_email - reached
             for cid in sorted(company_ids, key=lambda c: -score_by_company.get(c, 0)):
                 co = companies_map.get(cid)
                 if co:
