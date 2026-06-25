@@ -521,6 +521,15 @@
       <h2 style="font-size:1.1rem;font-weight:700">📭 Rebotes detectados</h2>
       <button onclick="closeBounceModal()" style="background:none;border:none;color:var(--muted);font-size:1.3rem;cursor:pointer;padding:0.25rem">&times;</button>
     </div>
+    <!-- loading state -->
+    <div id="bounce-modal-loading" style="display:none;flex-direction:column;align-items:center;justify-content:center;padding:2.5rem 1rem;gap:1rem">
+      <svg width="44" height="44" viewBox="0 0 44 44" style="animation:bounce-spin 0.9s linear infinite">
+        <circle cx="22" cy="22" r="18" fill="none" stroke="var(--border)" stroke-width="4"/>
+        <path d="M22 4 A18 18 0 0 1 40 22" fill="none" stroke="var(--accent)" stroke-width="4" stroke-linecap="round"/>
+      </svg>
+      <span style="color:var(--muted);font-size:0.88rem">Revisando inbox de Zoho…</span>
+    </div>
+    <style>@keyframes bounce-spin { to { transform: rotate(360deg); } }</style>
     <div id="bounce-modal-body" style="font-size:0.88rem;line-height:1.6;overflow-y:auto;flex:1;white-space:pre-wrap;user-select:text;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:0.75rem 1rem"></div>
     <div id="bounce-modal-actions" style="display:flex;gap:0.75rem;border-top:1px solid var(--border);padding-top:0.75rem">
       <button id="bounce-confirm-btn" onclick="applyBounces()"
@@ -976,11 +985,26 @@ async function enrichMissingContacts() {
 async function checkBounces(btn) {
   _bounceCheckBtn = btn;
   btn.disabled = true;
-  btn.textContent = '📭 Revisando Zoho…';
+  btn.textContent = '📭 Revisando…';
+
+  // show modal immediately with spinner
+  const modal = document.getElementById('bounce-modal');
+  const loading = document.getElementById('bounce-modal-loading');
+  const body = document.getElementById('bounce-modal-body');
+  const actions = document.getElementById('bounce-modal-actions');
+  loading.style.display = 'flex';
+  body.style.display = 'none';
+  actions.style.display = 'none';
+  body.textContent = '';
+  modal.style.display = 'flex';
+
   try {
     const r = await fetch('/bounces/scan');
     const d = await r.json();
-    if (d.error) { showNotification('Error: ' + d.error, 'error'); btn.disabled = false; btn.textContent = '📭 Chequear rebotes'; return; }
+    loading.style.display = 'none';
+    body.style.display = '';
+    actions.style.display = 'flex';
+    if (d.error) { showNotification('Error: ' + d.error, 'error'); modal.style.display = 'none'; btn.disabled = false; btn.textContent = '📭 Chequear rebotes'; return; }
     _bounceScanData = d;
 
     let msg = `Mensajes revisados: ${d.checked}\n`
@@ -992,13 +1016,16 @@ async function checkBounces(btn) {
     }
     if (d.new_count === 0) msg += '\n\nNo hay nuevos para marcar.';
 
-    document.getElementById('bounce-modal-body').textContent = msg;
+    body.textContent = msg;
     const confirmBtn = document.getElementById('bounce-confirm-btn');
     confirmBtn.style.display = d.new_count > 0 ? '' : 'none';
     confirmBtn.textContent = 'Marcar ' + d.new_count + ' como rebotado' + (d.new_count !== 1 ? 's' : '');
-    document.getElementById('bounce-modal').style.display = 'flex';
   } catch (e) {
     showNotification('Error: ' + e, 'error');
+    modal.style.display = 'none';
+    loading.style.display = 'none';
+    body.style.display = '';
+    actions.style.display = 'flex';
     btn.disabled = false;
     btn.textContent = '📭 Chequear rebotes';
   }
