@@ -446,8 +446,15 @@
           </label>
         </div>
       </div>
-      <div style="display:flex;gap:0.75rem;border-top:1px solid var(--border);padding-top:1rem">
-        <button onclick="submitGlobalDraft()" style="flex:1;background:var(--accent);color:#0f172a;font-weight:700;border:none;padding:0.6rem;border-radius:6px;cursor:pointer;font-size:0.9rem">Crear</button>
+      <div id="global-draft-loading" style="display:none;flex-direction:column;align-items:center;gap:0.75rem;padding:1rem 0">
+        <svg width="36" height="36" viewBox="0 0 36 36" style="animation:bounce-spin 0.9s linear infinite">
+          <circle cx="18" cy="18" r="14" fill="none" stroke="var(--border)" stroke-width="3"/>
+          <path d="M18 4 A14 14 0 0 1 32 18" fill="none" stroke="var(--accent)" stroke-width="3" stroke-linecap="round"/>
+        </svg>
+        <span id="global-draft-loading-msg" style="font-size:0.85rem;color:var(--muted)">Generando draft con IA…</span>
+      </div>
+      <div id="global-draft-actions" style="display:flex;gap:0.75rem;border-top:1px solid var(--border);padding-top:1rem">
+        <button id="global-draft-submit-btn" onclick="submitGlobalDraft()" style="flex:1;background:var(--accent);color:#0f172a;font-weight:700;border:none;padding:0.6rem;border-radius:6px;cursor:pointer;font-size:0.9rem">Crear</button>
         <button onclick="closeGlobalDraftModal()" style="flex:1;background:var(--surface-hover);color:var(--text);border:1px solid var(--border);padding:0.6rem;border-radius:6px;cursor:pointer;font-size:0.9rem">Cancelar</button>
       </div>
     </div>
@@ -871,6 +878,10 @@
       modal.style.display = 'none';
       _currentDraftCompanyId = null;
       _currentDraftContactId = null;
+      var loading = document.getElementById('global-draft-loading');
+      var actions = document.getElementById('global-draft-actions');
+      if (loading) loading.style.display = 'none';
+      if (actions) actions.style.display = 'flex';
     }
 
     function submitGlobalDraft() {
@@ -887,6 +898,15 @@
         return;
       }
 
+      var loading = document.getElementById('global-draft-loading');
+      var actions = document.getElementById('global-draft-actions');
+      var loadingMsg = document.getElementById('global-draft-loading-msg');
+      var isAI = draftType === 'ai';
+
+      loading.style.display = 'flex';
+      actions.style.display = 'none';
+      if (loadingMsg) loadingMsg.textContent = isAI ? 'Generando draft con IA…' : 'Creando draft…';
+
       var payload = {
         contact_id: _currentDraftContactId,
         action: draftType,
@@ -900,6 +920,8 @@
       })
         .then(function(r) { return r.json(); })
         .then(function(data) {
+          loading.style.display = 'none';
+          actions.style.display = 'flex';
           if (data.error) {
             showNotification('Error: ' + data.error, 'error');
           } else if (data.ok || data.has_existing) {
@@ -909,6 +931,8 @@
           }
         })
         .catch(function(err) {
+          loading.style.display = 'none';
+          actions.style.display = 'flex';
           console.error(err);
           showNotification('Error al crear el draft: ' + err.message, 'error');
         });
