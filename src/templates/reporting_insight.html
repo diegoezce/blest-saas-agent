@@ -4,7 +4,11 @@
 {% block content %}
 <style>
   .insight-table { width: 100%; border-collapse: collapse; font-size: 0.87rem; }
-  .insight-table th { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 2px solid var(--border); color: var(--muted); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; }
+  .insight-table th { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 2px solid var(--border); color: var(--muted); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; cursor: pointer; user-select: none; white-space: nowrap; }
+  .insight-table th:hover { color: var(--text); }
+  .insight-table th .sort-arrow { margin-left: 0.3rem; opacity: 0.4; }
+  .insight-table th.sorted { color: var(--accent); }
+  .insight-table th.sorted .sort-arrow { opacity: 1; }
   .insight-table td { padding: 0.55rem 0.75rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
   .insight-table tr:last-child td { border-bottom: none; }
   .insight-table tr:hover td { background: var(--surface-hover); }
@@ -23,21 +27,23 @@
 
   {% if rows %}
   <div style="background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden;">
-    <table class="insight-table">
+    <table class="insight-table" id="insight-table">
       <thead>
         <tr>
-          <th>Empresa</th>
-          <th>Dominio</th>
+          <th onclick="sortTable(0)" data-col="0">Empresa <span class="sort-arrow">↕</span></th>
+          <th onclick="sortTable(1)" data-col="1">Dominio <span class="sort-arrow">↕</span></th>
           {% if slug == "bounced" %}
-          <th>Email rebotado</th>
+          <th onclick="sortTable(2)" data-col="2">Email rebotado <span class="sort-arrow">↕</span></th>
           {% else %}
-          <th>Score</th>
+          <th onclick="sortTable(2)" data-col="2" class="sorted" data-dir="desc">Score <span class="sort-arrow">↓</span></th>
           {% endif %}
         </tr>
       </thead>
-      <tbody>
+      <tbody id="insight-tbody">
         {% for r in rows %}
-        <tr>
+        <tr data-name="{{ (r.name or r.company or '')|lower }}"
+            data-domain="{{ (r.domain or '')|lower }}"
+            data-third="{{ r.score if r.score is defined else (r.email or '') }}">
           <td>
             {% if r.id %}
             <span class="company-name-link" onclick="openCompanyModal({{ r.id }})" style="font-weight:700;cursor:pointer">{{ r.name or r.company }}</span>
@@ -74,4 +80,40 @@
   </div>
   {% endif %}
 </div>
+
+<script>
+var _sortCol = 2, _sortDir = 'desc';
+
+function sortTable(col) {
+  var ths = document.querySelectorAll('#insight-table thead th');
+  if (_sortCol === col) {
+    _sortDir = _sortDir === 'asc' ? 'desc' : 'asc';
+  } else {
+    _sortCol = col;
+    _sortDir = col === 2 ? 'desc' : 'asc';
+  }
+
+  ths.forEach(function(th, i) {
+    th.classList.remove('sorted');
+    th.querySelector('.sort-arrow').textContent = '↕';
+  });
+  ths[col].classList.add('sorted');
+  ths[col].querySelector('.sort-arrow').textContent = _sortDir === 'asc' ? '↑' : '↓';
+
+  var dataAttr = col === 0 ? 'name' : col === 1 ? 'domain' : 'third';
+  var tbody = document.getElementById('insight-tbody');
+  var rows = Array.from(tbody.querySelectorAll('tr'));
+
+  rows.sort(function(a, b) {
+    var av = a.dataset[dataAttr] || '';
+    var bv = b.dataset[dataAttr] || '';
+    var an = parseFloat(av), bn = parseFloat(bv);
+    var numeric = !isNaN(an) && !isNaN(bn);
+    var cmp = numeric ? (an - bn) : av.localeCompare(bv);
+    return _sortDir === 'asc' ? cmp : -cmp;
+  });
+
+  rows.forEach(function(r) { tbody.appendChild(r); });
+}
+</script>
 {% endblock %}
