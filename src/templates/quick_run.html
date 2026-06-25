@@ -195,6 +195,11 @@
             {% elif item.email_status in ("probable", "catch_all") %}<span title="probable">🟡</span>
             {% else %}<span title="sin verificar">🔵</span>{% endif %}
             <a href="mailto:{{ item.email }}" style="color:var(--accent);text-decoration:none;font-size:0.83rem">{{ item.email }}</a>
+            <button onclick="openDraftModalFromContact({{ item.company_id }}, {{ item.contact_id }})"
+              title="Generar draft para este contacto"
+              style="margin-left:0.3rem;font-size:0.75rem;padding:0.1rem 0.35rem;background:rgba(14,165,233,0.12);border:1px solid rgba(14,165,233,0.35);border-radius:4px;color:var(--accent);cursor:pointer;vertical-align:middle">
+              ✉️
+            </button>
           {% elif item.linkedin_url %}
             <a href="{{ item.linkedin_url }}" target="_blank" rel="noopener"
                style="color:var(--muted);font-size:0.8rem;text-decoration:none">🔵 LinkedIn ↗</a>
