@@ -745,6 +745,9 @@
       if (editMode) {
         html += '<div id="modal-add-email-section" style="margin-top: 0.4rem; padding: 0.6rem; border: 1px dashed var(--border); border-radius: 6px;">';
         html += '<div style="font-size: 0.8rem; color: var(--muted); margin-bottom: 0.4rem;">Agregar email de contacto</div>';
+        html += '<div style="display: flex; gap: 0.4rem; margin-bottom: 0.4rem;">';
+        html += '<input type="text" id="modal-new-contact-name-input" placeholder="Nombre (opcional)" style="flex: 1; padding: 0.45rem 0.5rem; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); color: var(--text); font-size: 0.85rem;">';
+        html += '</div>';
         html += '<div style="display: flex; gap: 0.4rem;">';
         html += '<input type="email" id="modal-new-email-input" placeholder="nuevo@empresa.com" style="flex: 1; padding: 0.45rem 0.5rem; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); color: var(--text); font-size: 0.85rem;">';
         html += '<button onclick="_addCompanyEmail()" style="background: var(--accent); color: #0f172a; border: none; border-radius: 4px; padding: 0.45rem 0.75rem; font-size: 0.8rem; font-weight: 700; cursor: pointer;">➕ Agregar</button>';
@@ -941,20 +944,22 @@
 
     function _addCompanyEmail() {
       var input = document.getElementById('modal-new-email-input');
+      var nameInput = document.getElementById('modal-new-contact-name-input');
       if (!input) return;
       var email = input.value.trim().toLowerCase();
+      var name = nameInput ? nameInput.value.trim() : '';
       if (!email || !email.includes('@') || !email.split('@')[1].includes('.')) {
         showNotification('Email inválido', 'warning'); return;
       }
       fetch('/company/' + _currentCompanyId + '/add-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email }),
+        body: JSON.stringify({ email: email, name: name || null }),
       })
         .then(function(r) { return r.json(); })
         .then(function(d) {
           if (d.ok && d.contact) {
-            var newContact = { id: d.contact.id, email: d.contact.email, name: null, role: null, email_source: 'manual', is_primary: false };
+            var newContact = { id: d.contact.id, email: d.contact.email, name: d.contact.name || null, role: null, email_source: 'manual', is_primary: false };
             if (!_currentCompanyData.contacts) _currentCompanyData.contacts = [];
             _currentCompanyData.contacts.push(newContact);
             var list = document.getElementById('modal-contacts-list');
@@ -966,6 +971,7 @@
               else list.appendChild(div.firstChild);
             }
             input.value = '';
+            if (nameInput) nameInput.value = '';
           } else {
             showNotification('Error al agregar: ' + (d.error || 'desconocido'), 'error');
           }

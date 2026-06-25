@@ -1203,6 +1203,7 @@ def create_app() -> Flask:
         from src.database.models import Company, Contact
         data = request.get_json(silent=True) or {}
         email = (data.get("email") or "").strip().lower()
+        name = (data.get("name") or "").strip() or None
         if not email or "@" not in email or "." not in email.split("@")[-1]:
             return jsonify({"error": "email inválido"}), 400
         with get_session() as db:
@@ -1212,6 +1213,7 @@ def create_app() -> Flask:
             contact = Contact(
                 company_id=company_id,
                 email=email,
+                name=name,
                 email_status="verified",
                 email_source="manual",
                 is_primary=False,
@@ -1219,7 +1221,7 @@ def create_app() -> Flask:
             db.add(contact)
             db.flush()
             contact_id_new = contact.id
-        return jsonify({"ok": True, "contact": {"id": contact_id_new, "email": email}})
+        return jsonify({"ok": True, "contact": {"id": contact_id_new, "email": email, "name": name}})
 
     @app.route("/company/<int:company_id>/create-manual-draft", methods=["POST"])
     @_require_auth
