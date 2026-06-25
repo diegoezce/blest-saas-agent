@@ -157,7 +157,8 @@ class Contact(Base):
     phone_whatsapp = Column(Text, nullable=True)
     enriched_at = Column(DateTime, nullable=True)
     enrichment_log = Column(JSONB, nullable=True)
-    replied_at = Column(DateTime, nullable=True)   # set when a reply from this email is seen in the Zoho inbox
+    replied_at = Column(DateTime, nullable=True)
+    draft_sent_at = Column(DateTime, nullable=True)   # set when a reply from this email is seen in the Zoho inbox
     is_primary = Column(Boolean, nullable=True, default=False)
 
     company = relationship("Company", back_populates="contacts")

@@ -788,6 +788,7 @@ def create_app() -> Flask:
                     "linkedin_url": c.linkedin_url,
                     "email_source": c.email_source,
                     "is_primary": bool(c.is_primary),
+                    "draft_sent_at": str(c.draft_sent_at)[:10] if c.draft_sent_at else None,
                 }
                 for c in contacts
             ]
@@ -1381,6 +1382,8 @@ def create_app() -> Flask:
 
             try:
                 create_draft(to_address=contact.email, subject=subject, content=body)
+                import datetime
+                contact.draft_sent_at = datetime.datetime.utcnow()
                 from src.tools.db_tools import mark_company_contacted
                 mark_company_contacted(db, company_id, method="email")
                 return jsonify({"ok": True})
