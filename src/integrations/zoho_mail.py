@@ -148,8 +148,24 @@ def create_draft(to_address: str, subject: str, content: str) -> dict:
     if not account_id:
         raise RuntimeError("No account_id stored. Re-run --zoho-auth.")
 
-    # Wrap plain text in minimal HTML to preserve line breaks
-    html_content = "<pre style='font-family:sans-serif;white-space:pre-wrap'>" + content + "</pre>"
+    # Wrap body in Arial 11px and append signature
+    _STYLE = "font-family:Arial,sans-serif;font-size:11px;line-height:1.6"
+    _SIG = (
+        '<div style="' + _STYLE + ';margin-top:18px;padding-top:12px;'
+        'border-top:1px solid #d0d0d0;color:#555">'
+        "Mariela Minetti<br>"
+        "Directora<br>"
+        "Blest Learning<br>"
+        "📧 hello@blestlearning.com<br>"
+        "🌐 www.blestlearning.com<br>"
+        "💼 LinkedIn<br>"
+        "💬 +54 9 11 3890 8145 (WhatsApp)"
+        "</div>"
+    )
+    html_content = (
+        f'<div style="{_STYLE};white-space:pre-wrap">{content}</div>'
+        + _SIG
+    )
 
     payload = {
         "toAddress": to_address,
