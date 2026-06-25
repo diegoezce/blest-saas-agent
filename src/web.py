@@ -2569,7 +2569,10 @@ def create_app() -> Flask:
                 Contact.company_id, Contact.email_status, Contact.email,
             ).all()
             cs_rows = db.query(ContactStatus.company_id, ContactStatus.response_received).all()
-            companies_map = {c.id: c for c in db.query(Company).all()}
+            companies_map = {
+                c.id: {"name": c.name, "domain": c.domain}
+                for c in db.query(Company).all()
+            }
 
         score_by_company = {}
         pushed_company_ids = set()
@@ -2589,8 +2592,8 @@ def create_app() -> Flask:
             if status == "bounced" and email:
                 c = companies_map.get(cid)
                 bounced_contacts.append({
-                    "company": c.name if c else f"#{cid}",
-                    "domain": c.domain if c else "",
+                    "company": c["name"] if c else f"#{cid}",
+                    "domain": c["domain"] if c else "",
                     "email": email,
                 })
 
@@ -2609,7 +2612,7 @@ def create_app() -> Flask:
             for cid in sorted(company_ids, key=lambda c: -score_by_company.get(c, 0)):
                 co = companies_map.get(cid)
                 if co:
-                    rows.append({"name": co.name, "domain": co.domain or "",
+                    rows.append({"name": co["name"], "domain": co["domain"] or "",
                                  "score": score_by_company.get(cid, 0)})
 
         elif slug == "no_contact_found":
@@ -2618,7 +2621,7 @@ def create_app() -> Flask:
             for cid in sorted(company_ids, key=lambda c: -score_by_company.get(c, 0)):
                 co = companies_map.get(cid)
                 if co:
-                    rows.append({"name": co.name, "domain": co.domain or "",
+                    rows.append({"name": co["name"], "domain": co["domain"] or "",
                                  "score": score_by_company.get(cid, 0)})
 
         elif slug == "contact_no_email":
@@ -2626,7 +2629,7 @@ def create_app() -> Flask:
             for cid in sorted(company_ids, key=lambda c: -score_by_company.get(c, 0)):
                 co = companies_map.get(cid)
                 if co:
-                    rows.append({"name": co.name, "domain": co.domain or "",
+                    rows.append({"name": co["name"], "domain": co["domain"] or "",
                                  "score": score_by_company.get(cid, 0)})
 
         elif slug == "bounced":
