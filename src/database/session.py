@@ -148,6 +148,13 @@ def _run_migrations() -> None:
                 ))
                 conn.commit()
                 logger.info("Migration: added profiles.outreach_language")
+        if "is_default" not in profile_cols:
+            with engine.connect() as conn:
+                conn.execute(text(
+                    "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS is_default BOOLEAN NOT NULL DEFAULT FALSE"
+                ))
+                conn.commit()
+                logger.info("Migration: added profiles.is_default")
     except Exception as e:
         logger.info(f"Migration note (non-fatal): {e}")
 

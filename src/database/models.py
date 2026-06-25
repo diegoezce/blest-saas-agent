@@ -17,6 +17,7 @@ class Profile(Base):
     name = Column(Text, nullable=False, unique=True)
     description = Column(Text, nullable=True)
     active = Column(Boolean, default=True)
+    is_default = Column(Boolean, default=False, nullable=False)
 
     # Who is selling
     agent_company_name = Column(Text, nullable=False, comment="e.g. Blest")

@@ -57,6 +57,7 @@ def _profile_form_data() -> dict:
         "name": request.form.get("name", "").strip(),
         "description": request.form.get("description", "").strip() or None,
         "active": request.form.get("active") == "1",
+        "is_default": request.form.get("is_default") == "1",
         "agent_company_name": request.form.get("agent_company_name", "").strip(),
         "agent_description": request.form.get("agent_description", "").strip(),
         "target_industries": request.form.get("target_industries", "").strip() or None,
@@ -882,6 +883,8 @@ def create_app() -> Flask:
                 if existing:
                     flash(f"A profile named '{data['name']}' already exists.", "error")
                     return render_template("profile_form.html", profile=None, action="/profiles/new")
+                if data.get("is_default"):
+                    session.query(Profile).update({"is_default": False})
                 profile = Profile(**data)
                 session.add(profile)
                 session.flush()
@@ -911,6 +914,8 @@ def create_app() -> Flask:
                     flash(f"A profile named '{data['name']}' already exists.", "error")
                     return render_template("profile_form.html", profile=profile, action=f"/profiles/{profile_id}/edit")
 
+                if data.get("is_default"):
+                    session.query(Profile).filter(Profile.id != profile_id).update({"is_default": False})
                 for key, val in data.items():
                     setattr(profile, key, val)
                 flash(f"Profile '{data['name']}' updated.", "success")

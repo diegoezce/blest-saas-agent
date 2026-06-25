@@ -16,7 +16,10 @@ def load_profile(profile_id: int | None = None) -> tuple[int | None, dict | None
         if profile_id:
             profile = session.get(ProfileModel, profile_id)
         else:
-            profile = session.query(ProfileModel).filter_by(active=True).first()
+            profile = (
+                session.query(ProfileModel).filter_by(active=True, is_default=True).first()
+                or session.query(ProfileModel).filter_by(active=True).first()
+            )
 
         if not profile:
             return None, None

@@ -16,7 +16,7 @@
   <!-- Basic info -->
   <div class="card">
     <div class="section-title">Basic Info</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem">
       <div>
         <label style="font-size:0.85rem;color:var(--muted);display:block;margin-bottom:0.35rem;font-weight:600">Profile Name *</label>
         <input type="text" name="name" required value="{{ profile.name if profile else '' }}"
@@ -27,9 +27,18 @@
         <label style="font-size:0.85rem;color:var(--muted);display:block;margin-bottom:0.35rem;font-weight:600">Active</label>
         <select name="active"
           style="width:100%;padding:0.6rem 0.75rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.95rem">
-          <option value="1" {{ 'selected' if profile and profile.active else '' }}>Yes</option>
+          <option value="1" {{ 'selected' if (not profile) or (profile and profile.active) else '' }}>Yes</option>
           <option value="0" {{ 'selected' if profile and not profile.active else '' }}>No</option>
         </select>
+      </div>
+      <div>
+        <label style="font-size:0.85rem;color:var(--muted);display:block;margin-bottom:0.35rem;font-weight:600">Default</label>
+        <select name="is_default"
+          style="width:100%;padding:0.6rem 0.75rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.95rem">
+          <option value="0" {{ 'selected' if not profile or not profile.is_default else '' }}>No</option>
+          <option value="1" {{ 'selected' if profile and profile.is_default else '' }}>Sí — perfil por defecto</option>
+        </select>
+        <div style="font-size:0.72rem;color:var(--muted);margin-top:0.25rem">Se usa cuando no se especifica un perfil al correr.</div>
       </div>
     </div>
     <div style="margin-top:1rem">
