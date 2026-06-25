@@ -29,6 +29,11 @@ Follow-ups → Perfiles → Logout. Visual separators.
 - Eligibility-gated: only verified/probable emails, skips already-contacted/pushed
 - Persists enriched contact IDs to DB (`DiscoveryRun.enriched_contact_ids` JSONB) for page reload recovery
 
+**Company Detail Modal** (opened from any company card):
+- Edit mode: inline email inputs per contact, ⭐ primary toggle, 🗑 delete for manual contacts
+- "Agregar email de contacto" section: optional **Nombre** field + email field → `POST /company/<id>/add-email`
+- Delete (🗑) shown for any contact with `email_source=manual`, regardless of whether it has a name
+
 **Contacted Companies Report** (`/contacts-report`):
 - Cross-run view of all `ContactStatus` records (follow-up tracking)
 - Grouped by profile (collapsible `<details>`, collapsed by default)
@@ -50,6 +55,7 @@ Follow-ups → Perfiles → Logout. Visual separators.
 - `GET /enrich-missing-contacts/status` — poll progress for the above
 - `POST /run/<id>/zoho-drafts` — push all outreach drafts to Zoho
 - `POST /contact/<id>/set-email` — manually set email (sets status=verified, source=manual)
+- `POST /company/<id>/add-email` — add a manual contact row; accepts `{ email, name? }`; `email_source=manual`; delete button shown for all manual contacts regardless of name
 
 **Bounce & Reply Detection**:
 - `GET /bounces/scan` — preview Zoho bounces matched to contacts (read-only)
