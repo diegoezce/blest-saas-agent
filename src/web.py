@@ -770,14 +770,14 @@ def create_app() -> Flask:
     @_require_auth
     def get_company_details(company_id):
         from src.database.session import get_session
-        from src.database.models import Company, Contact
+        from src.database.models import Company, Contact, Opportunity
+        from sqlalchemy import func
 
         with get_session() as session:
             company = session.get(Company, company_id)
             if not company:
                 return jsonify({"error": "Not found"}), 404
 
-            # Fetch all contacts for this company
             contacts = session.query(Contact).filter_by(company_id=company_id).all()
             contacts_data = [
                 {
@@ -791,6 +791,8 @@ def create_app() -> Flask:
                 }
                 for c in contacts
             ]
+
+            best_score = session.query(func.max(Opportunity.score)).filter_by(company_id=company_id).scalar()
 
             return jsonify({
                 "id": company.id,
@@ -807,6 +809,7 @@ def create_app() -> Flask:
                 "first_seen_at": str(company.first_seen_at)[:10] if company.first_seen_at else None,
                 "last_updated_at": str(company.last_updated_at)[:10] if company.last_updated_at else None,
                 "contacts": contacts_data,
+                "score": best_score,
             })
 
     @app.route("/company/<int:company_id>/update", methods=["POST"])
@@ -828,6 +831,15 @@ def create_app() -> Flask:
             for field in editable_fields:
                 if field in data:
                     setattr(company, field, data[field] or None)
+
+            if "score" in data and data["score"] is not None:
+                from src.database.models import Opportunity
+                try:
+                    new_score = int(data["score"])
+                    new_score = max(0, min(100, new_score))
+                    session.query(Opportunity).filter_by(company_id=company_id).update({"score": new_score})
+                except (ValueError, TypeError):
+                    pass
 
             session.commit()
             return jsonify({"success": True, "message": "Company updated"})

@@ -685,10 +685,11 @@
       var body = document.getElementById('modal-body');
       var html = '';
 
-      var editableFields = ['industry', 'size_estimate', 'location', 'description', 'website_url', 'linkedin_url'];
+      var editableFields = ['industry', 'size_estimate', 'location', 'description', 'website_url', 'linkedin_url', 'score'];
       var fields = [
         { key: 'name', label: 'Nombre', editable: false },
         { key: 'domain', label: 'Dominio', editable: false, isLink: true },
+        { key: 'score', label: 'Score', editable: true, type: 'number' },
         { key: 'location', label: 'Ubicación', editable: true },
         { key: 'industry', label: 'Industria', editable: true },
         { key: 'size_estimate', label: 'Tamaño (estimado)', editable: true },
@@ -712,11 +713,17 @@
           if (editMode && field.editable) {
             if (field.type === 'textarea') {
               html += '<textarea data-field="' + field.key + '" style="width: 100%; min-height: 80px; padding: 0.5rem; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); color: var(--text); font-family: inherit; font-size: 0.9rem;">' + (value || '') + '</textarea>';
+            } else if (field.type === 'number') {
+              html += '<input type="number" min="0" max="100" data-field="' + field.key + '" value="' + (value !== null && value !== undefined ? value : '') + '" placeholder="0–100" style="width: 90px; padding: 0.5rem; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); color: var(--text); font-size: 0.9rem;">';
             } else {
               html += '<input type="text" data-field="' + field.key + '" value="' + (value || '') + '" style="width: 100%; padding: 0.5rem; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); color: var(--text); font-size: 0.9rem;">';
             }
           } else {
-            if (field.isLink && value) {
+            if (field.key === 'score' && value !== null && value !== undefined) {
+              var scoreVal = parseInt(value);
+              var scoreCls = scoreVal >= 70 ? 'score-high' : scoreVal >= 50 ? 'score-mid' : 'score-low';
+              html += '<div class="modal-value"><span class="score ' + scoreCls + '">' + scoreVal + '</span></div>';
+            } else if (field.isLink && value) {
               var href = value;
               if (!href.startsWith('http')) href = 'http://' + href;
               html += '<div class="modal-value"><a href="' + href + '" target="_blank">' + value.substring(0, 60) + (value.length > 60 ? '...' : '') + '</a></div>';
@@ -789,7 +796,7 @@
       inputs.forEach(function(input) {
         var field = input.getAttribute('data-field');
         var value = input.value;
-        data[field] = value || null;
+        data[field] = (input.type === 'number') ? (value !== '' ? Number(value) : null) : (value || null);
       });
 
       var contactUpdates = {};
