@@ -2486,10 +2486,11 @@ def create_app() -> Flask:
                     "action": "Ver listado", "href": "/reporting/insight/hot_no_contact",
                 })
             if email_not_reached:
+                email_already_reached = len(companies_with_email & reached)
                 insights.append({
                     "sev": "med",
                     "title": f"{email_not_reached} empresas con email listas para contactar",
-                    "body": f"Tienen email verificado o probable pero todavía no recibieron outreach. {len(companies_with_email)} empresas en total con email — solo {len(reached)} contactadas.",
+                    "body": f"De las {len(companies_with_email)} con email usable, {email_already_reached} ya fueron contactadas — quedan {email_not_reached} pendientes.",
                     "action": "Ver listado", "href": "/reporting/insight/email_not_reached",
                 })
             if scored_no_contact:
