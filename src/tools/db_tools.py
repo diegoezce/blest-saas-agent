@@ -261,11 +261,6 @@ def generate_report_node(state: AgentState) -> AgentState:
     quick_wins = [s for s in scored if s.get("priority") == "quick_win"]
     strategic = [s for s in scored if s.get("priority") == "strategic"]
 
-    follow_ups = []
-    for scored_company in scored[:3]:
-        name = scored_company["company_name"]
-        follow_ups.append(f"Research {name} further — check their LinkedIn for current L&D activity")
-
     profile = state.get("profile", {})
     report = {
         "run_date": state["run_date"],
@@ -279,7 +274,6 @@ def generate_report_node(state: AgentState) -> AgentState:
         "top_insights": state.get("insights", []),
         "outreach_drafts": state.get("outreach_drafts", []),
         "all_contacts": state.get("contacts", []),
-        "follow_up_suggestions": follow_ups,
     }
 
     return {**state, "report": report}

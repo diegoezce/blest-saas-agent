@@ -138,11 +138,6 @@ details.lead[open] .lead-chevron { transform:rotate(90deg); }
     ✉ Outreach ({{ drafts|length }})
   </a>
   {% endif %}
-  {% if follow_ups %}
-  <a href="#followups" style="background:var(--surface-hover);border:1px solid var(--border);padding:0.3rem 0.7rem;border-radius:20px;text-decoration:none;color:var(--muted)">
-    📋 Seguimiento ({{ follow_ups|length }})
-  </a>
-  {% endif %}
 </div>
 {% endif %}
 
@@ -423,26 +418,6 @@ details.lead[open] .lead-chevron { transform:rotate(90deg); }
 </details>
 {% endif %}
 
-<!-- Follow-up suggestions -->
-{% if follow_ups %}
-<details id="followups" class="section">
-  <summary>
-    <span class="section-title" style="margin-bottom:0">📋 Follow-Up Suggestions</span>
-    <span class="text-muted" style="font-size:0.8rem">({{ follow_ups|length }})</span>
-    <span class="section-chevron">▶</span>
-  </summary>
-  <div class="card">
-    <ul style="list-style:none;display:flex;flex-direction:column;gap:0.6rem">
-      {% for suggestion in follow_ups %}
-      <li style="display:flex;gap:0.6rem;align-items:flex-start;font-size:0.9rem">
-        <span style="color:var(--accent);margin-top:0.1rem">→</span>
-        {{ suggestion }}
-      </li>
-      {% endfor %}
-    </ul>
-  </div>
-</details>
-{% endif %}
 
 {% if not all_opps and not drafts %}
 <div class="card" style="text-align:center;padding:3rem;color:var(--muted)">

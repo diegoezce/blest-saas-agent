@@ -102,4 +102,4 @@ class DailyReport(BaseModel):
     top_contacts: list[ContactPerson]
     top_insights: list[CompanyInsight]
     outreach_drafts: list[OutreachDraft]
-    follow_up_suggestions: list[str]
+    follow_up_suggestions: list[str] = []
