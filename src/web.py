@@ -855,7 +855,7 @@ def create_app() -> Flask:
 
         with get_session() as session:
             profiles = session.query(Profile).filter_by(active=True).order_by(Profile.name).all()
-            return jsonify({"profiles": [{"id": p.id, "name": p.name} for p in profiles]})
+            return jsonify({"profiles": [{"id": p.id, "name": p.name, "is_default": bool(p.is_default)} for p in profiles]})
 
     @app.route("/profiles")
     @_require_auth

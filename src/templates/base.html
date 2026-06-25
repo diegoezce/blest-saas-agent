@@ -585,12 +585,15 @@
           .then(function(r) { return r.json(); })
           .then(function(data) {
             if (data && data.profiles) {
+              var defaultId = null;
               data.profiles.forEach(function(p) {
                 var opt = document.createElement('option');
                 opt.value = p.id;
                 opt.textContent = p.name;
                 profileSelect.appendChild(opt);
+                if (p.is_default) defaultId = p.id;
               });
+              if (defaultId) profileSelect.value = defaultId;
             }
           })
           .catch(function(e) { console.error('Error fetching profiles:', e); });
@@ -1030,12 +1033,15 @@
           if (data && data.profiles) {
             var sel = document.getElementById('draft-options-profile');
             if (sel) {
+              var defaultId = null;
               data.profiles.forEach(function(p) {
                 var opt = document.createElement('option');
                 opt.value = p.id;
                 opt.textContent = p.name;
                 sel.appendChild(opt);
+                if (p.is_default) defaultId = p.id;
               });
+              if (defaultId) sel.value = defaultId;
             }
           }
         });
