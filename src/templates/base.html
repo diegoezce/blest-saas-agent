@@ -925,9 +925,8 @@
           if (data.error) {
             showNotification('Error: ' + data.error, 'error');
           } else if (data.ok || data.has_existing) {
-            showNotification('Draft creado/actualizado exitosamente', 'success');
+            showNotification('Draft creado exitosamente ✓', 'success');
             closeGlobalDraftModal();
-            setTimeout(function() { window.location.reload(); }, 1000);
           }
         })
         .catch(function(err) {
