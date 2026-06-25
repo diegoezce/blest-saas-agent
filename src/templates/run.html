@@ -182,7 +182,13 @@ details.lead[open] .lead-chevron { transform:rotate(90deg); }
         <tr style="border-bottom:1px solid var(--border)" onmouseover="this.style.background='rgba(255,255,255,0.02)'" onmouseout="this.style.background=''">
           <td data-label="#" style="padding:0.85rem 1.25rem;color:var(--muted);font-size:0.85rem">{{ loop.index }}</td>
           <td data-label="Company" style="padding:0.85rem 1rem">
-            <div style="font-weight:600;font-size:0.95rem">{{ name or '—' }}</div>
+            <div style="font-weight:600;font-size:0.95rem">
+              {% if info.company_id %}
+                <span class="company-name-link" onclick="openCompanyModal({{ info.company_id }})">{{ name or '—' }}</span>
+              {% else %}
+                {{ name or '—' }}
+              {% endif %}
+            </div>
             {% if opp.get('industry') %}
               <div class="text-muted" style="font-size:0.78rem">{{ opp.get('industry') }}</div>
             {% endif %}
@@ -362,6 +368,13 @@ details.lead[open] .lead-chevron { transform:rotate(90deg); }
             style="font-size:0.72rem;padding:0.1rem 0.45rem;background:var(--surface-hover);border:1px solid var(--border);border-radius:4px;color:var(--muted);cursor:pointer">
             Enrich
           </button>
+          {% if first.get('contact_email') and first.get('company_id') %}
+          <button
+            onclick="event.stopPropagation();openDraftModalFromContact({{ first.get('company_id') }}, {{ first.get('contact_id') }})"
+            style="font-size:0.72rem;padding:0.1rem 0.45rem;background:rgba(14,165,233,0.12);border:1px solid rgba(14,165,233,0.35);border-radius:4px;color:var(--accent);cursor:pointer">
+            ✉️ Draft
+          </button>
+          {% endif %}
         {% endif %}
         {% if first.get('contact_linkedin_url') %}
           <a href="{{ first.get('contact_linkedin_url') }}" target="_blank" rel="noopener"
