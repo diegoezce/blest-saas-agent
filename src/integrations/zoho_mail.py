@@ -212,23 +212,12 @@ def create_draft(to_address: str, subject: str, content: str) -> dict:
         + _SIG
     )
 
-    unsubscribe_address = from_address or "hello@blestlearning.com"
     payload = {
         "toAddress": to_address,
         "subject": subject or "(sin asunto)",
         "content": html_content,
         "mailFormat": "html",
         "mode": "draft",
-        "mailHeaders": [
-            {
-                "headerName": "List-Unsubscribe",
-                "headerValue": f"<mailto:{unsubscribe_address}?subject=unsubscribe>",
-            },
-            {
-                "headerName": "List-Unsubscribe-Post",
-                "headerValue": "List-Unsubscribe=One-Click",
-            },
-        ],
     }
     if from_address:
         payload["fromAddress"] = from_address
