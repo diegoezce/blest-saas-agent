@@ -194,7 +194,7 @@ def create_draft(to_address: str, subject: str, content: str) -> dict:
     content = _fix_spanish_punctuation(content)
 
     # Wrap body in Arial 11px and append signature
-    _STYLE = "font-family:Arial,sans-serif;font-size:11px;line-height:1.6"
+    _STYLE = "font-family:Arial,sans-serif;font-size:11pt;line-height:1.6"
     _SIG = (
         '<div style="' + _STYLE + ';margin-top:18px;padding-top:12px;'
         'border-top:1px solid #d0d0d0;color:#555">'
