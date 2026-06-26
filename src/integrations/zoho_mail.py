@@ -212,12 +212,23 @@ def create_draft(to_address: str, subject: str, content: str) -> dict:
         + _SIG
     )
 
+    unsubscribe_address = from_address or "hello@blestlearning.com"
     payload = {
         "toAddress": to_address,
         "subject": subject or "(sin asunto)",
         "content": html_content,
         "mailFormat": "html",
         "mode": "draft",
+        "mailHeaders": [
+            {
+                "headerName": "List-Unsubscribe",
+                "headerValue": f"<mailto:{unsubscribe_address}?subject=unsubscribe>",
+            },
+            {
+                "headerName": "List-Unsubscribe-Post",
+                "headerValue": "List-Unsubscribe=One-Click",
+            },
+        ],
     }
     if from_address:
         payload["fromAddress"] = from_address
@@ -233,6 +244,77 @@ def create_draft(to_address: str, subject: str, content: str) -> dict:
     )
     resp.raise_for_status()
     return resp.json()
+
+
+# ── Unsubscribe detection (requires ZohoMail.messages.READ + folders.READ scope) ──
+
+def scan_unsubscribe_requests(max_messages: int = 200) -> dict:
+    """Scan the Zoho inbox for unsubscribe requests sent via List-Unsubscribe.
+
+    Gmail/Outlook send an email to our from_address with subject 'unsubscribe'
+    when the recipient clicks the one-click unsubscribe button. We extract the
+    sender address and match it against known contacts.
+
+    Returns {checked, unsubscribe_messages, addresses: [..]}
+    """
+    access = _get_access_token()
+    tokens = _load_tokens()
+    account_id = tokens.get("account_id")
+    if not account_id:
+        raise RuntimeError("No account_id stored. Re-run --zoho-auth.")
+    base = f"{_ACCOUNTS_URL}/{account_id}"
+    headers = {"Authorization": f"Zoho-oauthtoken {access}"}
+    own_domain = (tokens.get("from_address", "").split("@")[-1] or "").lower()
+
+    fr = requests.get(f"{base}/folders", headers=headers, timeout=15)
+    fr.raise_for_status()
+    folders = fr.json().get("data", [])
+    inbox = next((f for f in folders if (f.get("folderName") or "").lower() == "inbox"), None)
+    if not inbox:
+        return {"checked": 0, "unsubscribe_messages": 0, "addresses": []}
+    folder_id = inbox["folderId"]
+
+    addresses: set[str] = set()
+    unsubscribe_messages = 0
+    checked = 0
+    start = 1
+    page = 50
+    while checked < max_messages:
+        mr = requests.get(
+            f"{base}/messages/view", headers=headers,
+            params={"folderId": folder_id, "limit": min(page, max_messages - checked), "start": start},
+            timeout=20,
+        )
+        if mr.status_code != 200:
+            break
+        batch = mr.json().get("data", [])
+        if not batch:
+            break
+        for m in batch:
+            checked += 1
+            subj = (m.get("subject") or "").lower().strip()
+            if subj != "unsubscribe":
+                continue
+            unsubscribe_messages += 1
+            frm = m.get("fromAddress") or m.get("sender") or ""
+            match = _EMAIL_RE.search(frm)
+            if not match:
+                continue
+            em = match.group(0).lower()
+            if own_domain and own_domain in em:
+                continue
+            if any(n in em for n in _ADDR_NOISE):
+                continue
+            addresses.add(em)
+        start += len(batch)
+        if len(batch) < page:
+            break
+
+    return {
+        "checked": checked,
+        "unsubscribe_messages": unsubscribe_messages,
+        "addresses": sorted(addresses),
+    }
 
 
 # ── Bounce detection (requires ZohoMail.messages.READ + folders.READ scope) ──

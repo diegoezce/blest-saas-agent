@@ -193,9 +193,10 @@ def _run_migrations() -> None:
             ("phone_whatsapp", "TEXT"),
             ("enriched_at",    "TIMESTAMP"),
             ("enrichment_log", "JSONB"),
-            ("replied_at",     "TIMESTAMP"),
-            ("draft_sent_at",  "TIMESTAMP"),
-            ("is_primary",     "BOOLEAN DEFAULT FALSE"),
+            ("replied_at",       "TIMESTAMP"),
+            ("draft_sent_at",    "TIMESTAMP"),
+            ("is_primary",       "BOOLEAN DEFAULT FALSE"),
+            ("unsubscribed_at",  "TIMESTAMP"),
         ]
         with engine.connect() as conn:
             for col_name, col_type in new_cols:

@@ -160,6 +160,7 @@ class Contact(Base):
     replied_at = Column(DateTime, nullable=True)
     draft_sent_at = Column(DateTime, nullable=True)   # set when a reply from this email is seen in the Zoho inbox
     is_primary = Column(Boolean, nullable=True, default=False)
+    unsubscribed_at = Column(DateTime, nullable=True)
 
     company = relationship("Company", back_populates="contacts")
 

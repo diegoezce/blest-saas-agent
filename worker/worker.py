@@ -6,8 +6,9 @@ Phase 1 — Enrichment:  finds emails for contacts that don't have one yet.
 Phase 1b— Recovery:    retries bounced contacts (blocklist bad address + re-enrich).
 Phase 2 — Zoho push:   pushes outreach drafts for contacts that now have a
            verified/probable email and haven't been sent to Zoho yet.
-Phase 3 — Bounce check: scans the Zoho inbox and marks bounced contacts.
-Phase 4 — Follow-ups:  detects replies and pushes follow-up drafts to unanswered leads.
+Phase 3 — Bounce check:     scans the Zoho inbox and marks bounced contacts.
+Phase 3b— Unsubscribes:    marks contacts that sent a List-Unsubscribe request.
+Phase 4 — Follow-ups:      detects replies and pushes follow-up drafts to unanswered leads.
 
 Reads/writes directly to the Railway PostgreSQL database via DATABASE_URL.
 All src/ modules are reused as-is; no code is duplicated.
@@ -271,6 +272,7 @@ def _run_push_phase(db) -> int:
         .filter(Contact.company_id.in_(company_ids))
         .filter(Contact.email.isnot(None))
         .filter(Contact.email_status.in_(["verified", "probable"]))
+        .filter(Contact.unsubscribed_at.is_(None))
         .order_by(Contact.is_primary.desc().nullslast(), Contact.confidence_score.desc())
         .all()
     )
@@ -375,6 +377,25 @@ def _run_recovery_phase() -> int:
         return 0
 
 
+# ── Phase 3b: Unsubscribes ───────────────────────────────────────────────────
+
+def _run_unsubscribe_phase() -> int:
+    """Scan the Zoho inbox for List-Unsubscribe requests and mark matched contacts.
+    Self-contained (own DB session). Non-fatal (same as bounce check)."""
+    try:
+        from src.tools.unsubscribes import apply_unsubscribes
+        res = apply_unsubscribes()
+        if res["unsubscribe_messages"]:
+            logger.info(
+                f"Unsubscribes: {res['unsubscribe_messages']} request(s) in inbox, "
+                f"{res['marked']} contact(s) newly marked as unsubscribed"
+            )
+        return res["marked"]
+    except Exception as exc:
+        logger.warning(f"Unsubscribe check skipped/failed: {exc}")
+        return 0
+
+
 # ── Phase 4: Follow-ups ──────────────────────────────────────────────────────
 
 def _run_followup_phase() -> int:
@@ -426,8 +447,9 @@ def main():
         _run_enrichment_phase(db)
         _run_push_phase(db)
 
-    _run_bounce_phase()    # Phase 3 — mark bounced emails (reads Zoho inbox)
-    _run_followup_phase()  # Phase 4 — detect replies + push follow-up drafts
+    _run_bounce_phase()       # Phase 3  — mark bounced emails (reads Zoho inbox)
+    _run_unsubscribe_phase()  # Phase 3b — mark unsubscribed contacts
+    _run_followup_phase()     # Phase 4  — detect replies + push follow-up drafts
 
     logger.info("Worker finished.")
 
