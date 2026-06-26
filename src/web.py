@@ -1996,6 +1996,7 @@ def create_app() -> Flask:
                     "email_source": c.email_source or "",
                     "linkedin_url": c.linkedin_url or "",
                     "phone_whatsapp": c.phone_whatsapp or "",
+                    "replied_at": c.replied_at.strftime("%d/%m/%Y") if c.replied_at else "",
                 })
 
             # Best opportunity per company — single bulk query
@@ -2101,6 +2102,29 @@ def create_app() -> Flask:
                 domain = company.domain or ""
                 display_url = domain or website.replace("https://", "").replace("http://", "").split("/")[0]
 
+                # Build communication history timeline
+                history = []
+                if opp and opp.zoho_pushed_at:
+                    history.append({
+                        "type": "outreach",
+                        "date": opp.zoho_pushed_at.strftime("%d/%m/%Y"),
+                        "subject": opp.outreach_subject or "(sin asunto)",
+                        "body": opp.outreach_draft or "",
+                    })
+                if opp and (opp.followup_count or 0) > 0 and opp.last_followup_at:
+                    history.append({
+                        "type": "followup",
+                        "date": opp.last_followup_at.strftime("%d/%m/%Y"),
+                        "subject": opp.followup_subject or "(sin asunto)",
+                        "body": opp.followup_draft or "",
+                        "stage": opp.followup_count,
+                    })
+                replied_at_str = next(
+                    (c["replied_at"] for c in merged_contacts if c.get("replied_at")), ""
+                )
+                if replied_at_str:
+                    history.append({"type": "reply", "date": replied_at_str})
+
                 companies_data.append({
                     "id": company.id,
                     "name": company.name or "",
@@ -2125,6 +2149,7 @@ def create_app() -> Flask:
                     "has_bounced": any(c.get("email_status") == "bounced" for c in merged_contacts),
                     "is_success": (status.response_received or "") in
                                   ("replied", "interested", "meeting_scheduled"),
+                    "history": history,
                 })
 
             profiles_order: list = []

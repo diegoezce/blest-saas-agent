@@ -226,6 +226,80 @@
   }
   .profile-pill-btn:hover { color: var(--text); border-color: var(--accent); }
 
+  /* Communication history */
+  .comm-history {
+    border-top: 1px solid var(--border);
+    padding-top: 0.35rem;
+  }
+  .comm-history > summary {
+    list-style: none;
+    cursor: pointer;
+    font-size: 0.76rem;
+    color: var(--muted);
+    font-weight: 600;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+  }
+  .comm-history > summary::-webkit-details-marker { display: none; }
+  .comm-history > summary::before {
+    content: '▶';
+    font-size: 0.55rem;
+    color: var(--muted);
+    transition: transform 0.12s;
+  }
+  .comm-history[open] > summary::before { transform: rotate(90deg); }
+  .comm-timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0.55rem 0 0.1rem 0.6rem;
+    border-left: 2px solid var(--border);
+    margin-top: 0.45rem;
+    margin-left: 0.3rem;
+  }
+  .comm-event {
+    display: flex;
+    gap: 0.5rem;
+    font-size: 0.77rem;
+    position: relative;
+  }
+  .comm-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    flex-shrink: 0; margin-top: 0.3rem;
+    margin-left: -0.95rem;
+  }
+  .comm-outreach .comm-dot { background: var(--accent); }
+  .comm-followup .comm-dot { background: var(--amber); }
+  .comm-reply    .comm-dot { background: var(--green, #4ade80); }
+  .comm-meta {
+    display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap;
+    font-weight: 600; color: var(--text);
+  }
+  .comm-date { font-weight: 400; color: var(--muted); }
+  .comm-subject { color: var(--muted); margin-top: 0.1rem; font-style: italic; }
+  .comm-body-toggle { margin-top: 0.2rem; }
+  .comm-body-toggle > summary {
+    list-style: none; cursor: pointer; font-size: 0.72rem;
+    color: var(--accent); font-weight: 600;
+  }
+  .comm-body-toggle > summary::-webkit-details-marker { display: none; }
+  .comm-body {
+    margin-top: 0.3rem;
+    font-size: 0.74rem;
+    white-space: pre-wrap;
+    color: var(--muted);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.5rem 0.65rem;
+    max-height: 180px;
+    overflow-y: auto;
+    font-family: inherit;
+    line-height: 1.5;
+  }
+
   @media (max-width: 600px) {
     .lead-grid { grid-template-columns: 1fr; }
     .cr-stats { gap: 0.4rem; }
@@ -297,6 +371,34 @@
     {% elif d.follow_up_date %}<span>📅 {{ d.follow_up_date_display }}</span>{% endif %}
     {% if d.comment %}<span style="font-style:italic">{{ d.comment[:55] }}{% if d.comment|length > 55 %}…{% endif %}</span>{% endif %}
   </div>
+
+  {% if d.history %}
+  <details class="comm-history">
+    <summary>📋 Historial de comunicación ({{ d.history | length }})</summary>
+    <div class="comm-timeline">
+      {% for ev in d.history %}
+      <div class="comm-event comm-{{ ev.type }}">
+        <span class="comm-dot"></span>
+        <div style="flex:1;min-width:0">
+          <div class="comm-meta">
+            {% if ev.type == 'outreach' %}📧 Outreach inicial
+            {% elif ev.type == 'followup' %}📧 Follow-up{% if ev.stage > 1 %} ×{{ ev.stage }}{% endif %}
+            {% else %}💬 Respondió{% endif %}
+            <span class="comm-date">{{ ev.date }}</span>
+          </div>
+          {% if ev.subject %}<div class="comm-subject">{{ ev.subject }}</div>{% endif %}
+          {% if ev.body %}
+          <details class="comm-body-toggle">
+            <summary>Ver cuerpo</summary>
+            <pre class="comm-body">{{ ev.body }}</pre>
+          </details>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </details>
+  {% endif %}
 
   <div class="card-actions">
     <button class="btn-action btn-feedback"
