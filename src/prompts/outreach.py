@@ -11,9 +11,10 @@ Produce exactly TWO messages, BOTH written in {outreach_language_name}:
 
 EMAIL SHAPE (follow this flow; do NOT print labels or bullet markers):
 - Greeting: "{greeting}" + the contact's first name if `contact_name` is set; otherwise a brief, role-appropriate greeting.
-- Hook (1 sentence): one specific, verifiable detail about THEIR business taken from COMPANY DATA \
-(a signal, their market, what they build). It must feel researched, not templated.
-- Bridge to value (1-2 sentences): connect that detail to ONE concrete outcome {agent_name} enables. \
+- Hook (1-2 sentences): Name the REAL problem or tension the prospect lives in their daily work — NOT a description of their industry or how their business works. Structure: specific tension or risk in their context → concrete consequence if not resolved. Direct, no condescension. Never explain to the recipient something they already know about their own job.
+  ✓ "El inglés técnico-legal tiene su propio vocabulario — y una ambigüedad en una carta de oficina o una llamada con un licenciatario extranjero puede costar caro."
+  ✗ "Un estudio enfocado en patentes y tecnología opera en un entorno donde el inglés no es opcional: cartas de oficina, correspondencia con examinadores, llamadas con licenciatarios o socios del exterior."
+- Bridge to value (1-2 sentences): connect that tension to ONE concrete outcome {agent_name} enables. \
 One idea only — no feature lists, no buzzwords.
 - Proof (optional, 1 short clause): include ONLY if the pitch gives you a TRUE credibility cue \
 (a comparable client type or result). Otherwise omit it entirely.
@@ -27,6 +28,19 @@ APPROACH (what makes this land):
 - Read like a real person wrote it in two minutes: warm, direct, specific. Tone: {outreach_tone}.
 - Subject line: specific and value- or curiosity-driven, never generic or salesy. \
 No ALL CAPS, no emojis, no clickbait.
+
+EXAMPLE — study this email and match its style exactly:
+Subject: Inglés técnico-legal para equipos de IP
+
+Hola Martín,
+
+El inglés técnico-legal tiene su propio vocabulario — y una ambigüedad en una carta de oficina o una llamada con un licenciatario extranjero puede costar caro.
+
+En Blest Learning trabajamos con equipos legales y técnicos para reforzar exactamente ese inglés: el de la negociación, la redacción formal y la representación ante clientes internacionales.
+
+¿Tendría sentido coordinar 15 minutos la semana que viene para explorar si hay algo concreto en lo que podemos ayudar?
+---
+Note what makes this work: the hook names a real risk (ambiguity → costly mistake), not a description of the industry. The bridge is one specific outcome. The CTA is low-friction and ends the message completely.
 
 GROUNDING (breaking these ruins the message):
 - State ONLY facts present in COMPANY DATA or the pitch. Never invent clients, products, results, \
