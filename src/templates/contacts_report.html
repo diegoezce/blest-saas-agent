@@ -219,6 +219,13 @@
     background: rgba(56,189,248,0.25); border-color: var(--accent);
   }
 
+  .profile-pill-btn {
+    background: none; border: 1px solid var(--border); border-radius: 10px;
+    padding: 0.1rem 0.5rem; font-size: 0.74rem; color: var(--muted);
+    cursor: pointer; font-family: inherit; transition: all 0.12s;
+  }
+  .profile-pill-btn:hover { color: var(--text); border-color: var(--accent); }
+
   @media (max-width: 600px) {
     .lead-grid { grid-template-columns: 1fr; }
     .cr-stats { gap: 0.4rem; }
@@ -239,6 +246,7 @@
     {% if d.score is not none %}
     <span class="score {% if d.score >= 70 %}score-high{% elif d.score >= 45 %}score-mid{% else %}score-low{% endif %}">{{ d.score }}</span>
     {% endif %}
+    <button class="profile-pill-btn" onclick="openProfileModal({{ d.id }}, {{ d.profile_id or 'null' }})" title="Cambiar perfil">🏷 {{ d.profile_name }}</button>
   </div>
 
   {% if d.description %}<div class="lead-desc">{{ d.description }}</div>{% endif %}
@@ -672,6 +680,32 @@
   </div>
 </div>
 
+<!-- ── Profile Modal ──────────────────────────────────────────────────── -->
+<div id="profile-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:300;align-items:center;justify-content:center">
+  <div class="card" style="width:100%;max-width:360px;padding:1.5rem;display:flex;flex-direction:column;gap:1rem">
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <h2 style="font-size:1rem;font-weight:700">🏷 Asignar perfil</h2>
+      <button onclick="closeProfileModal()" style="background:none;border:none;color:var(--muted);font-size:1.3rem;cursor:pointer;padding:0.25rem">&times;</button>
+    </div>
+    <select id="profile-modal-select"
+      style="width:100%;padding:0.55rem 0.7rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.9rem">
+      {% for profile in profiles %}
+      <option value="{{ profile.id }}">{{ profile.name }}</option>
+      {% endfor %}
+    </select>
+    <div style="display:flex;gap:0.75rem;border-top:1px solid var(--border);padding-top:0.75rem">
+      <button onclick="saveProfile()"
+        style="flex:1;background:#38bdf8;color:#0f172a;font-weight:700;border:none;padding:0.55rem;border-radius:6px;cursor:pointer;font-size:0.9rem">
+        Guardar
+      </button>
+      <button onclick="closeProfileModal()"
+        style="flex:1;background:var(--surface-hover);color:var(--text);border:1px solid var(--border);padding:0.55rem;border-radius:6px;cursor:pointer;font-size:0.9rem">
+        Cancelar
+      </button>
+    </div>
+  </div>
+</div>
+
 <script>
 let _currentView = 'cards';
 let _currentSort = { column: null, direction: 'asc' };
@@ -1061,6 +1095,42 @@ function toggleSetEmail(contactId) {
   if (!visible) {
     const inp = document.getElementById('se-input-' + contactId);
     if (inp) inp.focus();
+  }
+}
+
+let _profileModalCompanyId = null;
+
+function openProfileModal(companyId, currentProfileId) {
+  _profileModalCompanyId = companyId;
+  const sel = document.getElementById('profile-modal-select');
+  if (currentProfileId) sel.value = String(currentProfileId);
+  document.getElementById('profile-modal').style.display = 'flex';
+}
+
+function closeProfileModal() {
+  document.getElementById('profile-modal').style.display = 'none';
+  _profileModalCompanyId = null;
+}
+
+document.getElementById('profile-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeProfileModal();
+});
+
+async function saveProfile() {
+  const profileId = document.getElementById('profile-modal-select').value;
+  if (!profileId || !_profileModalCompanyId) return;
+  try {
+    const r = await fetch('/company/' + _profileModalCompanyId + '/set-profile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ profile_id: profileId }),
+    });
+    const d = await r.json();
+    if (d.error) { showNotification('Error: ' + d.error, 'error'); return; }
+    closeProfileModal();
+    location.reload();
+  } catch (e) {
+    showNotification('Error: ' + e, 'error');
   }
 }
 

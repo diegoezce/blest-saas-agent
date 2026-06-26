@@ -725,6 +725,29 @@ def create_app() -> Flask:
             headers={"Content-Disposition": f"attachment; filename=blest-professional-report-{run_date}.md"},
         )
 
+    @app.route("/company/<int:company_id>/set-profile", methods=["POST"])
+    @_require_auth
+    def company_set_profile(company_id):
+        from src.database.session import get_session
+        from src.database.models import DiscoveryRun, Opportunity, Profile
+        data = request.get_json(force=True)
+        try:
+            profile_id = int(data.get("profile_id")) if data.get("profile_id") else None
+        except (TypeError, ValueError):
+            return jsonify({"error": "profile_id inválido"}), 400
+
+        with get_session() as db:
+            if profile_id and not db.get(Profile, profile_id):
+                return jsonify({"error": "Perfil no encontrado"}), 404
+            run_ids = [r for (r,) in db.query(Opportunity.run_id).filter_by(company_id=company_id).all()]
+            if run_ids:
+                db.query(DiscoveryRun).filter(
+                    DiscoveryRun.id.in_(run_ids),
+                    DiscoveryRun.profile_id.is_(None),
+                ).update({"profile_id": profile_id}, synchronize_session=False)
+                db.commit()
+        return jsonify({"ok": True})
+
     @app.route("/company/<int:company_id>/toggle-contact", methods=["POST"])
     @_require_auth
     def toggle_contact(company_id):
@@ -2087,6 +2110,7 @@ def create_app() -> Flask:
                     "description": desc,
                     "notable": notable,
                     "profile_name": profile.name if profile else "Default",
+                    "profile_id": profile.id if profile else None,
                     "score": opp.score if opp else None,
                     "contacts": merged_contacts,
                     "contacted_at": status.contacted_at.strftime("%d/%m/%Y") if status.contacted_at else "",
