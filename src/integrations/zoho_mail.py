@@ -146,6 +146,25 @@ def exchange_grant_token(grant_token: str) -> None:
     logger.info(f"Zoho Mail configured — account_id={info['account_id']} from={info['from_address']}")
 
 
+def _fix_spanish_punctuation(text: str) -> str:
+    """Fix common Spanish punctuation errors in AI-generated drafts.
+
+    - Adds missing ¿ before questions that lack the opening mark.
+    """
+    def maybe_fix(m):
+        boundary, sentence = m.group(1), m.group(2)
+        if "¿" in sentence:
+            return m.group(0)
+        return boundary + "¿" + sentence
+
+    return re.sub(
+        r"((?:^|(?<=[.!?])\s+))([^¿\n][^\n?]*\?)",
+        maybe_fix,
+        text,
+        flags=re.MULTILINE,
+    )
+
+
 def _strip_ai_signoff(text: str) -> str:
     """Remove any sign-off lines the AI appended after the CTA."""
     lines = text.rstrip().split("\n")
@@ -170,8 +189,9 @@ def create_draft(to_address: str, subject: str, content: str) -> dict:
     if not account_id:
         raise RuntimeError("No account_id stored. Re-run --zoho-auth.")
 
-    # Strip any AI-generated sign-off lines before wrapping
+    # Clean up AI-generated content before wrapping
     content = _strip_ai_signoff(content)
+    content = _fix_spanish_punctuation(content)
 
     # Wrap body in Arial 11px and append signature
     _STYLE = "font-family:Arial,sans-serif;font-size:11px;line-height:1.6"
