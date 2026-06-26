@@ -4,6 +4,16 @@ import re
 import time
 from pathlib import Path
 
+_SIGNOFF_RE = re.compile(
+    r"(?i)^("
+    r"más info|para más info|podés conocer|conocé más en|"
+    r"https?://|www\.|"
+    r"saludos|atentamente|hasta pronto|quedo a|cordialmente|"
+    r"mariela|blest\s*learning|directora|hello@|"
+    r"📧|🌐|💼|💬|\+54|tel[ée]fono|whatsapp"
+    r")"
+)
+
 import requests
 
 logger = logging.getLogger(__name__)
@@ -136,6 +146,18 @@ def exchange_grant_token(grant_token: str) -> None:
     logger.info(f"Zoho Mail configured — account_id={info['account_id']} from={info['from_address']}")
 
 
+def _strip_ai_signoff(text: str) -> str:
+    """Remove any sign-off lines the AI appended after the CTA."""
+    lines = text.rstrip().split("\n")
+    while lines and not lines[-1].strip():
+        lines.pop()
+    while lines and _SIGNOFF_RE.match(lines[-1].strip()):
+        lines.pop()
+        while lines and not lines[-1].strip():
+            lines.pop()
+    return "\n".join(lines)
+
+
 def create_draft(to_address: str, subject: str, content: str) -> dict:
     """
     Create a draft email in the authenticated Zoho Mail account.
@@ -147,6 +169,9 @@ def create_draft(to_address: str, subject: str, content: str) -> dict:
     from_address = tokens.get("from_address", "")
     if not account_id:
         raise RuntimeError("No account_id stored. Re-run --zoho-auth.")
+
+    # Strip any AI-generated sign-off lines before wrapping
+    content = _strip_ai_signoff(content)
 
     # Wrap body in Arial 11px and append signature
     _STYLE = "font-family:Arial,sans-serif;font-size:11px;line-height:1.6"
