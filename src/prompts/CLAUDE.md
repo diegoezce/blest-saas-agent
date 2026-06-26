@@ -19,8 +19,9 @@ proof points, what to emphasize/avoid) is injected as `WHAT <AGENT> OFFERS` bloc
 the main lever to improve message quality per product.
 
 **Shape enforced**: greeting → researched hook → one value bridge → optional true 
-proof → one low-friction CTA → short sign-off. "Earn the reply, don't pitch" approach. 
-Expanded banned-phrase list.
+proof → one low-friction CTA. No sign-off — the real sender signature is appended 
+by `create_draft()` automatically. "Earn the reply, don't pitch" approach. 
+Expanded banned-phrase list including post-CTA patterns ("Más info en", name/title lines, URLs).
 
 **Language**: Per-profile via `outreach_language`:
 - `es` (default) — Argentine voseo (informal, warm)

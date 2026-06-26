@@ -28,6 +28,13 @@ bounces and replies to auto-mark contacts and trigger follow-ups.
 **Key functions**: `is_configured()`, `exchange_grant_token()`, `create_draft()`, 
 `_get_access_token()` (auto-refresh)
 
+### Draft formatting (`create_draft()`)
+
+- Body wrapped in `<div style="font-family:Arial,sans-serif;font-size:11px">` with `white-space:pre-wrap`
+- **HTML signature** appended automatically after the body (Mariela Minetti / Directora / Blest Learning, with clickable LinkedIn and WhatsApp links)
+- **`_strip_ai_signoff(text)`** — runs before HTML wrapping; removes trailing lines the AI appended after the CTA (URLs, "Más info en", names, phone numbers, social links). Uses `_SIGNOFF_RE` regex.
+- **`_fix_spanish_punctuation(text)`** — runs after strip; adds missing `¿` before Spanish questions that lack the opening mark. Applied via regex on sentence boundaries.
+
 ## Bounce Detection
 
 Scans Zoho inbox for bounce notifications (from `mailer-daemon`/`postmaster`; 
