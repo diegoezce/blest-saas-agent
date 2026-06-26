@@ -157,7 +157,7 @@ def create_draft(to_address: str, subject: str, content: str) -> dict:
         "Directora<br>"
         "Blest Learning<br>"
         "📧 hello@blestlearning.com<br>"
-        "🌐 www.blestlearning.com<br>"
+        '🌐 <a href="https://www.blestlearning.com">www.blestlearning.com</a><br>'
         '💼 <a href="https://www.linkedin.com/company/blest-learning">LinkedIn</a><br>'
         '💬 <a href="https://wa.me/5491138908145">+54 9 11 3890 8145 (WhatsApp)</a>'
         "</div>"

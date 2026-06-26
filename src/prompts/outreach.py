@@ -19,7 +19,7 @@ One idea only — no feature lists, no buzzwords.
 (a comparable client type or result). Otherwise omit it entirely.
 - Ask (1 sentence): a single low-friction, specific CTA that's easy to say yes to \
 (e.g. a 15-minute call next week, or offering to send one short example).
-- Do NOT include any closing, sign-off, or signature of any kind. End the message right after the CTA sentence — nothing after it. No "Saludos", "Quedo a disposición", "Hasta pronto", "Atentamente", "Best regards", no name, no title, no company, no URL, no phone, no social media links. The signature is added separately.
+- CRITICAL: The last sentence of the email body MUST be the CTA. Stop there. Do not add anything after it — no sign-off, no name, no title, no company name, no URL, no website, no phone, no "Más info en", no "Para más información", no "Podés conocer más en", no "te invito a visitar", no social media, no "del equipo", no "Mariela", nothing. The real sender signature is appended automatically — any text you add after the CTA will be deleted.
 
 APPROACH (what makes this land):
 - Earn the reply — the opening is about THEM, the ask is small. Never pitch in the first sentence.
