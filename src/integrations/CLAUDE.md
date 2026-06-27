@@ -28,12 +28,15 @@ bounces and replies to auto-mark contacts and trigger follow-ups.
 **Key functions**: `is_configured()`, `exchange_grant_token()`, `create_draft()`, 
 `_get_access_token()` (auto-refresh)
 
-### Draft formatting (`create_draft()`)
+### Draft formatting (`create_draft()` and `send_email()`)
 
 - Body wrapped in `<div style="font-family:Arial,sans-serif;font-size:11px">` with `white-space:pre-wrap`
 - **HTML signature** appended automatically after the body (Mariela Minetti / Directora / Blest Learning, with clickable LinkedIn and WhatsApp links)
 - **`_strip_ai_signoff(text)`** — runs before HTML wrapping; removes trailing lines the AI appended after the CTA (URLs, "Más info en", names, phone numbers, social links). Uses `_SIGNOFF_RE` regex.
 - **`_fix_spanish_punctuation(text)`** — runs after strip; adds missing `¿` before Spanish questions that lack the opening mark. Applied via regex on sentence boundaries.
+- **Tracking pixel** — both functions accept optional `email_id: str`. When set and `TRACKING_BASE_URL` is configured, a 1×1 transparent PNG `<img>` is appended after the signature:
+  `<img src="{TRACKING_BASE_URL}/track/open/{email_id}" width="1" height="1" style="display:none;" />`
+  Call sites pass the contact's DB integer ID as string. Pixel is omitted if either value is absent.
 
 ## Bounce Detection
 

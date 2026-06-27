@@ -85,6 +85,9 @@ See [`worker/README.md`](worker/README.md) for Windows setup.
 - `EMAIL_VERIFIER_API_KEY` / `NEVERBOUNCE_API_KEY` — verifier credits
 - `HUNTER_API_KEY` — Hunter.io (25 free/month)
 
+**Tracking** (optional):
+- `TRACKING_BASE_URL` — public base URL of the app (e.g. `https://myapp.up.railway.app`); enables email open tracking pixel in Zoho drafts; view results at `/track/stats`
+
 **Tuning** (defaults in config):
 - `SCHEDULE_TIME`, `SCHEDULE_DAYS` — cron timing
 - `FAST_MODEL`, `REASONING_MODEL`, `OUTREACH_MODEL` — Claude models
