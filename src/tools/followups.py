@@ -17,7 +17,7 @@ from sqlalchemy import func
 
 from src.database.models import Contact, Opportunity, Company, DiscoveryRun, Profile, ContactStatus
 from src.database.session import get_session
-from src.integrations.zoho_mail import scan_inbox_senders, create_draft as zoho_create_draft
+from src.integrations.zoho_mail import scan_inbox_senders, create_draft as zoho_create_draft, _strip_ai_signoff
 
 logger = logging.getLogger(__name__)
 
@@ -354,6 +354,7 @@ def run_followups(session, batch: int = 15, delay: float = 1.0) -> dict:
         label = f"{company.name} → {contact.email} (#{(opp.followup_count or 0) + 1})"
         try:
             subject, body = generate_followup(company, contact, opp, profile)
+            body = _strip_ai_signoff(body)
             zoho_create_draft(to_address=contact.email, subject=subject, content=body)
             opp.followup_count = (opp.followup_count or 0) + 1
             opp.last_followup_at = datetime.now(timezone.utc)
@@ -391,6 +392,7 @@ def push_followup_now(session, company_id: int) -> dict:
     stage = (opp.followup_count or 0) + 1
     try:
         subject, body = generate_followup(company, contact, opp, profile)
+        body = _strip_ai_signoff(body)
         zoho_create_draft(to_address=contact.email, subject=subject, content=body)
         opp.followup_count = (opp.followup_count or 0) + 1
         opp.last_followup_at = datetime.now(timezone.utc)
