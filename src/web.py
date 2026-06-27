@@ -1,3 +1,4 @@
+import base64
 import concurrent.futures
 import logging
 import os
@@ -7,6 +8,12 @@ import collections
 from functools import wraps
 
 from flask import Flask, render_template, redirect, url_for, abort, request, flash, Response, jsonify, session
+
+# 1×1 transparent PNG returned by the tracking endpoint
+_TRACKING_PIXEL = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVQI12NgAAIABQ"
+    "AABjkB6QAAAABJRU5ErkJggg=="
+)
 
 logger = logging.getLogger(__name__)
 
@@ -315,6 +322,46 @@ def create_app() -> Flask:
     def logout():
         session.clear()
         return redirect(url_for("login"))
+
+    @app.route("/track/open/<email_id>")
+    def track_open(email_id):
+        """Record an email open event and return a 1×1 tracking pixel."""
+        import datetime
+        from src.database.session import get_session
+        from src.database.models import EmailOpenEvent
+        try:
+            with get_session() as db:
+                db.add(EmailOpenEvent(
+                    email_id=str(email_id),
+                    opened_at=datetime.datetime.utcnow(),
+                    ip_address=request.headers.get("X-Forwarded-For", request.remote_addr),
+                    user_agent=request.headers.get("User-Agent", ""),
+                ))
+        except Exception:
+            pass  # never 404
+        return Response(
+            _TRACKING_PIXEL,
+            mimetype="image/png",
+            headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+        )
+
+    @app.route("/track/stats")
+    @_require_auth
+    def track_stats():
+        """JSON list of email open events grouped by email_id."""
+        from src.database.session import get_session
+        from sqlalchemy import text
+        with get_session() as db:
+            rows = db.execute(text("""
+                SELECT email_id, COUNT(*) AS opens, MIN(opened_at) AS first_open
+                FROM email_open_events
+                GROUP BY email_id
+                ORDER BY first_open DESC
+            """)).fetchall()
+        return jsonify([
+            {"email_id": r.email_id, "opens": r.opens, "first_open": str(r.first_open)}
+            for r in rows
+        ])
 
     @app.route("/schedule/update", methods=["POST"])
     @_require_auth
@@ -1176,7 +1223,7 @@ def create_app() -> Flask:
             contact_email = contact.email
 
             try:
-                create_draft(to_address=contact_email, subject=subject, content=body)
+                create_draft(to_address=contact_email, subject=subject, content=body, email_id=str(contact_id))
                 from src.tools.db_tools import mark_company_contacted
                 mark_company_contacted(session, company_id, method="email")
                 return jsonify({"ok": True})
@@ -1269,7 +1316,7 @@ def create_app() -> Flask:
             body = draft.get("body", "")
 
             try:
-                zoho_send(to_address=contact.email, subject=subject, content=body)
+                zoho_send(to_address=contact.email, subject=subject, content=body, email_id=str(contact_id))
                 # Mark pushed_at if not already set
                 opp = (
                     session.query(Opportunity)
@@ -1528,7 +1575,7 @@ def create_app() -> Flask:
                 return jsonify({"error": "No se pudo determinar asunto/contenido"}), 400
 
             try:
-                create_draft(to_address=contact.email, subject=subject, content=body)
+                create_draft(to_address=contact.email, subject=subject, content=body, email_id=str(contact.id))
                 import datetime
                 contact.draft_sent_at = datetime.datetime.utcnow()
                 if action == "ai":
@@ -2006,7 +2053,7 @@ def create_app() -> Flask:
 
                 subject = draft.get("subject_line") or f"Outreach — {co.name}"
                 try:
-                    create_draft(to_address=ct.email, subject=subject, content=body)
+                    create_draft(to_address=ct.email, subject=subject, content=body, email_id=str(ct.id))
                     opp.zoho_pushed_at = datetime.now(timezone.utc)
                     mark_company_contacted(db, co.id, method="email")
                     db.flush()
@@ -2063,6 +2110,7 @@ def create_app() -> Flask:
                 to_address=email,
                 subject=data.get("subject", "").strip() or "Outreach",
                 content=data.get("body", "").strip(),
+                email_id=str(company_id) if company_id else None,
             )
             if company_id:
                 from src.database.session import get_session

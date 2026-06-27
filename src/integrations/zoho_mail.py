@@ -177,7 +177,7 @@ def _strip_ai_signoff(text: str) -> str:
     return "\n".join(lines)
 
 
-def create_draft(to_address: str, subject: str, content: str) -> dict:
+def create_draft(to_address: str, subject: str, content: str, email_id: str | None = None) -> dict:
     """
     Create a draft email in the authenticated Zoho Mail account.
     Returns the API response dict.
@@ -212,6 +212,16 @@ def create_draft(to_address: str, subject: str, content: str) -> dict:
         + _SIG
     )
 
+    if email_id:
+        from src.config import get_settings
+        _tracking_base = get_settings().tracking_base_url
+        if _tracking_base:
+            pixel_url = f"{_tracking_base.rstrip('/')}/track/open/{email_id}"
+            html_content += (
+                f'<img src="{pixel_url}" width="1" height="1" '
+                f'style="display:none;" alt="" />'
+            )
+
     payload = {
         "toAddress": to_address,
         "subject": subject or "(sin asunto)",
@@ -235,7 +245,7 @@ def create_draft(to_address: str, subject: str, content: str) -> dict:
     return resp.json()
 
 
-def send_email(to_address: str, subject: str, content: str) -> dict:
+def send_email(to_address: str, subject: str, content: str, email_id: str | None = None) -> dict:
     """Send an email directly via Zoho Mail (not a draft).
 
     Includes List-Unsubscribe headers for one-click unsubscribe compliance.
@@ -268,6 +278,16 @@ def send_email(to_address: str, subject: str, content: str) -> dict:
         f'<div style="{_STYLE};white-space:pre-wrap">{content}</div>'
         + _SIG
     )
+
+    if email_id:
+        from src.config import get_settings
+        _tracking_base = get_settings().tracking_base_url
+        if _tracking_base:
+            pixel_url = f"{_tracking_base.rstrip('/')}/track/open/{email_id}"
+            html_content += (
+                f'<img src="{pixel_url}" width="1" height="1" '
+                f'style="display:none;" alt="" />'
+            )
 
     payload = {
         "toAddress": to_address,

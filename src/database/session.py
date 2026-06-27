@@ -224,3 +224,25 @@ def _run_migrations() -> None:
                 logger.info("Migration: added discovery_runs.enriched_contact_ids")
     except Exception as e:
         logger.info(f"Migration note (non-fatal): {e}")
+
+    # Email open tracking table
+    try:
+        engine = get_engine()
+        with engine.connect() as conn:
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS email_open_events (
+                    id SERIAL PRIMARY KEY,
+                    email_id VARCHAR(100) NOT NULL,
+                    opened_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                    ip_address VARCHAR(50),
+                    user_agent VARCHAR(500)
+                )
+            """))
+            conn.execute(text(
+                "CREATE INDEX IF NOT EXISTS ix_email_open_events_email_id "
+                "ON email_open_events (email_id)"
+            ))
+            conn.commit()
+            logger.info("Migration: email_open_events table ready")
+    except Exception as e:
+        logger.info(f"Migration note (non-fatal): {e}")

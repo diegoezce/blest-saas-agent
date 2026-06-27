@@ -182,3 +182,13 @@ class DailyReport(Base):
 
     run = relationship("DiscoveryRun", back_populates="reports")
 
+
+class EmailOpenEvent(Base):
+    __tablename__ = "email_open_events"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    email_id = Column(String(100), nullable=False, index=True)
+    opened_at = Column(DateTime, nullable=False, server_default=func.now())
+    ip_address = Column(String(50), nullable=True)
+    user_agent = Column(String(500), nullable=True)
+
