@@ -57,6 +57,9 @@ class Settings(BaseSettings):
     zoho_account_id: str = ""
     zoho_from_address: str = ""
 
+    # Email open tracking
+    tracking_base_url: str = ""  # e.g. https://myapp.up.railway.app
+
     # Logging
     log_level: str = "INFO"
     log_file: str = "./logs/agent.log"
