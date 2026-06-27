@@ -398,6 +398,7 @@ def push_followup_now(session, company_id: int) -> dict:
         opp.last_followup_at = datetime.now(timezone.utc)
         opp.followup_subject = subject
         opp.followup_draft = body
+        opp.followup_approved = False
         session.commit()
         logger.info(f"Follow-up #{stage} enviado: {company.name} → {contact.email}")
         return {"ok": True, "message": f"Follow-up #{stage} enviado para {company.name}", "stage": stage}
