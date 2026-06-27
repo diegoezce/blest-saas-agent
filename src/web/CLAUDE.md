@@ -62,6 +62,12 @@ Follow-ups → Perfiles → Logout. Visual separators.
 - `POST /bounces/apply` — mark matched contacts bounced
 - Follow-up detection auto-runs in worker (sets `Contact.replied_at`)
 
+**Email Open Tracking**:
+- `GET /track/open/<email_id>` — **public, no auth** — logs open event to `email_open_events` table and returns 1×1 transparent PNG; always 200, never 404; uses `X-Forwarded-For` for IP
+- `GET /track/stats` — auth-protected JSON: opens grouped by `email_id` with count and first open timestamp
+- `email_id` = contact DB integer ID as string (set by Zoho push call sites)
+- Requires `TRACKING_BASE_URL` env var to be set; pixel is silently omitted otherwise
+
 **Profiles** (`/profiles`, `/profiles/new`, `/profiles/<id>/edit`):
 - CRUD for profiles
 - Form fields: targeting, tone, language, outreach instructions, custom scoring rubric

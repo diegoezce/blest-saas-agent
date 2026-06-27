@@ -47,6 +47,12 @@ on startup via `_run_migrations()` in `src/database/session.py` — uses
 - Aggregates a run's results for the report page
 - Stores all report data as JSONB `report_json`
 
+**`EmailOpenEvent`**
+- One row per email open event (triggered by tracking pixel)
+- Fields: `email_id` (VARCHAR 100 — contact ID as string), `opened_at`, `ip_address`, `user_agent`
+- Indexed on `email_id` for fast aggregation
+- Queried via `GET /track/stats`
+
 ## Current Migrations
 
 - `discovery_runs.profile_id`
@@ -58,5 +64,6 @@ on startup via `_run_migrations()` in `src/database/session.py` — uses
 - `opportunities.outreach_subject`, `opportunities.zoho_pushed_at`
 - Follow-up columns: `opportunities.followup_count`, `last_followup_at`, 
   `followup_subject`, `followup_draft`
+- `email_open_events` table (CREATE TABLE IF NOT EXISTS — new table, not ALTER)
 
 **Module**: `src/database/session.py:_run_migrations()`
