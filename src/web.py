@@ -348,20 +348,33 @@ def create_app() -> Flask:
     @app.route("/track/stats")
     @_require_auth
     def track_stats():
-        """JSON list of email open events grouped by email_id."""
         from src.database.session import get_session
         from sqlalchemy import text
         with get_session() as db:
             rows = db.execute(text("""
-                SELECT email_id, COUNT(*) AS opens, MIN(opened_at) AS first_open
-                FROM email_open_events
-                GROUP BY email_id
+                SELECT
+                    e.email_id,
+                    COUNT(*) AS opens,
+                    MIN(e.opened_at) AS first_open,
+                    MAX(e.opened_at) AS last_open,
+                    c.name AS contact_name,
+                    c.email AS contact_email,
+                    c.role AS contact_role,
+                    co.name AS company_name,
+                    co.id AS company_id
+                FROM email_open_events e
+                LEFT JOIN contacts c ON c.id = CAST(e.email_id AS INTEGER)
+                LEFT JOIN companies co ON co.id = c.company_id
+                GROUP BY e.email_id, c.name, c.email, c.role, co.name, co.id
                 ORDER BY first_open DESC
             """)).fetchall()
-        return jsonify([
-            {"email_id": r.email_id, "opens": r.opens, "first_open": str(r.first_open)}
-            for r in rows
-        ])
+            total_events = db.execute(text("SELECT COUNT(*) FROM email_open_events")).scalar()
+            unique_contacts = db.execute(text("SELECT COUNT(DISTINCT email_id) FROM email_open_events")).scalar()
+        stats = [dict(r._mapping) for r in rows]
+        return render_template("tracking_stats.html",
+                               stats=stats,
+                               total_events=total_events,
+                               unique_contacts=unique_contacts)
 
     @app.route("/schedule/update", methods=["POST"])
     @_require_auth
@@ -2145,10 +2158,22 @@ def create_app() -> Flask:
                 return render_template(
                     "contacts_report.html",
                     by_profile={}, profiles_order=[], profiles=profiles, total=0, needs_follow_up=0, overdue=0,
-                    bounced_count=0, success_count=0,
+                    bounced_count=0, success_count=0, opens_summary=[],
                 )
 
             company_ids = [c.id for c, _ in pairs]
+
+            # Email open events — bulk query keyed by contact id (string)
+            from src.database.models import EmailOpenEvent
+            from sqlalchemy import func as sqlfunc
+            open_rows = (
+                db.query(EmailOpenEvent.email_id,
+                         sqlfunc.count().label("opens"),
+                         sqlfunc.min(EmailOpenEvent.opened_at).label("first_open"))
+                .group_by(EmailOpenEvent.email_id)
+                .all()
+            )
+            opens_by_contact: dict = {r.email_id: {"opens": r.opens, "first_open": r.first_open} for r in open_rows}
 
             # Contacts per company — single bulk query
             contacts_rows = (
@@ -2159,6 +2184,7 @@ def create_app() -> Flask:
             )
             contacts_by_company: dict = {}
             for c in contacts_rows:
+                oe = opens_by_contact.get(str(c.id), {})
                 contacts_by_company.setdefault(c.company_id, []).append({
                     "id": c.id,
                     "name": c.name or "",
@@ -2169,6 +2195,8 @@ def create_app() -> Flask:
                     "linkedin_url": c.linkedin_url or "",
                     "phone_whatsapp": c.phone_whatsapp or "",
                     "replied_at": c.replied_at.strftime("%d/%m/%Y") if c.replied_at else "",
+                    "opens": oe.get("opens", 0),
+                    "first_open": oe["first_open"].strftime("%d/%m/%Y %H:%M") if oe.get("first_open") else "",
                 })
 
             # Best opportunity per company — single bulk query
@@ -2322,6 +2350,7 @@ def create_app() -> Flask:
                     "is_success": (status.response_received or "") in
                                   ("replied", "interested", "meeting_scheduled"),
                     "history": history,
+                    "total_opens": sum(c.get("opens", 0) for c in merged_contacts),
                 })
 
             profiles_order: list = []
@@ -2342,6 +2371,13 @@ def create_app() -> Flask:
             bounced_count = sum(1 for d in companies_data if d["has_bounced"])
             success_count = sum(1 for d in companies_data if d["is_success"])
 
+            # Opens summary for top section — only companies with at least 1 open
+            opens_summary = sorted(
+                [d for d in companies_data if d["total_opens"] > 0],
+                key=lambda x: x["total_opens"],
+                reverse=True,
+            )
+
         # Fetch all profiles for the draft modal
         profiles = db.query(Profile).filter_by(active=True).order_by(Profile.name).all()
 
@@ -2355,6 +2391,7 @@ def create_app() -> Flask:
             overdue=overdue,
             bounced_count=bounced_count,
             success_count=success_count,
+            opens_summary=opens_summary,
         )
 
     @app.route("/follow-ups")

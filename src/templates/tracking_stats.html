@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{% block title %}Opens — Blest Lead Discovery{% endblock %}
+{% block content %}
+
+<style>
+  .cr-stats { display: flex; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
+  .cr-stat {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 0.65rem 1.1rem; display: flex; flex-direction: column; align-items: center; min-width: 90px;
+  }
+  .cr-stat-num { font-size: 1.6rem; font-weight: 800; line-height: 1; }
+  .cr-stat-label { font-size: 0.72rem; color: var(--muted); margin-top: 0.2rem; text-align: center; }
+
+  .page-header { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1.25rem; }
+  .page-header h1 { font-size: 1.2rem; font-weight: 800; }
+
+  table.track-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+  table.track-table th {
+    text-align: left; color: var(--muted); font-weight: 600; font-size: 0.74rem;
+    padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--border);
+    cursor: pointer; user-select: none; white-space: nowrap;
+  }
+  table.track-table th::after { content: ' ⇅'; font-size: 0.65rem; opacity: 0.4; }
+  table.track-table th.sorted-asc::after { content: ' ↑'; opacity: 1; }
+  table.track-table th.sorted-desc::after { content: ' ↓'; opacity: 1; }
+  table.track-table td { padding: 0.45rem 0.6rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  table.track-table tr:hover td { background: var(--surface-hover); }
+
+  .opens-badge {
+    display: inline-flex; align-items: center; justify-content: center;
+    background: var(--accent); color: #fff; border-radius: 999px;
+    min-width: 1.6rem; height: 1.6rem; font-size: 0.8rem; font-weight: 800;
+    padding: 0 0.35rem;
+  }
+  .opens-badge.multi { background: #a78bfa; }
+
+  .contact-name { font-weight: 600; }
+  .contact-role { font-size: 0.75rem; color: var(--muted); }
+  .contact-email { font-size: 0.75rem; color: var(--muted); font-family: monospace; }
+
+  .company-link { color: var(--accent); text-decoration: none; font-weight: 500; }
+  .company-link:hover { text-decoration: underline; }
+
+  .ts { font-size: 0.78rem; color: var(--muted); white-space: nowrap; }
+
+  .empty-state { text-align: center; padding: 3rem 1rem; color: var(--muted); }
+</style>
+
+<div class="page-header">
+  <h1>📬 Email Opens</h1>
+</div>
+
+<div class="cr-stats">
+  <div class="cr-stat">
+    <span class="cr-stat-num">{{ unique_contacts }}</span>
+    <span class="cr-stat-label">contactos que abrieron</span>
+  </div>
+  <div class="cr-stat">
+    <span class="cr-stat-num">{{ total_events }}</span>
+    <span class="cr-stat-label">aperturas totales</span>
+  </div>
+</div>
+
+{% if stats %}
+<table class="track-table" id="track-table">
+  <thead>
+    <tr>
+      <th data-col="opens">Opens</th>
+      <th data-col="contact_name">Contacto</th>
+      <th data-col="company_name">Empresa</th>
+      <th data-col="first_open">Primera apertura</th>
+      <th data-col="last_open">Última apertura</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in stats %}
+    <tr>
+      <td>
+        <span class="opens-badge {% if r.opens > 1 %}multi{% endif %}">{{ r.opens }}</span>
+      </td>
+      <td>
+        {% if r.contact_name %}
+          <div class="contact-name">{{ r.contact_name }}</div>
+          {% if r.contact_role %}<div class="contact-role">{{ r.contact_role }}</div>{% endif %}
+          {% if r.contact_email %}<div class="contact-email">{{ r.contact_email }}</div>{% endif %}
+        {% else %}
+          <span style="color:var(--muted);font-size:0.78rem">ID {{ r.email_id }}</span>
+        {% endif %}
+      </td>
+      <td>
+        {% if r.company_name %}
+          <a class="company-link" href="/company/{{ r.company_id }}/feedback">{{ r.company_name }}</a>
+        {% else %}—{% endif %}
+      </td>
+      <td class="ts" data-ts="{{ r.first_open }}">{{ r.first_open | string | truncate(16, killwords=True, end='') }}</td>
+      <td class="ts" data-ts="{{ r.last_open }}">
+        {% if r.opens > 1 %}{{ r.last_open | string | truncate(16, killwords=True, end='') }}{% else %}—{% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty-state">
+  <p style="font-size:2rem;margin-bottom:0.5rem">📭</p>
+  <p>Todavía no hay aperturas registradas.</p>
+  <p style="font-size:0.8rem;margin-top:0.4rem">Asegurate de que <code>TRACKING_BASE_URL</code> esté configurado en Railway.</p>
+</div>
+{% endif %}
+
+<script>
+(function () {
+  const table = document.getElementById('track-table');
+  if (!table) return;
+  let sortCol = null, sortDir = 1;
+
+  table.querySelectorAll('th[data-col]').forEach(th => {
+    th.addEventListener('click', () => {
+      const col = th.dataset.col;
+      if (sortCol === col) { sortDir *= -1; }
+      else { sortCol = col; sortDir = -1; }
+
+      table.querySelectorAll('th').forEach(h => h.classList.remove('sorted-asc', 'sorted-desc'));
+      th.classList.add(sortDir === 1 ? 'sorted-asc' : 'sorted-desc');
+
+      const tbody = table.querySelector('tbody');
+      const rows = Array.from(tbody.querySelectorAll('tr'));
+      rows.sort((a, b) => {
+        const ai = colIndex(col);
+        const av = cellVal(a, ai, col);
+        const bv = cellVal(b, ai, col);
+        if (av < bv) return -sortDir;
+        if (av > bv) return sortDir;
+        return 0;
+      });
+      rows.forEach(r => tbody.appendChild(r));
+    });
+  });
+
+  function colIndex(col) {
+    const headers = Array.from(table.querySelectorAll('th[data-col]'));
+    return headers.findIndex(h => h.dataset.col === col);
+  }
+
+  function cellVal(row, idx, col) {
+    const cell = row.querySelectorAll('td')[idx];
+    if (!cell) return '';
+    if (col === 'opens') return parseInt(cell.textContent.trim()) || 0;
+    if (col === 'first_open' || col === 'last_open') return cell.dataset.ts || cell.textContent.trim();
+    return cell.textContent.trim().toLowerCase();
+  }
+})();
+</script>
+
+{% endblock %}

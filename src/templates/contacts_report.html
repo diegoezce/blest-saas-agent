@@ -226,6 +226,47 @@
   }
   .profile-pill-btn:hover { color: var(--text); border-color: var(--accent); }
 
+  /* Opens section */
+  .opens-section {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    margin-bottom: 1.25rem; overflow: hidden;
+  }
+  .opens-section > summary {
+    list-style: none; cursor: pointer; padding: 0.7rem 1rem;
+    display: flex; align-items: center; gap: 0.5rem;
+    font-size: 0.85rem; font-weight: 700; user-select: none;
+  }
+  .opens-section > summary::-webkit-details-marker { display: none; }
+  .opens-section > summary::before {
+    content: '▶'; font-size: 0.6rem; color: var(--muted); transition: transform 0.12s;
+  }
+  .opens-section[open] > summary::before { transform: rotate(90deg); }
+  .opens-section > summary .opens-count-badge {
+    background: var(--accent); color: #0f172a; border-radius: 999px;
+    padding: 0.05rem 0.5rem; font-size: 0.75rem; font-weight: 800;
+  }
+  .opens-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+  .opens-table th {
+    text-align: left; color: var(--muted); font-weight: 600; font-size: 0.74rem;
+    padding: 0.35rem 1rem; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+    background: var(--bg);
+  }
+  .opens-table td { padding: 0.45rem 1rem; border-bottom: 1px solid var(--border); }
+  .opens-table tr:last-child td { border-bottom: none; }
+  .opens-table tr:hover td { background: var(--surface-hover); }
+  .open-badge {
+    display: inline-flex; align-items: center; justify-content: center;
+    background: var(--accent); color: #0f172a; border-radius: 999px;
+    min-width: 1.5rem; height: 1.5rem; font-size: 0.78rem; font-weight: 800; padding: 0 0.3rem;
+  }
+  .open-badge.multi { background: #a78bfa; color: #fff; }
+
+  /* Card open indicator */
+  .open-indicator {
+    display: inline-flex; align-items: center; gap: 0.2rem;
+    font-size: 0.73rem; font-weight: 700; color: var(--accent);
+  }
+
   /* Communication history */
   .comm-history {
     border-top: 1px solid var(--border);
@@ -370,6 +411,11 @@
     {% elif d.follow_up_today %}<span style="color:var(--amber);font-weight:600">📅 Hoy</span>
     {% elif d.follow_up_date %}<span>📅 {{ d.follow_up_date_display }}</span>{% endif %}
     {% if d.comment %}<span style="font-style:italic">{{ d.comment[:55] }}{% if d.comment|length > 55 %}…{% endif %}</span>{% endif %}
+    {% if d.total_opens %}
+    <span class="open-indicator" title="Abrió el email {{ d.total_opens }} vez{% if d.total_opens != 1 %}es{% endif %}">
+      📬 {{ d.total_opens }}
+    </span>
+    {% endif %}
   </div>
 
   {% if d.history %}
@@ -486,6 +532,49 @@
   <p style="font-weight:600">Sin empresas contactadas todavía</p>
   <p style="font-size:0.83rem;margin-top:0.35rem">Marcá empresas desde cualquier reporte de descubrimiento.</p>
 </div>
+{% endif %}
+
+<!-- ── Opens summary ────────────────────────────────────────────────── -->
+{% if opens_summary %}
+<details class="opens-section">
+  <summary>
+    📬 Aperturas de email
+    <span class="opens-count-badge">{{ opens_summary | length }}</span>
+    <span style="color:var(--muted);font-weight:400;font-size:0.8rem;margin-left:0.25rem">empresa{{ 's' if opens_summary|length != 1 }} que abrieron</span>
+  </summary>
+  <table class="opens-table">
+    <thead>
+      <tr>
+        <th>Empresa</th>
+        <th>Contacto</th>
+        <th>Veces</th>
+        <th>Primera apertura</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for d in opens_summary %}
+      {% set opener = d.contacts | selectattr("opens") | sort(attribute="opens", reverse=True) | first %}
+      <tr>
+        <td>
+          <span class="company-name-link" style="font-weight:600;cursor:pointer" onclick="openCompanyModal({{ d.id }})">{{ d.name }}</span>
+        </td>
+        <td>
+          {% if opener %}
+            <span style="font-weight:500">{{ opener.name }}</span>
+            {% if opener.role %}<span style="color:var(--muted);font-size:0.78rem"> · {{ opener.role }}</span>{% endif %}
+          {% else %}—{% endif %}
+        </td>
+        <td>
+          <span class="open-badge {% if d.total_opens > 1 %}multi{% endif %}">{{ d.total_opens }}</span>
+        </td>
+        <td style="color:var(--muted);font-size:0.78rem">
+          {% if opener and opener.first_open %}{{ opener.first_open }}{% else %}—{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</details>
 {% endif %}
 
 <!-- ── Filter bar ────────────────────────────────────────────────────── -->
