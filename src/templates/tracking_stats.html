@@ -21,6 +21,7 @@
     cursor: pointer; user-select: none; white-space: nowrap;
   }
   table.track-table th::after { content: ' ⇅'; font-size: 0.65rem; opacity: 0.4; }
+  table.track-table th.no-sort::after { content: ''; }
   table.track-table th.sorted-asc::after { content: ' ↑'; opacity: 1; }
   table.track-table th.sorted-desc::after { content: ' ↓'; opacity: 1; }
   table.track-table td { padding: 0.45rem 0.6rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
@@ -42,6 +43,18 @@
   .company-link:hover { text-decoration: underline; }
 
   .ts { font-size: 0.78rem; color: var(--muted); white-space: nowrap; }
+
+  /* UA chip */
+  .ua-chip {
+    display: inline-block; font-size: 0.72rem; padding: 0.15rem 0.45rem;
+    border-radius: 4px; font-weight: 600; white-space: nowrap;
+  }
+  .ua-mine   { background: #7f1d1d; color: #fecaca; }
+  .ua-mobile { background: #14532d; color: #bbf7d0; }
+  .ua-desktop { background: #1e3a5f; color: #bae6fd; }
+  .ua-unknown { background: var(--surface); color: var(--muted); border: 1px solid var(--border); }
+  .ua-raw { font-size: 0.68rem; color: var(--muted); font-family: monospace; max-width: 200px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; margin-top: 0.15rem; }
 
   .empty-state { text-align: center; padding: 3rem 1rem; color: var(--muted); }
 </style>
@@ -70,6 +83,7 @@
       <th data-col="company_name">Empresa</th>
       <th data-col="first_open">Primera apertura</th>
       <th data-col="last_open">Última apertura</th>
+      <th class="no-sort">User-Agent</th>
     </tr>
   </thead>
   <tbody>
@@ -96,10 +110,29 @@
       <td class="ts" data-ts="{{ r.last_open }}">
         {% if r.opens > 1 %}{{ r.last_open | string | truncate(16, killwords=True, end='') }}{% else %}—{% endif %}
       </td>
+      <td>
+        {% set ua = r.first_ua or '' %}
+        {% if not ua %}
+          <span class="ua-chip ua-unknown">desconocido</span>
+        {% elif 'ZohoMail' in ua or 'Zoho' in ua %}
+          <span class="ua-chip ua-mine" title="{{ ua }}">⚠ Zoho (tuyo)</span>
+        {% elif 'Mobile' in ua or 'Android' in ua or 'iPhone' in ua %}
+          <span class="ua-chip ua-mobile" title="{{ ua }}">📱 Móvil</span>
+          <span class="ua-raw" title="{{ ua }}">{{ ua[:60] }}{% if ua|length > 60 %}…{% endif %}</span>
+        {% else %}
+          <span class="ua-chip ua-desktop" title="{{ ua }}">🖥 Desktop</span>
+          <span class="ua-raw" title="{{ ua }}">{{ ua[:60] }}{% if ua|length > 60 %}…{% endif %}</span>
+        {% endif %}
+      </td>
     </tr>
     {% endfor %}
   </tbody>
 </table>
+
+<p style="font-size:0.75rem;color:var(--muted);margin-top:0.75rem">
+  ⚠ <strong>User-Agent</strong> mostrado es el del primer open. Aperturas marcadas como <span style="background:#7f1d1d;color:#fecaca;padding:0.1rem 0.3rem;border-radius:3px;font-size:0.72rem;font-weight:600">Zoho (tuyo)</span> probablemente son vos abriendo el draft o el sent.
+</p>
+
 {% else %}
 <div class="empty-state">
   <p style="font-size:2rem;margin-bottom:0.5rem">📭</p>

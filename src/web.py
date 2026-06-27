@@ -361,7 +361,13 @@ def create_app() -> Flask:
                     c.email AS contact_email,
                     c.role AS contact_role,
                     co.name AS company_name,
-                    co.id AS company_id
+                    co.id AS company_id,
+                    (SELECT e2.user_agent FROM email_open_events e2
+                     WHERE e2.email_id = e.email_id
+                     ORDER BY e2.opened_at ASC LIMIT 1) AS first_ua,
+                    (SELECT e2.user_agent FROM email_open_events e2
+                     WHERE e2.email_id = e.email_id
+                     ORDER BY e2.opened_at DESC LIMIT 1) AS last_ua
                 FROM email_open_events e
                 LEFT JOIN contacts c ON c.id = CAST(e.email_id AS INTEGER)
                 LEFT JOIN companies co ON co.id = c.company_id
