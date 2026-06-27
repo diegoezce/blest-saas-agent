@@ -17,7 +17,7 @@ from sqlalchemy import func
 
 from src.database.models import Contact, Opportunity, Company, DiscoveryRun, Profile, ContactStatus
 from src.database.session import get_session
-from src.integrations.zoho_mail import scan_inbox_senders, create_draft as zoho_create_draft, _strip_ai_signoff
+from src.integrations.zoho_mail import scan_inbox_senders, send_email as zoho_send_email, _strip_ai_signoff
 
 logger = logging.getLogger(__name__)
 
@@ -355,7 +355,7 @@ def run_followups(session, batch: int = 15, delay: float = 1.0) -> dict:
         try:
             subject, body = generate_followup(company, contact, opp, profile)
             body = _strip_ai_signoff(body)
-            zoho_create_draft(to_address=contact.email, subject=subject, content=body)
+            zoho_send_email(to_address=contact.email, subject=subject, content=body)
             opp.followup_count = (opp.followup_count or 0) + 1
             opp.last_followup_at = datetime.now(timezone.utc)
             opp.followup_subject = subject
@@ -363,7 +363,7 @@ def run_followups(session, batch: int = 15, delay: float = 1.0) -> dict:
             opp.followup_approved = False
             session.flush()
             drafted += 1
-            logger.info(f"  📨 {label} — follow-up draft pushed")
+            logger.info(f"  📨 {label} — follow-up sent")
         except Exception as exc:
             logger.error(f"  ❌ {label} — {exc}")
         time.sleep(delay)
@@ -393,14 +393,14 @@ def push_followup_now(session, company_id: int) -> dict:
     try:
         subject, body = generate_followup(company, contact, opp, profile)
         body = _strip_ai_signoff(body)
-        zoho_create_draft(to_address=contact.email, subject=subject, content=body)
+        zoho_send_email(to_address=contact.email, subject=subject, content=body)
         opp.followup_count = (opp.followup_count or 0) + 1
         opp.last_followup_at = datetime.now(timezone.utc)
         opp.followup_subject = subject
         opp.followup_draft = body
         session.commit()
-        logger.info(f"Follow-up #{stage} adelantado: {company.name} → {contact.email}")
-        return {"ok": True, "message": f"Follow-up #{stage} drafteado para {company.name}", "stage": stage}
+        logger.info(f"Follow-up #{stage} enviado: {company.name} → {contact.email}")
+        return {"ok": True, "message": f"Follow-up #{stage} enviado para {company.name}", "stage": stage}
     except Exception as exc:
         session.rollback()
         logger.error(f"Follow-up adelantado falló ({company.name}): {exc}")
