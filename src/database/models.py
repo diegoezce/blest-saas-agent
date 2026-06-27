@@ -130,6 +130,7 @@ class Opportunity(Base):
     last_followup_at = Column(DateTime, nullable=True)
     followup_subject = Column(Text, nullable=True)
     followup_draft = Column(Text, nullable=True)
+    followup_approved = Column(Boolean, nullable=True, default=False)
     created_at = Column(DateTime, server_default=func.now())
 
     run = relationship("DiscoveryRun", back_populates="opportunities")

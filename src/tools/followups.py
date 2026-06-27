@@ -339,7 +339,8 @@ def run_followups(session, batch: int = 15, delay: float = 1.0) -> dict:
     """
     rep = detect_replies()
 
-    candidates = select_followup_candidates(session)[:batch]
+    all_due = select_followup_candidates(session)
+    candidates = [c for c in all_due if c[0].followup_approved][:batch]
     if not candidates:
         logger.info("Follow-ups: nothing due")
         return {"replies_detected": rep["newly_marked"], "ooo_verified": rep.get("ooo_verified", 0), "ooo_alt_captured": rep.get("ooo_alt_captured", 0), "candidates": 0, "drafted": 0}
@@ -358,6 +359,7 @@ def run_followups(session, batch: int = 15, delay: float = 1.0) -> dict:
             opp.last_followup_at = datetime.now(timezone.utc)
             opp.followup_subject = subject
             opp.followup_draft = body
+            opp.followup_approved = False
             session.flush()
             drafted += 1
             logger.info(f"  📨 {label} — follow-up draft pushed")

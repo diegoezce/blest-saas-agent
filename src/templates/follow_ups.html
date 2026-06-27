@@ -64,6 +64,28 @@
   }
 
   .empty-state { text-align: center; padding: 2.5rem 1rem; color: var(--muted); }
+
+  /* Auto-send approval toggle */
+  .fu-approve-wrap {
+    display: flex; align-items: center; gap: 0.35rem;
+    margin-left: auto;
+  }
+  .fu-approve-label {
+    display: flex; align-items: center; gap: 0.3rem;
+    font-size: 0.73rem; font-weight: 600; cursor: pointer;
+    padding: 0.2rem 0.5rem; border-radius: 5px;
+    border: 1px solid var(--border); color: var(--muted);
+    transition: all 0.12s; user-select: none;
+  }
+  .fu-approve-label:hover { border-color: #4ade80; color: #4ade80; }
+  .fu-approve-label input { display: none; }
+  .fu-approve-label.approved {
+    background: rgba(74,222,128,0.1);
+    border-color: rgba(74,222,128,0.5);
+    color: #4ade80;
+  }
+  .fu-approve-icon { font-size: 0.85rem; }
+
   @media (max-width: 600px) {
     .lead-grid { grid-template-columns: 1fr; }
     .cr-stat { min-width: 75px; padding: 0.45rem 0.65rem; }
@@ -77,6 +99,11 @@
 <div style="margin-bottom:1.25rem;display:flex;align-items:center;justify-content:space-between;gap:0.75rem;flex-wrap:wrap">
   <h1 style="font-size:1.2rem;font-weight:800">⏰ Follow-ups</h1>
   <span style="font-size:0.78rem;color:var(--muted)">Cadencia: día ~4 y día ~10 · máx. 2 toques</span>
+</div>
+
+<div style="background:rgba(56,189,248,0.07);border:1px solid rgba(56,189,248,0.2);border-radius:8px;padding:0.65rem 1rem;font-size:0.81rem;color:var(--muted);margin-bottom:1.25rem;display:flex;align-items:flex-start;gap:0.6rem">
+  <span style="font-size:1rem;flex-shrink:0">⚙️</span>
+  <span>El worker envía automáticamente solo los follow-ups marcados con <strong style="color:#4ade80">✅ Auto</strong>. Marcá las empresas que querés que salgan en el próximo ciclo del worker. El botón <strong>⏩ Hacer hoy</strong> siempre funciona, sin necesidad de marcarlos.</span>
 </div>
 
 <div class="cr-stats">
@@ -117,16 +144,26 @@
         <span class="badge {{ 'badge-red' if d.overdue else 'badge-amber' }}">Toque #{{ d.stage }}</span>
         <span>hace {{ d.days_since }} día{{ 's' if d.days_since != 1 }}</span>
         {% if d.overdue %}<span style="color:var(--red);font-weight:600">⚠ vencido</span>{% endif %}
-        <form method="post" action="{{ url_for('follow_ups_push_now') }}" style="margin-left:auto" class="fu-push-form">
-          <input type="hidden" name="company_id" value="{{ d.company_id }}">
-          <button type="submit" class="fu-now-btn" title="Generar y pushear el follow-up a Zoho ahora"><span class="btn-text">⏩ Hacer hoy</span></button>
-        </form>
+        <div style="margin-left:auto;display:flex;align-items:center;gap:0.4rem">
+          <label class="fu-approve-label {% if d.followup_approved %}approved{% endif %}"
+                 id="approve-label-{{ d.company_id }}"
+                 title="Marcar para envío automático por el worker">
+            <input type="checkbox" {% if d.followup_approved %}checked{% endif %}
+                   onchange="toggleApproval({{ d.company_id }}, this)">
+            <span class="fu-approve-icon">{{ '✅' if d.followup_approved else '⬜' }}</span>
+            <span>Auto</span>
+          </label>
+          <form method="post" action="{{ url_for('follow_ups_push_now') }}" class="fu-push-form">
+            <input type="hidden" name="company_id" value="{{ d.company_id }}">
+            <button type="submit" class="fu-now-btn" title="Generar y pushear el follow-up a Zoho ahora"><span class="btn-text">⏩ Hacer hoy</span></button>
+          </form>
+        </div>
       </div>
     </div>
     {% endfor %}
   </div>
   {% else %}
-  <div class="empty-state">Nada pendiente. El worker draftea automáticamente cuando un lead cumple la cadencia.</div>
+  <div class="empty-state">Nada pendiente. Cuando un lead cumpla la cadencia, aparecerá aquí para que lo marques.</div>
   {% endif %}
 </details>
 
@@ -144,6 +181,7 @@
       <th>Contacto</th>
       <th>Toque</th>
       <th class="sortable" data-sort="due">Vence</th>
+      <th>Worker auto</th>
       <th></th>
     </tr></thead>
     <tbody>
@@ -157,6 +195,16 @@
         </td>
         <td data-label="Toque">#{{ u.stage }}</td>
         <td data-label="Vence" data-due-value="{{ u.days_until }}">{{ u.due_display }} <span style="color:var(--muted)">(en {{ u.days_until }}d)</span></td>
+        <td data-label="Worker auto">
+          <label class="fu-approve-label {% if u.followup_approved %}approved{% endif %}"
+                 id="approve-label-{{ u.company_id }}"
+                 title="Marcar para envío automático por el worker">
+            <input type="checkbox" {% if u.followup_approved %}checked{% endif %}
+                   onchange="toggleApproval({{ u.company_id }}, this)">
+            <span class="fu-approve-icon">{{ '✅' if u.followup_approved else '⬜' }}</span>
+            <span>Auto</span>
+          </label>
+        </td>
         <td data-label="">
           <form method="post" action="{{ url_for('follow_ups_push_now') }}" class="fu-push-form">
             <input type="hidden" name="company_id" value="{{ u.company_id }}">
@@ -295,6 +343,33 @@ if (upcomingTable) {
   const companyHeader = upcomingTable.querySelector('th[data-sort="company"]');
   if (companyHeader) {
     companyHeader.classList.add('sorted-asc');
+  }
+}
+
+async function toggleApproval(companyId, cb) {
+  const approved = cb.checked;
+  const label = document.getElementById('approve-label-' + companyId);
+  if (label) label.style.opacity = '0.5';
+  try {
+    await fetch('/company/' + companyId + '/followup-approve', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({approved}),
+    });
+    if (label) {
+      label.style.opacity = '1';
+      const icon = label.querySelector('.fu-approve-icon');
+      if (approved) {
+        label.classList.add('approved');
+        if (icon) icon.textContent = '✅';
+      } else {
+        label.classList.remove('approved');
+        if (icon) icon.textContent = '⬜';
+      }
+    }
+  } catch(e) {
+    cb.checked = !approved;
+    if (label) label.style.opacity = '1';
   }
 }
 </script>

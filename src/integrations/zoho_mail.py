@@ -235,6 +235,74 @@ def create_draft(to_address: str, subject: str, content: str) -> dict:
     return resp.json()
 
 
+def send_email(to_address: str, subject: str, content: str) -> dict:
+    """Send an email directly via Zoho Mail (not a draft).
+
+    Includes List-Unsubscribe headers for one-click unsubscribe compliance.
+    Returns the API response dict.
+    """
+    access_token = _get_access_token()
+    tokens = _load_tokens()
+    account_id = tokens.get("account_id")
+    from_address = tokens.get("from_address", "")
+    if not account_id:
+        raise RuntimeError("No account_id stored. Re-run --zoho-auth.")
+
+    content = _strip_ai_signoff(content)
+    content = _fix_spanish_punctuation(content)
+
+    _STYLE = "font-family:Arial,sans-serif;font-size:11pt;line-height:1.6"
+    _SIG = (
+        '<div style="' + _STYLE + ';margin-top:18px;padding-top:12px;'
+        'border-top:1px solid #d0d0d0;color:#555">'
+        "Mariela Minetti<br>"
+        "Directora<br>"
+        "Blest Learning<br>"
+        "📧 hello@blestlearning.com<br>"
+        '🌐 <a href="https://www.blestlearning.com">www.blestlearning.com</a><br>'
+        '💼 <a href="https://www.linkedin.com/company/blest-learning">LinkedIn</a><br>'
+        '💬 <a href="https://wa.me/5491138908145">+54 9 11 3890 8145 (WhatsApp)</a>'
+        "</div>"
+    )
+    html_content = (
+        f'<div style="{_STYLE};white-space:pre-wrap">{content}</div>'
+        + _SIG
+    )
+
+    unsubscribe_address = from_address or "hello@blestlearning.com"
+    payload = {
+        "toAddress": to_address,
+        "subject": subject or "(sin asunto)",
+        "content": html_content,
+        "mailFormat": "html",
+        "mode": "send",
+        "mailHeaders": [
+            {
+                "headerName": "List-Unsubscribe",
+                "headerValue": f"<mailto:{unsubscribe_address}?subject=unsubscribe>",
+            },
+            {
+                "headerName": "List-Unsubscribe-Post",
+                "headerValue": "List-Unsubscribe=One-Click",
+            },
+        ],
+    }
+    if from_address:
+        payload["fromAddress"] = from_address
+
+    resp = requests.post(
+        f"{_ACCOUNTS_URL}/{account_id}/messages",
+        headers={
+            "Authorization": f"Zoho-oauthtoken {access_token}",
+            "Content-Type": "application/json",
+        },
+        json=payload,
+        timeout=15,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
 # ── Unsubscribe detection (requires ZohoMail.messages.READ + folders.READ scope) ──
 
 def scan_unsubscribe_requests(max_messages: int = 200) -> dict:

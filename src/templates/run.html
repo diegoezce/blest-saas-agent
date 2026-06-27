@@ -369,6 +369,13 @@ details.lead[open] .lead-chevron { transform:rotate(90deg); }
             style="font-size:0.72rem;padding:0.1rem 0.45rem;background:rgba(14,165,233,0.12);border:1px solid rgba(14,165,233,0.35);border-radius:4px;color:var(--accent);cursor:pointer">
             ✉️ Draft
           </button>
+          {% if zoho_configured %}
+          <button
+            onclick="event.stopPropagation();openSendPreviewModal({{ first.get('contact_id') }})"
+            style="font-size:0.72rem;padding:0.1rem 0.45rem;background:rgba(74,222,128,0.12);border:1px solid rgba(74,222,128,0.35);border-radius:4px;color:#4ade80;cursor:pointer">
+            📤 Enviar
+          </button>
+          {% endif %}
           {% endif %}
         {% endif %}
         {% if first.get('contact_linkedin_url') %}
@@ -540,6 +547,35 @@ details.lead[open] .lead-chevron { transform:rotate(90deg); }
         📧 Crear draft en Zoho
       </button>
       <div id="enrich-zoho-result" style="font-size:0.82rem;color:var(--muted);margin-top:0.5rem;text-align:center"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Send Preview Modal -->
+<div id="send-preview-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:500;align-items:center;justify-content:center">
+  <div class="card" style="width:100%;max-width:580px;padding:1.75rem;max-height:88vh;overflow-y:auto;position:relative">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.1rem">
+      <h2 style="font-size:1.05rem;font-weight:700">📤 Confirmar envío</h2>
+      <button onclick="closeSendPreview()" style="background:none;border:none;color:var(--muted);font-size:1.3rem;cursor:pointer;padding:0.25rem">&times;</button>
+    </div>
+    <div style="background:rgba(251,191,36,0.1);border:1px solid rgba(251,191,36,0.35);border-radius:6px;padding:0.6rem 0.9rem;font-size:0.8rem;color:#fbbf24;margin-bottom:1rem">
+      ⚠️ Este email se enviará <strong>directamente</strong> al destinatario, sin pasar por borradores.
+    </div>
+    <div style="display:flex;flex-direction:column;gap:0.55rem;font-size:0.85rem;margin-bottom:1rem">
+      <div><span style="color:var(--muted);font-weight:600;min-width:70px;display:inline-block">Para:</span> <span id="sp-to" style="color:var(--accent)"></span></div>
+      <div><span style="color:var(--muted);font-weight:600;min-width:70px;display:inline-block">Asunto:</span> <span id="sp-subject"></span></div>
+    </div>
+    <pre id="sp-body" style="font-family:inherit;font-size:0.8rem;white-space:pre-wrap;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:0.75rem 1rem;max-height:260px;overflow-y:auto;color:var(--text);line-height:1.55;margin-bottom:1rem"></pre>
+    <div id="sp-result" style="font-size:0.82rem;text-align:center;min-height:1.2rem;margin-bottom:0.75rem"></div>
+    <div style="display:flex;gap:0.6rem">
+      <button id="sp-send-btn" onclick="confirmSend(this)"
+        style="flex:1;background:#16a34a;color:#fff;border:none;padding:0.6rem;border-radius:6px;cursor:pointer;font-size:0.9rem;font-weight:700">
+        📤 Enviar ahora
+      </button>
+      <button onclick="closeSendPreview()"
+        style="padding:0.6rem 1.1rem;background:var(--surface);border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:0.85rem;color:var(--muted)">
+        Cancelar
+      </button>
     </div>
   </div>
 </div>
@@ -842,6 +878,76 @@ function createDraftFromModal(btn) {
       btn.textContent = '📧 Crear draft en Zoho';
       btn.disabled = false;
     });
+}
+
+// ── Send Preview Modal ────────────────────────────────────────────────────
+let _sendContactId = null;
+
+async function openSendPreviewModal(contactId) {
+  _sendContactId = contactId;
+  const modal = document.getElementById('send-preview-modal');
+  const bodyEl = document.getElementById('sp-body');
+  const toEl = document.getElementById('sp-to');
+  const subjEl = document.getElementById('sp-subject');
+  const resultEl = document.getElementById('sp-result');
+  const sendBtn = document.getElementById('sp-send-btn');
+  toEl.textContent = '';
+  subjEl.textContent = '';
+  bodyEl.textContent = '⟳ Cargando…';
+  resultEl.textContent = '';
+  sendBtn.textContent = '📤 Enviar ahora';
+  sendBtn.disabled = false;
+  sendBtn.style.background = '#16a34a';
+  modal.style.display = 'flex';
+  modal.onclick = e => { if (e.target === modal) closeSendPreview(); };
+  try {
+    const res = await fetch('/contact/' + contactId + '/zoho-preview?run_id=' + RUN_ID);
+    const data = await res.json();
+    if (data.error) { bodyEl.textContent = '❌ ' + data.error; return; }
+    toEl.textContent = data.to_address;
+    subjEl.textContent = data.subject;
+    bodyEl.textContent = data.body;
+  } catch(e) {
+    bodyEl.textContent = '❌ Error de red';
+  }
+}
+
+function closeSendPreview() {
+  document.getElementById('send-preview-modal').style.display = 'none';
+  _sendContactId = null;
+}
+
+async function confirmSend(btn) {
+  if (!_sendContactId) return;
+  btn.disabled = true;
+  btn.textContent = '⟳ Enviando…';
+  const resultEl = document.getElementById('sp-result');
+  resultEl.textContent = '';
+  try {
+    const res = await fetch('/contact/' + _sendContactId + '/zoho-send', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({run_id: RUN_ID}),
+    });
+    const data = await res.json();
+    if (data.error) {
+      resultEl.textContent = '❌ ' + data.error;
+      resultEl.style.color = '#f87171';
+      btn.textContent = '📤 Enviar ahora';
+      btn.disabled = false;
+    } else {
+      btn.textContent = '✓ Enviado';
+      btn.style.background = '#15803d';
+      resultEl.textContent = '✓ Email enviado correctamente';
+      resultEl.style.color = '#4ade80';
+      setTimeout(closeSendPreview, 2200);
+    }
+  } catch(e) {
+    resultEl.textContent = '❌ Error de red';
+    resultEl.style.color = '#f87171';
+    btn.textContent = '📤 Enviar ahora';
+    btn.disabled = false;
+  }
 }
 
 let _enrichPollId = null;

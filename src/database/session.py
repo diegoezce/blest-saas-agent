@@ -170,6 +170,7 @@ def _run_migrations() -> None:
             ("last_followup_at",  "TIMESTAMP"),
             ("followup_subject",  "TEXT"),
             ("followup_draft",    "TEXT"),
+            ("followup_approved", "BOOLEAN DEFAULT FALSE"),
         ]
         with engine.connect() as conn:
             for col_name, col_type in new_opp_cols:

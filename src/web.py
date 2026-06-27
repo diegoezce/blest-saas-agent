@@ -1184,6 +1184,130 @@ def create_app() -> Flask:
                 logger.warning(f"Zoho single draft failed for contact {contact_id}: {e}")
                 return jsonify({"error": str(e)}), 500
 
+    @app.route("/contact/<int:contact_id>/zoho-preview", methods=["GET"])
+    @_require_auth
+    def contact_zoho_preview(contact_id):
+        """Return the email preview (subject + body) without touching Zoho."""
+        from src.database.session import get_session
+        from src.database.models import Contact, Company, DailyReport
+        from src.dashboard import _enrich_drafts_from_db
+
+        run_id = request.args.get("run_id", type=int)
+        if not run_id:
+            return jsonify({"error": "run_id requerido"}), 400
+
+        with get_session() as session:
+            contact = session.get(Contact, contact_id)
+            if not contact or not contact.email:
+                return jsonify({"error": "Contacto sin email"}), 404
+
+            company = session.get(Company, contact.company_id)
+            if not company:
+                return jsonify({"error": "Empresa no encontrada"}), 404
+
+            report = session.query(DailyReport).filter_by(run_id=run_id).first()
+            if not report or not report.report_json:
+                return jsonify({"error": "Sin datos de reporte para este run"}), 404
+
+            report_data = _enrich_drafts_from_db(session, dict(report.report_json))
+            all_drafts = report_data.get("outreach_drafts", [])
+            company_drafts = [d for d in all_drafts if d.get("company_name") == company.name]
+            draft = next((d for d in company_drafts if d.get("channel") == "email"), None)
+            if not draft and company_drafts:
+                draft = company_drafts[0]
+            if not draft:
+                return jsonify({"error": f"Sin draft para {company.name}"}), 404
+
+            return jsonify({
+                "to_address": contact.email,
+                "subject": draft.get("subject_line") or f"Outreach — {company.name}",
+                "body": draft.get("body", ""),
+            })
+
+    @app.route("/contact/<int:contact_id>/zoho-send", methods=["POST"])
+    @_require_auth
+    def contact_zoho_send(contact_id):
+        """Send email directly via Zoho Mail (not a draft)."""
+        from src.database.session import get_session
+        from src.database.models import Contact, Company, DailyReport, Opportunity
+        from src.dashboard import _enrich_drafts_from_db
+        from src.integrations.zoho_mail import send_email as zoho_send, is_configured
+
+        if not is_configured():
+            return jsonify({"error": "Zoho Mail no configurado"}), 503
+
+        data = request.get_json(silent=True) or {}
+        run_id = data.get("run_id")
+        if not run_id:
+            return jsonify({"error": "run_id requerido"}), 400
+
+        with get_session() as session:
+            contact = session.get(Contact, contact_id)
+            if not contact or not contact.email:
+                return jsonify({"error": "Contacto sin email"}), 404
+
+            company = session.get(Company, contact.company_id)
+            if not company:
+                return jsonify({"error": "Empresa no encontrada"}), 404
+
+            company_id_val = company.id
+
+            report = session.query(DailyReport).filter_by(run_id=run_id).first()
+            if not report or not report.report_json:
+                return jsonify({"error": "Sin datos de reporte para este run"}), 404
+
+            report_data = _enrich_drafts_from_db(session, dict(report.report_json))
+            all_drafts = report_data.get("outreach_drafts", [])
+            company_drafts = [d for d in all_drafts if d.get("company_name") == company.name]
+            draft = next((d for d in company_drafts if d.get("channel") == "email"), None)
+            if not draft and company_drafts:
+                draft = company_drafts[0]
+            if not draft:
+                return jsonify({"error": f"Sin draft para {company.name}"}), 404
+
+            subject = draft.get("subject_line") or f"Outreach — {company.name}"
+            body = draft.get("body", "")
+
+            try:
+                zoho_send(to_address=contact.email, subject=subject, content=body)
+                # Mark pushed_at if not already set
+                opp = (
+                    session.query(Opportunity)
+                    .filter_by(company_id=company_id_val, run_id=run_id)
+                    .first()
+                )
+                if opp and not opp.zoho_pushed_at:
+                    from datetime import datetime, timezone
+                    opp.zoho_pushed_at = datetime.now(timezone.utc)
+                from src.tools.db_tools import mark_company_contacted
+                mark_company_contacted(session, company_id_val, method="email")
+                return jsonify({"ok": True})
+            except Exception as e:
+                logger.warning(f"Zoho direct send failed for contact {contact_id}: {e}")
+                return jsonify({"error": str(e)}), 500
+
+    @app.route("/company/<int:company_id>/followup-approve", methods=["POST"])
+    @_require_auth
+    def followup_approve(company_id):
+        """Toggle followup_approved on the latest opportunity for a company."""
+        from src.database.session import get_session
+        from src.database.models import Opportunity
+
+        data = request.get_json(silent=True) or {}
+        approved = bool(data.get("approved", False))
+
+        with get_session() as session:
+            opp = (
+                session.query(Opportunity)
+                .filter_by(company_id=company_id)
+                .order_by(Opportunity.id.desc())
+                .first()
+            )
+            if not opp:
+                return jsonify({"error": "Opportunity no encontrada"}), 404
+            opp.followup_approved = approved
+        return jsonify({"ok": True, "approved": approved})
+
     # ── Contact Enrichment ───────────────────────────────────────────────────
 
     # Per-run: track in-progress bulk enrichment {run_id: {"done": int, "total": int}}
@@ -2238,6 +2362,7 @@ def create_app() -> Flask:
                     "stage": count + 1,
                     "days_since": days_since,
                     "overdue": days_since >= target + 3,
+                    "followup_approved": bool(opp.followup_approved),
                 })
 
             # ── Upcoming (eligible but cadence not yet due) ──
@@ -2257,6 +2382,7 @@ def create_app() -> Flask:
                     "stage": (opp.followup_count or 0) + 1,
                     "days_until": days_until,
                     "due_display": due_date.strftime("%d/%m"),
+                    "followup_approved": bool(opp.followup_approved),
                 })
 
             # ── Drafted this week (weekly summary) ──
