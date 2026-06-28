@@ -355,7 +355,7 @@ def run_followups(session, batch: int = 15, delay: float = 1.0) -> dict:
         try:
             subject, body = generate_followup(company, contact, opp, profile)
             body = _strip_ai_signoff(body)
-            zoho_send_email(to_address=contact.email, subject=subject, content=body)
+            zoho_send_email(to_address=contact.email, subject=subject, content=body, email_id=str(contact.id))
             opp.followup_count = (opp.followup_count or 0) + 1
             opp.last_followup_at = datetime.now(timezone.utc)
             opp.followup_subject = subject
@@ -393,7 +393,7 @@ def push_followup_now(session, company_id: int) -> dict:
     try:
         subject, body = generate_followup(company, contact, opp, profile)
         body = _strip_ai_signoff(body)
-        zoho_send_email(to_address=contact.email, subject=subject, content=body)
+        zoho_send_email(to_address=contact.email, subject=subject, content=body, email_id=str(contact.id))
         opp.followup_count = (opp.followup_count or 0) + 1
         opp.last_followup_at = datetime.now(timezone.utc)
         opp.followup_subject = subject
