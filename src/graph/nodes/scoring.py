@@ -88,6 +88,15 @@ def _score_company(company: dict, min_emp: int, max_emp: int) -> dict:
     score += eng_pts
 
     score = min(score, 100)
+
+    # Hard cap for companies clearly above the profile's size ceiling.
+    # A 1,000+ employee enterprise (e.g. Globant) otherwise scores 90+ from the
+    # international/remote/tech buckets, but a cold email to one employee there
+    # has a structurally near-zero response rate. Force it to low_priority so the
+    # worker's push floor (score >= 40) skips it.
+    if emp >= 0 and emp > max_emp:
+        score = min(score, 35)
+
     if score >= 70:
         priority = "quick_win"
     elif score >= 40:

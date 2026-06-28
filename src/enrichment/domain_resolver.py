@@ -48,6 +48,19 @@ def _domain_matches_name(domain: str, tokens: list[str]) -> bool:
     return any(t in root or root in t for t in tokens)
 
 
+def _title_mentions_name(title: str, tokens: list[str]) -> bool:
+    """True if a search result title contains a company-name token.
+
+    Used to gate the fallback domain: a result whose title names the company is
+    far more likely to be the company's own site than an unrelated investor/news
+    page that merely mentions it.
+    """
+    if not tokens:
+        return False
+    title_lower = (title or "").lower()
+    return any(t in title_lower for t in tokens)
+
+
 def resolve_company_domain(
     name: str | None,
     location: str | None = None,
@@ -85,11 +98,19 @@ def resolve_company_domain(
             if _domain_matches_name(d, tokens):
                 logger.info(f"Domain resolved for '{name}': {d} (name match)")
                 return d
-            if fallback is None:
+            # Only consider a non-matching domain as fallback when the result's
+            # title actually mentions the company. This rejects investor/news/
+            # partner domains (e.g. "Technisys" → kaszek.com, its VC) that share
+            # a page with the company but aren't its site — those generate
+            # bouncing first.last@wrong-domain emails. Acronym domains whose
+            # title names the company (e.g. bacp.com.ar) still pass.
+            if fallback is None and _title_mentions_name(r.get("title", ""), tokens):
                 fallback = d
         if fallback:
             break
 
     if fallback:
-        logger.info(f"Domain resolved for '{name}': {fallback} (fallback, no name match)")
+        logger.info(f"Domain resolved for '{name}': {fallback} (fallback, title match)")
+    else:
+        logger.info(f"Domain resolution for '{name}': no confident match, returning None")
     return fallback

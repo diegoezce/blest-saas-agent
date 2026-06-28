@@ -254,6 +254,7 @@ def _run_push_phase(db) -> int:
         .join(DiscoveryRun, Opportunity.run_id == DiscoveryRun.id)
         .outerjoin(Profile, DiscoveryRun.profile_id == Profile.id)
         .filter(Opportunity.zoho_pushed_at.is_(None))
+        .filter(Opportunity.score >= 40)  # skip low_priority (incl. oversized companies)
         .filter(~Opportunity.company_id.in_(contacted_sq))
         .filter(~Opportunity.company_id.in_(pushed_sq))
         .order_by(Opportunity.score.desc())
@@ -271,7 +272,7 @@ def _run_push_phase(db) -> int:
         db.query(Contact)
         .filter(Contact.company_id.in_(company_ids))
         .filter(Contact.email.isnot(None))
-        .filter(Contact.email_status.in_(["verified", "probable"]))
+        .filter(Contact.email_status == "verified")
         .filter(Contact.unsubscribed_at.is_(None))
         .order_by(Contact.is_primary.desc().nullslast(), Contact.confidence_score.desc())
         .all()
@@ -293,7 +294,7 @@ def _run_push_phase(db) -> int:
     for opp, company, run, profile in best_opps:
         contact = best_contact.get(opp.company_id)
         if not contact:
-            logger.info(f"  ⏭  {company.name} — no verified/probable contact email, skipping")
+            logger.info(f"  ⏭  {company.name} — no verified contact email, skipping")
             continue
 
         label = f"{company.name} → {contact.email}"
@@ -315,6 +316,7 @@ def _run_push_phase(db) -> int:
                 to_address=contact.email,
                 subject=subject,
                 content=body,
+                email_id=str(contact.id),
             )
 
             opp.zoho_pushed_at = datetime.now(timezone.utc)
