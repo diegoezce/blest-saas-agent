@@ -9,6 +9,7 @@
     padding: 0.65rem 1.1rem; display: flex; flex-direction: column; align-items: center; min-width: 90px;
   }
   .cr-stat-num { font-size: 1.6rem; font-weight: 800; line-height: 1; }
+  .cr-stat-num.green { color: #4ade80; }
   .cr-stat-label { font-size: 0.72rem; color: var(--muted); margin-top: 0.2rem; text-align: center; }
 
   .page-header { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1.25rem; }
@@ -17,23 +18,19 @@
   table.track-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
   table.track-table th {
     text-align: left; color: var(--muted); font-weight: 600; font-size: 0.74rem;
-    padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--border);
-    cursor: pointer; user-select: none; white-space: nowrap;
+    padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--border); white-space: nowrap;
   }
-  table.track-table th::after { content: ' ⇅'; font-size: 0.65rem; opacity: 0.4; }
-  table.track-table th.no-sort::after { content: ''; }
-  table.track-table th.sorted-asc::after { content: ' ↑'; opacity: 1; }
-  table.track-table th.sorted-desc::after { content: ' ↓'; opacity: 1; }
   table.track-table td { padding: 0.45rem 0.6rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
   table.track-table tr:hover td { background: var(--surface-hover); }
+  table.track-table tr.is-self td { opacity: 0.55; }
 
   .opens-badge {
     display: inline-flex; align-items: center; justify-content: center;
-    background: var(--accent); color: #fff; border-radius: 999px;
-    min-width: 1.6rem; height: 1.6rem; font-size: 0.8rem; font-weight: 800;
-    padding: 0 0.35rem;
+    border-radius: 999px; min-width: 1.6rem; height: 1.6rem;
+    font-size: 0.8rem; font-weight: 800; padding: 0 0.35rem;
   }
-  .opens-badge.multi { background: #a78bfa; }
+  .opens-badge.real { background: #16a34a; color: #fff; }
+  .opens-badge.none { background: var(--surface); color: var(--muted); border: 1px solid var(--border); }
 
   .contact-name { font-weight: 600; }
   .contact-role { font-size: 0.75rem; color: var(--muted); }
@@ -44,17 +41,12 @@
 
   .ts { font-size: 0.78rem; color: var(--muted); white-space: nowrap; }
 
-  /* UA chip */
-  .ua-chip {
-    display: inline-block; font-size: 0.72rem; padding: 0.15rem 0.45rem;
-    border-radius: 4px; font-weight: 600; white-space: nowrap;
-  }
-  .ua-mine   { background: #7f1d1d; color: #fecaca; }
-  .ua-mobile { background: #14532d; color: #bbf7d0; }
-  .ua-desktop { background: #1e3a5f; color: #bae6fd; }
-  .ua-unknown { background: var(--surface); color: var(--muted); border: 1px solid var(--border); }
-  .ua-raw { font-size: 0.68rem; color: var(--muted); font-family: monospace; max-width: 200px;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; margin-top: 0.15rem; }
+  .chip { display: inline-block; font-size: 0.72rem; padding: 0.15rem 0.45rem; border-radius: 4px; font-weight: 600; white-space: nowrap; }
+  .chip-gmail   { background: #14532d; color: #bbf7d0; }
+  .chip-outlook { background: #1e3a5f; color: #bae6fd; }
+  .chip-other   { background: #3b2f1e; color: #fde68a; }
+  .chip-self    { background: #7f1d1d; color: #fecaca; }
+  .self-note { font-size: 0.72rem; color: var(--muted); margin-left: 0.35rem; }
 
   .empty-state { text-align: center; padding: 3rem 1rem; color: var(--muted); }
 </style>
@@ -65,32 +57,40 @@
 
 <div class="cr-stats">
   <div class="cr-stat">
-    <span class="cr-stat-num">{{ unique_contacts }}</span>
-    <span class="cr-stat-label">contactos que abrieron</span>
+    <span class="cr-stat-num green">{{ contacts_opened_real }}</span>
+    <span class="cr-stat-label">abrieron de verdad<br>(destinatarios)</span>
   </div>
   <div class="cr-stat">
-    <span class="cr-stat-num">{{ total_events }}</span>
-    <span class="cr-stat-label">aperturas totales</span>
+    <span class="cr-stat-num">{{ total_real_opens }}</span>
+    <span class="cr-stat-label">aperturas reales</span>
+  </div>
+  <div class="cr-stat">
+    <span class="cr-stat-num">{{ total_contacts }}</span>
+    <span class="cr-stat-label">contactos con<br>algún registro</span>
   </div>
 </div>
 
 {% if stats %}
-<table class="track-table" id="track-table">
+<table class="track-table">
   <thead>
     <tr>
-      <th data-col="opens">Opens</th>
-      <th data-col="contact_name">Contacto</th>
-      <th data-col="company_name">Empresa</th>
-      <th data-col="first_open">Primera apertura</th>
-      <th data-col="last_open">Última apertura</th>
-      <th class="no-sort">User-Agent</th>
+      <th>Abrió</th>
+      <th>Contacto</th>
+      <th>Empresa</th>
+      <th>Cliente</th>
+      <th>Primera apertura real</th>
+      <th>Última apertura real</th>
     </tr>
   </thead>
   <tbody>
     {% for r in stats %}
-    <tr>
+    <tr class="{{ 'is-self' if r.real_opens == 0 else '' }}">
       <td>
-        <span class="opens-badge {% if r.opens > 1 %}multi{% endif %}">{{ r.opens }}</span>
+        {% if r.real_opens > 0 %}
+          <span class="opens-badge real" title="{{ r.real_opens }} apertura(s) real(es) del destinatario">{{ r.real_opens }}</span>
+        {% else %}
+          <span class="opens-badge none" title="Solo aperturas tuyas (Zoho), ninguna del destinatario">0</span>
+        {% endif %}
       </td>
       <td>
         {% if r.contact_name %}
@@ -106,31 +106,30 @@
           <a class="company-link" href="/company/{{ r.company_id }}/feedback">{{ r.company_name }}</a>
         {% else %}—{% endif %}
       </td>
-      <td class="ts" data-ts="{{ r.first_open }}">{{ r.first_open | string | truncate(16, killwords=True, end='') }}</td>
-      <td class="ts" data-ts="{{ r.last_open }}">
-        {% if r.opens > 1 %}{{ r.last_open | string | truncate(16, killwords=True, end='') }}{% else %}—{% endif %}
-      </td>
       <td>
-        {% set ua = r.first_ua or '' %}
-        {% if not ua %}
-          <span class="ua-chip ua-unknown">desconocido</span>
-        {% elif 'ZohoMail' in ua or 'Zoho' in ua %}
-          <span class="ua-chip ua-mine" title="{{ ua }}">⚠ Zoho (tuyo)</span>
-        {% elif 'Mobile' in ua or 'Android' in ua or 'iPhone' in ua %}
-          <span class="ua-chip ua-mobile" title="{{ ua }}">📱 Móvil</span>
-          <span class="ua-raw" title="{{ ua }}">{{ ua[:60] }}{% if ua|length > 60 %}…{% endif %}</span>
+        {% if r.real_opens > 0 %}
+          {% if r.client == 'gmail' %}<span class="chip chip-gmail">📧 Gmail</span>
+          {% elif r.client == 'outlook' %}<span class="chip chip-outlook">📧 Outlook</span>
+          {% else %}<span class="chip chip-other">📧 Otro</span>{% endif %}
         {% else %}
-          <span class="ua-chip ua-desktop" title="{{ ua }}">🖥 Desktop</span>
-          <span class="ua-raw" title="{{ ua }}">{{ ua[:60] }}{% if ua|length > 60 %}…{% endif %}</span>
+          <span class="chip chip-self">⚠ solo vos (Zoho)</span>
+        {% endif %}
+        {% if r.real_opens > 0 and r.self_opens > 0 %}
+          <span class="self-note">+{{ r.self_opens }} tuya(s)</span>
         {% endif %}
       </td>
+      <td class="ts">{{ r.first_real.strftime('%d/%m %H:%M') if r.first_real else '—' }}</td>
+      <td class="ts">{{ r.last_real.strftime('%d/%m %H:%M') if r.last_real and r.real_opens > 1 else '—' }}</td>
     </tr>
     {% endfor %}
   </tbody>
 </table>
 
-<p style="font-size:0.75rem;color:var(--muted);margin-top:0.75rem">
-  ⚠ <strong>User-Agent</strong> mostrado es el del primer open. Aperturas marcadas como <span style="background:#7f1d1d;color:#fecaca;padding:0.1rem 0.3rem;border-radius:3px;font-size:0.72rem;font-weight:600">Zoho (tuyo)</span> probablemente son vos abriendo el draft o el sent.
+<p style="font-size:0.75rem;color:var(--muted);margin-top:0.75rem;line-height:1.6">
+  <strong>Cómo se lee:</strong> el conteo verde son aperturas <strong>reales del destinatario</strong>
+  (detectadas por el proxy de Gmail/Outlook). Las aperturas vía <span class="chip chip-self">⚠ solo vos (Zoho)</span>
+  son tuyas mirando el draft o el enviado, y NO cuentan como apertura real. Gmail cachea el pixel, así que el
+  conteo de aperturas reales es aproximado (sirve para «abrió / no abrió», no para «cuántas veces exactas»).
 </p>
 
 {% else %}
@@ -140,49 +139,5 @@
   <p style="font-size:0.8rem;margin-top:0.4rem">Asegurate de que <code>TRACKING_BASE_URL</code> esté configurado en Railway.</p>
 </div>
 {% endif %}
-
-<script>
-(function () {
-  const table = document.getElementById('track-table');
-  if (!table) return;
-  let sortCol = null, sortDir = 1;
-
-  table.querySelectorAll('th[data-col]').forEach(th => {
-    th.addEventListener('click', () => {
-      const col = th.dataset.col;
-      if (sortCol === col) { sortDir *= -1; }
-      else { sortCol = col; sortDir = -1; }
-
-      table.querySelectorAll('th').forEach(h => h.classList.remove('sorted-asc', 'sorted-desc'));
-      th.classList.add(sortDir === 1 ? 'sorted-asc' : 'sorted-desc');
-
-      const tbody = table.querySelector('tbody');
-      const rows = Array.from(tbody.querySelectorAll('tr'));
-      rows.sort((a, b) => {
-        const ai = colIndex(col);
-        const av = cellVal(a, ai, col);
-        const bv = cellVal(b, ai, col);
-        if (av < bv) return -sortDir;
-        if (av > bv) return sortDir;
-        return 0;
-      });
-      rows.forEach(r => tbody.appendChild(r));
-    });
-  });
-
-  function colIndex(col) {
-    const headers = Array.from(table.querySelectorAll('th[data-col]'));
-    return headers.findIndex(h => h.dataset.col === col);
-  }
-
-  function cellVal(row, idx, col) {
-    const cell = row.querySelectorAll('td')[idx];
-    if (!cell) return '';
-    if (col === 'opens') return parseInt(cell.textContent.trim()) || 0;
-    if (col === 'first_open' || col === 'last_open') return cell.dataset.ts || cell.textContent.trim();
-    return cell.textContent.trim().toLowerCase();
-  }
-})();
-</script>
 
 {% endblock %}

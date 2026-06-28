@@ -15,6 +15,33 @@ _TRACKING_PIXEL = base64.b64decode(
     "AABjkB6QAAAABJRU5ErkJggg=="
 )
 
+# IP prefixes for the image proxies we see (X-Forwarded-For leftmost hop).
+_ZOHO_IP_PREFIXES = ("136.143.",)  # Zoho Mail image proxy → the SENDER viewing their own mail
+_GOOGLE_IP_PREFIXES = (             # GoogleImageProxy → recipient opened in Gmail
+    "66.249.", "64.233.", "72.14.", "74.125.", "209.85.", "173.194.", "108.177.", "142.250.",
+)
+
+
+def _classify_open(user_agent: str | None, ip_address: str | None) -> str:
+    """Classify a tracking-pixel hit using UA + originating IP.
+
+    Returns: 'self' (sender viewing own draft/sent via Zoho), 'gmail', 'outlook',
+    or 'other' (real recipient open). Image-proxy fetches are the norm — Gmail and
+    Zoho both proxy remote images, so the IP range is the most reliable signal.
+    """
+    ua = (user_agent or "").lower()
+    # X-Forwarded-For is "client, proxy1, ..."; the leftmost hop is the image proxy.
+    ip = (ip_address or "").split(",")[0].strip()
+
+    if "zohomailimageproxy" in ua or ip.startswith(_ZOHO_IP_PREFIXES):
+        return "self"
+    if ("googleimageproxy" in ua or "chrome/42.0.23" in ua
+            or ip.startswith(_GOOGLE_IP_PREFIXES)):
+        return "gmail"
+    if "outlook" in ua or "microsoft" in ua or "office" in ua:
+        return "outlook"
+    return "other"
+
 logger = logging.getLogger(__name__)
 
 
@@ -350,37 +377,54 @@ def create_app() -> Flask:
     def track_stats():
         from src.database.session import get_session
         from sqlalchemy import text
+
         with get_session() as db:
             rows = db.execute(text("""
                 SELECT
-                    e.email_id,
-                    COUNT(*) AS opens,
-                    MIN(e.opened_at) AS first_open,
-                    MAX(e.opened_at) AS last_open,
-                    c.name AS contact_name,
-                    c.email AS contact_email,
-                    c.role AS contact_role,
-                    co.name AS company_name,
-                    co.id AS company_id,
-                    (SELECT e2.user_agent FROM email_open_events e2
-                     WHERE e2.email_id = e.email_id
-                     ORDER BY e2.opened_at ASC LIMIT 1) AS first_ua,
-                    (SELECT e2.user_agent FROM email_open_events e2
-                     WHERE e2.email_id = e.email_id
-                     ORDER BY e2.opened_at DESC LIMIT 1) AS last_ua
+                    e.email_id, e.opened_at, e.ip_address, e.user_agent,
+                    c.name AS contact_name, c.email AS contact_email, c.role AS contact_role,
+                    co.name AS company_name, co.id AS company_id
                 FROM email_open_events e
                 LEFT JOIN contacts c ON c.id = CAST(e.email_id AS INTEGER)
                 LEFT JOIN companies co ON co.id = c.company_id
-                GROUP BY e.email_id, c.name, c.email, c.role, co.name, co.id
-                ORDER BY first_open DESC
+                ORDER BY e.email_id, e.opened_at
             """)).fetchall()
-            total_events = db.execute(text("SELECT COUNT(*) FROM email_open_events")).scalar()
-            unique_contacts = db.execute(text("SELECT COUNT(DISTINCT email_id) FROM email_open_events")).scalar()
-        stats = [dict(r._mapping) for r in rows]
+
+        # Aggregate per contact, classifying each open as the sender's own view
+        # (Zoho image proxy) vs a real recipient open (Gmail/Outlook proxy/device).
+        by_contact: dict = {}
+        for r in rows:
+            g = by_contact.setdefault(r.email_id, {
+                "email_id": r.email_id, "contact_name": r.contact_name,
+                "contact_email": r.contact_email, "contact_role": r.contact_role,
+                "company_name": r.company_name, "company_id": r.company_id,
+                "self_opens": 0, "real_opens": 0, "total_opens": 0,
+                "client": None, "first_real": None, "last_real": None,
+            })
+            kind = _classify_open(r.user_agent, r.ip_address)
+            g["total_opens"] += 1
+            if kind == "self":
+                g["self_opens"] += 1
+            else:
+                g["real_opens"] += 1
+                if g["client"] is None:
+                    g["client"] = kind  # gmail | outlook | other
+                if g["first_real"] is None:
+                    g["first_real"] = r.opened_at
+                g["last_real"] = r.opened_at
+
+        stats = list(by_contact.values())
+        # Real opens first, then most-recent real open
+        stats.sort(key=lambda d: (d["real_opens"] > 0, d["last_real"] or d["email_id"]), reverse=True)
+
+        contacts_opened_real = sum(1 for d in stats if d["real_opens"] > 0)
+        total_real_opens = sum(d["real_opens"] for d in stats)
+
         return render_template("tracking_stats.html",
                                stats=stats,
-                               total_events=total_events,
-                               unique_contacts=unique_contacts)
+                               contacts_opened_real=contacts_opened_real,
+                               total_real_opens=total_real_opens,
+                               total_contacts=len(stats))
 
     @app.route("/schedule/update", methods=["POST"])
     @_require_auth
