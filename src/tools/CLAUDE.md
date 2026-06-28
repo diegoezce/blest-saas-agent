@@ -66,7 +66,9 @@ as worker **phase 4**, exposed via `/follow-ups` and CLI (`--detect-replies`,
 
 **Drafting**: `generate_followup()` builds payload + calls Haiku with `build_followup_prompt()` 
 (Spanish voseo by default via `outreach_language`; 50–120 words). Subject = `"Re: " + original`. 
-`run_followups()` pushes each draft + bumps `followup_count` / `last_followup_at`.
+`run_followups()` **sends** each follow-up via `send_email()` (real delivery, unlike the 
+initial draft) + bumps `followup_count` / `last_followup_at`. Both send sites pass 
+`email_id=str(contact.id)` so the tracking pixel is embedded.
 
 **Bring-forward ("Hacer hoy")**: `push_followup_now(session, company_id)` generates 
 + pushes immediately, bypassing cadence wait (company must still be eligible). 

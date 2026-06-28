@@ -12,6 +12,14 @@ site (rejecting social / job-board / directory hosts). Resolved domain persists 
 to `Company` (unique constraint prevents overwrites). Contacts with **no name** are 
 skipped at persist time (can't be pattern-matched).
 
+⚠ **Fallback guard**: a domain whose root doesn't match a company-name token is only
+accepted as fallback if the **search result title names the company** (`_title_mentions_name`).
+This prevents adopting an investor/news/partner domain that merely shares a page with the
+company — e.g. "Technisys" → `kaszek.com` (its VC), which then generated bouncing
+`first.last@kaszek.com` emails. If no confident match, returns `None` (enrichment fails
+gracefully) rather than a wrong domain. Acronym domains whose title names the company
+(e.g. `bacp.com.ar`) still pass.
+
 **Module**: `src/enrichment/domain_resolver.py`
 
 ## Layer 1: Site Scraping

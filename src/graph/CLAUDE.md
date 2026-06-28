@@ -26,6 +26,13 @@ The 7-node LangGraph DAG is tuned for **lead volume + low AI spend**.
 - Industry/tech adoption: 0–10
 - English keyword signals: 0–10
 
+**Oversized hard cap**: if a company's known headcount exceeds the profile's
+`max_employees`, the final score is capped at **35** (→ `low_priority`). Without this a
+1,000+ employee enterprise (e.g. Globant) scores 90+ from the international/remote/tech
+buckets despite a structurally near-zero cold-email response rate. The worker push floor
+(`score >= 40`) then skips it. ⚠ Companies mislabeled small in `size_estimate` (e.g.
+Accenture local office tagged "200-500") still slip through — a discovery data gap.
+
 **Priority tiers**:
 - `quick_win`: score ≥ 70
 - `strategic`: score ≥ 40, < 70

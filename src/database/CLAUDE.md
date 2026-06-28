@@ -51,7 +51,10 @@ on startup via `_run_migrations()` in `src/database/session.py` — uses
 - One row per email open event (triggered by tracking pixel)
 - Fields: `email_id` (VARCHAR 100 — contact ID as string), `opened_at`, `ip_address`, `user_agent`
 - Indexed on `email_id` for fast aggregation
-- Queried via `GET /track/stats`
+- Queried via `GET /track/stats`, which classifies each hit with `_classify_open()`
+  (`src/web.py`) using **IP + UA**: Zoho proxy (`136.143.x` / `ZohoMailImageProxy`) =
+  sender's own view; Google proxy (`72.14.x` / `Chrome/42.0.23`) = real Gmail open. The
+  page surfaces real recipient opens separately from sender self-opens.
 
 ## Current Migrations
 

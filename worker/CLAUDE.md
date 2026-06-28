@@ -19,10 +19,15 @@ No local data storage; worker only reads/writes shared DB. Full runbook: `worker
 - 2s delay between contacts (avoid rate-limiting)
 
 **Phase 2 — Zoho Push** (`WORKER_PUSH_BATCH`, default 15):
-- Finds best opportunity per company (highest score) with verified/probable email + no `zoho_pushed_at`
+- Finds best opportunity per company (highest score) with a **`verified`** email + 
+  `score >= 40` + no `zoho_pushed_at`. **Only `verified`** — `probable`/guessed emails 
+  are skipped to keep the bounce rate near 0 (they were the source of a 16% bounce rate).
+- The `score >= 40` floor skips `low_priority` opps, including oversized companies the 
+  scoring node now hard-caps (see `src/graph/CLAUDE.md`).
 - **Company-level guard**: skips already-contacted (`ContactStatus`) or already-pushed 
   in any prior run → outreach never duplicated
 - Uses stored `outreach_draft` + `outreach_subject`; generates fresh Haiku draft if missing
+- Passes `email_id=str(contact.id)` so the **tracking pixel** is embedded in the draft
 - Sets `zoho_pushed_at` after push (idempotency)
 - 1s delay between Zoho API calls
 
@@ -33,7 +38,8 @@ No local data storage; worker only reads/writes shared DB. Full runbook: `worker
 
 **Phase 4 — Follow-ups** (optional, `WORKER_FOLLOWUP` default on):
 - Detects replies (marks `Contact.replied_at`)
-- Generates + pushes follow-up drafts for contacted leads without replies
+- Generates + **sends** follow-ups (via `send_email()`, real delivery) for contacted 
+  leads without replies; passes `email_id` so the tracking pixel is embedded
 - Respects cadence: first follow-up 4d after push, second 6d after first
 - Non-fatal if token lacks READ scope
 - 1s delay between Zoho API calls in this phase
