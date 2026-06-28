@@ -177,6 +177,73 @@ def _strip_ai_signoff(text: str) -> str:
     return "\n".join(lines)
 
 
+_PROOFREAD_PROMPT = (
+    "Sos un corrector de pruebas. Corregí ÚNICAMENTE errores ortográficos, de tipeo, "
+    "de acentuación y de puntuación evidentes en el siguiente texto (p. ej. "
+    "\"Coorinar\" → \"Coordinar\"). NO reescribas, NO cambies el estilo, el tono, el "
+    "vocabulario, el orden ni el contenido. NO toques nombres propios, marcas, correos, "
+    "URLs ni términos en inglés que estén bien escritos. Conservá los saltos de línea "
+    "exactamente igual. Devolvé SOLO el texto corregido, sin comentarios ni comillas.\n\n"
+    "TEXTO:\n{body}"
+)
+
+_proofread_client = None
+
+
+def _proofread(text: str) -> str:
+    """Deterministic last-mile typo/spelling guard for customer-facing copy.
+
+    The generation prompt asks for impeccable spelling, but that's a soft instruction
+    even on Sonnet — typos like "Coorinar" still slip through. This is the hard guard:
+    a focused, low-temperature pass that fixes ONLY obvious spelling/typo errors and
+    changes nothing else. Runs at the universal push choke point so every draft (workflow,
+    Quick Run, worker, follow-ups) is covered. Fails open: any error returns the original
+    text so a proofread hiccup never blocks a send.
+    """
+    import os
+
+    if os.getenv("PROOFREAD_DRAFTS", "1") not in ("1", "true", "True"):
+        return text
+    if not text or not text.strip():
+        return text
+
+    try:
+        from src.config import get_settings
+        cfg = get_settings()
+        if not cfg.anthropic_api_key:
+            return text
+
+        global _proofread_client
+        if _proofread_client is None:
+            import anthropic
+            _proofread_client = anthropic.Anthropic(api_key=cfg.anthropic_api_key)
+
+        resp = _proofread_client.messages.create(
+            model=cfg.fast_model,
+            max_tokens=1024,
+            temperature=0,
+            messages=[{"role": "user", "content": _PROOFREAD_PROMPT.format(body=text)}],
+        )
+        corrected = "".join(
+            block.text for block in resp.content if getattr(block, "type", None) == "text"
+        ).strip()
+
+        # Guardrail: a proofread should be a near-identical edit. If the model returned
+        # something empty or wildly different in length (i.e. it rewrote or refused),
+        # discard it and keep the original.
+        if not corrected:
+            return text
+        if abs(len(corrected) - len(text)) > max(40, len(text) * 0.25):
+            logger.warning("Proofread output diverged from input — keeping original")
+            return text
+        if corrected != text:
+            logger.info("Proofread corrected the draft copy")
+        return corrected
+    except Exception as e:
+        logger.warning(f"Proofread skipped ({e}) — using original text")
+        return text
+
+
 def create_draft(to_address: str, subject: str, content: str, email_id: str | None = None) -> dict:
     """
     Create a draft email in the authenticated Zoho Mail account.
@@ -191,6 +258,7 @@ def create_draft(to_address: str, subject: str, content: str, email_id: str | No
 
     # Clean up AI-generated content before wrapping
     content = _strip_ai_signoff(content)
+    content = _proofread(content)
     content = _fix_spanish_punctuation(content)
 
     # Wrap body in Arial 11px and append signature
@@ -259,6 +327,7 @@ def send_email(to_address: str, subject: str, content: str, email_id: str | None
         raise RuntimeError("No account_id stored. Re-run --zoho-auth.")
 
     content = _strip_ai_signoff(content)
+    content = _proofread(content)
     content = _fix_spanish_punctuation(content)
 
     _STYLE = "font-family:Arial,sans-serif;font-size:11pt;line-height:1.6"
