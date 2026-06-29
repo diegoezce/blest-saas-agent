@@ -33,7 +33,9 @@ This merges profile values **on top of** global `Settings` defaults:
 
 | Setting | Default | Purpose |
 |---|---|---|
-| `discovery_queries_per_run` | 12 | Tavily search queries generated per run |
+| `discovery_queries_per_run` | 6 | Tavily search queries generated per run (= credits) |
+| `tavily_max_results` | 20 | Results per query (free — Tavily bills per query, not per result) |
+| `web_search_max_queries` | 4 | Cap on Layer 4 web-email queries per contact |
 | `max_companies_to_score` | 50 | Cap on unique companies carried into scoring |
 | `max_companies_for_contacts` | 30 | Companies to find contacts for |
 | `max_companies_for_insights` | 0 | **0 = insights disabled** (no AI call) |
@@ -41,4 +43,21 @@ This merges profile values **on top of** global `Settings` defaults:
 | `exclude_known_companies` | true | Skip companies already in DB (net-new leads only) |
 | `rediscover_after_days` | 0 | 0 = never re-surface known company; >0 = re-allow after N days |
 
-**Net effect**: ~15–20 leads/run, ~$0.12 API cost (vs old $0.48 with AI scoring + insights).
+**Net effect**: ~15–20 leads/run, ~$0.12 Claude API cost (vs old $0.48 with AI scoring + insights).
+
+## Tavily Credit Cost
+
+**Tavily bills per query, not per result** — so fewer queries × more results each is
+strictly cheaper for the same LLM input. The two consumers:
+
+- **Discovery** (`run_discovery_node`): `discovery_queries_per_run` queries (6 credits).
+  The LLM only reads the first ~80 deduped results, so 6×20 fills it as well as 12×10 did.
+- **Enrichment Layer 4** (`web_email_finder`): up to `web_search_max_queries` per contact
+  (each = 1 credit). Early-stops on a named match. The **worker** is the bigger consumer
+  here (enriches `WORKER_ENRICH_BATCH` contacts/run + recovery). Companies without a
+  domain also cost domain-resolution searches (≤2 each).
+
+**Rule of thumb**: a full cycle (discovery + enriching its leads) ≈ **30–50 credits**.
+At ~3 runs/week that's ~450–500/month. ⚠ Railway env vars override these defaults — set
+`DISCOVERY_QUERIES_PER_RUN` / `TAVILY_MAX_RESULTS` there too, and the **worker must
+`git pull`** to pick up the cap. Track real spend at app.tavily.com → Usage.

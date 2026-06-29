@@ -91,6 +91,7 @@ See [`worker/README.md`](worker/README.md) for Windows setup.
 **Tuning** (defaults in config):
 - `SCHEDULE_TIME`, `SCHEDULE_DAYS` — cron timing
 - `FAST_MODEL`, `REASONING_MODEL`, `OUTREACH_MODEL` — Claude models
+- `DISCOVERY_QUERIES_PER_RUN`, `TAVILY_MAX_RESULTS`, `WEB_SEARCH_MAX_QUERIES` — Tavily credit control (bills per query; see `src/config/CLAUDE.md` → Tavily Credit Cost)
 - `WORKER_*` — batch sizes, delays, toggles (worker-only)
 
 Full reference: [`src/config/CLAUDE.md`](src/config/CLAUDE.md) + each module's docs.
