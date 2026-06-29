@@ -67,14 +67,16 @@ Calls Hunter.io email finder API (`HUNTER_API_KEY`). Score ≥ 90 → `verified`
 Only runs if email still not `verified` after Layers 0–3. Replicates manual 
 "empresa email" Google search. Runs for **both named and nameless contacts**.
 
-Queries built in order of specificity:
+Queries built in order of specificity (each = 1 Tavily credit):
 1. Named contact + company (`"{first} {last}" "{company}" email`) — only if named
 2. Company + role/context (`"{company}" {role} email`) — only if role known
-3. Generic company terms (`"{company}" email`, `"{company}" employees email`, team, staff)
-4. Spanish variants (`"{company}" contacto email`, `"{company}" empleados email`)
+3. Generic company terms (`"{company}" email`, `"{company}" contacto email`)
 
-Extracts emails from Tavily snippet results, filters by domain/reputation. Includes 
-0.2s delay between queries to avoid rate-limiting.
+⚠ **Credit control** (each query = 1 Tavily credit; a *failed* lookup runs the whole
+list): the list is capped at `web_search_max_queries` (default **4**) and trimmed of
+near-duplicates. It also **early-stops** the moment a named, non-generic candidate is
+found. Worst case ≈ 4 credits/contact (was ~10). Extracts emails from Tavily snippet
+results, filters by domain/reputation. 0.2s delay between queries.
 
 **Domain matching**: For named contacts, requires exact domain match (or subdomain).
 For **nameless placeholders**, accepts alternate TLDs sharing the same brand root
