@@ -24,6 +24,15 @@ _BLOCKED_HOSTS = {
     "medium.com", "wordpress.com", "blogspot.com", "github.com", "apollo.io",
     "zoominfo.com", "infobae.com", "lanacion.com.ar", "cronista.com",
     "clarin.com", "ambito.com", "elempleo.com", "trabajando.com",
+    # Email/contact-finding tools and data aggregators — a company is never these.
+    # (These leaked in as wrong domains: Grupo MSA → prospeo.io.)
+    "prospeo.io", "rocketreach.co", "lusha.com", "hunter.io", "snov.io",
+    "signalhire.com", "contactout.com", "lead411.com", "datanyze.com",
+    "kaspr.io", "uplead.com", "seamless.ai",
+    # VC / investor sites — they share news pages with portfolio companies.
+    # (Technisys → kaszek.com, its investor.)
+    "kaszek.com", "sequoiacap.com", "ycombinator.com", "a16z.com",
+    "softbank.com", "generalatlantic.com",
 }
 
 # Tokens that aren't useful for matching a domain to a company name.
@@ -46,19 +55,6 @@ def _name_tokens(name: str | None) -> list[str]:
 def _domain_matches_name(domain: str, tokens: list[str]) -> bool:
     root = domain.split(".")[0]
     return any(t in root or root in t for t in tokens)
-
-
-def _title_mentions_name(title: str, tokens: list[str]) -> bool:
-    """True if a search result title contains a company-name token.
-
-    Used to gate the fallback domain: a result whose title names the company is
-    far more likely to be the company's own site than an unrelated investor/news
-    page that merely mentions it.
-    """
-    if not tokens:
-        return False
-    title_lower = (title or "").lower()
-    return any(t in title_lower for t in tokens)
 
 
 def resolve_company_domain(
@@ -86,10 +82,14 @@ def resolve_company_domain(
     if not name:
         return None
 
-    # 2. Web search for the official site
+    # 2. Web search for the official site — ONLY accept a domain whose root matches
+    # a company-name token. A non-matching domain is far more likely to be an
+    # investor/news/data-tool page that merely mentions the company (Technisys →
+    # kaszek.com; Grupo MSA → prospeo.io) than its real site. A wrong domain
+    # generates bouncing or false-"verified" first.last@wrong emails, so it's
+    # safer to return None (→ contact stays not_found) than to guess.
     tokens = _name_tokens(name)
     loc = f" {location}" if location else ""
-    fallback: str | None = None
     for query in (f"{name}{loc} sitio web oficial", f"{name} official website"):
         for r in search(query, max_results=5):
             d = _normalize_domain(r.get("url"))
@@ -98,19 +98,6 @@ def resolve_company_domain(
             if _domain_matches_name(d, tokens):
                 logger.info(f"Domain resolved for '{name}': {d} (name match)")
                 return d
-            # Only consider a non-matching domain as fallback when the result's
-            # title actually mentions the company. This rejects investor/news/
-            # partner domains (e.g. "Technisys" → kaszek.com, its VC) that share
-            # a page with the company but aren't its site — those generate
-            # bouncing first.last@wrong-domain emails. Acronym domains whose
-            # title names the company (e.g. bacp.com.ar) still pass.
-            if fallback is None and _title_mentions_name(r.get("title", ""), tokens):
-                fallback = d
-        if fallback:
-            break
 
-    if fallback:
-        logger.info(f"Domain resolved for '{name}': {fallback} (fallback, title match)")
-    else:
-        logger.info(f"Domain resolution for '{name}': no confident match, returning None")
-    return fallback
+    logger.info(f"Domain resolution for '{name}': no name-matching domain, returning None")
+    return None
