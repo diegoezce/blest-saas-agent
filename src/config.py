@@ -48,6 +48,10 @@ class Settings(BaseSettings):
     # 0 = a known company is never re-surfaced. >0 = a never-contacted company
     # may be re-discovered once it hasn't been seen for this many days.
     rediscover_after_days: int = 0
+    # Companies to NEVER discover/contact (e.g. employer, partners, conflicts of
+    # interest). Comma-separated tokens matched (substring, case-insensitive)
+    # against each candidate's normalized name and domain. Survives DB deletion.
+    excluded_companies: str = "chevron"
 
     # Business targeting (defaults — overridable by Profile)
     target_cities: str = "Buenos Aires,Córdoba,Rosario,Mendoza,Neuquén"

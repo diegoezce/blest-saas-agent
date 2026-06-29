@@ -136,6 +136,23 @@ def run_discovery_node(state: AgentState) -> AgentState:
                 seen_names.add(key)
                 unique_companies.append(company.model_dump())
 
+        # Hard exclusion list (employer / conflicts of interest). Matched as a
+        # substring against normalized name + domain, so "Chevron Argentina" and
+        # chevron.com are both dropped. Survives DB deletion (config-based).
+        excl_tokens = [t.strip().lower() for t in (cfg.excluded_companies or "").split(",") if t.strip()]
+        if excl_tokens:
+            before = len(unique_companies)
+            def _excluded(c: dict) -> bool:
+                hay = " ".join([
+                    (normalize_company_name(c.get("name")) or ""),
+                    (c.get("name") or "").lower(),
+                    (_normalize_domain(c.get("website_url") or c.get("domain")) or ""),
+                ])
+                return any(tok in hay for tok in excl_tokens)
+            unique_companies = [c for c in unique_companies if not _excluded(c)]
+            if before - len(unique_companies):
+                logger.info(f"Excluded {before - len(unique_companies)} blocklisted companies ({', '.join(excl_tokens)})")
+
         # Drop companies already discovered in previous runs (across-run dedup),
         # so each run surfaces net-new leads instead of repeating known ones.
         if cfg.exclude_known_companies:
