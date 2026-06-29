@@ -414,8 +414,17 @@ def create_app() -> Flask:
                 g["last_real"] = r.opened_at
 
         stats = list(by_contact.values())
-        # Real opens first, then most-recent real open
+        # Real opens first, then most-recent real open (sort on naive UTC).
         stats.sort(key=lambda d: (d["real_opens"] > 0, d["last_real"] or d["email_id"]), reverse=True)
+
+        # Convert stored UTC timestamps to the configured local timezone for display.
+        from zoneinfo import ZoneInfo
+        from src.config import get_settings
+        _tz = ZoneInfo(get_settings().scheduler_timezone)
+        for d in stats:
+            for k in ("first_real", "last_real"):
+                if d[k] is not None:
+                    d[k] = d[k].replace(tzinfo=ZoneInfo("UTC")).astimezone(_tz)
 
         contacts_opened_real = sum(1 for d in stats if d["real_opens"] > 0)
         total_real_opens = sum(d["real_opens"] for d in stats)
