@@ -1007,6 +1007,57 @@ def create_app() -> Flask:
             profiles = session.query(Profile).filter_by(active=True).order_by(Profile.name).all()
             return jsonify({"profiles": [{"id": p.id, "name": p.name, "is_default": bool(p.is_default)} for p in profiles]})
 
+    @app.route("/settings")
+    @_require_auth
+    def settings_home():
+        return render_template("settings.html")
+
+    @app.route("/settings/providers")
+    @_require_auth
+    def settings_providers():
+        import os
+        # Which external services this deployment actually uses, with consoles.
+        verifier = os.environ.get("EMAIL_VERIFIER_PROVIDER", "millionverifier").strip().lower()
+        providers = [
+            {"name": "Railway", "cat": "Infra", "icon": "🚂",
+             "desc": "Hosting del web + scheduler y base PostgreSQL.",
+             "url": "https://railway.app/dashboard",
+             "note": "Variables de entorno, logs, base de datos, deploys."},
+            {"name": "Tavily", "cat": "Búsqueda", "icon": "🔎",
+             "desc": "Motor de búsqueda del discovery y enrichment.",
+             "url": "https://app.tavily.com",
+             "note": "Uso de créditos (→ Usage). Presupuesto objetivo: <1000/mes."},
+            {"name": "Anthropic (Claude)", "cat": "IA", "icon": "🧠",
+             "desc": "Modelos que generan queries, extraen empresas y redactan outreach.",
+             "url": "https://console.anthropic.com",
+             "note": "API keys, uso y facturación."},
+            {"name": "Zoho Mail", "cat": "Email", "icon": "📧",
+             "desc": "Envío de drafts/outreach y detección de bounces/replies.",
+             "url": "https://mail.zoho.com",
+             "note": "Casilla hello@blestlearning.com · Display name (pseudónimo)."},
+            {"name": "Zoho API Console", "cat": "Email", "icon": "🔑",
+             "desc": "Self-client OAuth2 para los tokens de Zoho Mail.",
+             "url": "https://api-console.zoho.com",
+             "note": "Regenerar grant token si caducan los scopes."},
+            {"name": "Hunter.io", "cat": "Enrichment", "icon": "🎯",
+             "desc": "Búsqueda de emails (Layer 3 del enrichment).",
+             "url": "https://hunter.io/dashboard",
+             "note": "Cuota gratuita ~25/mes."},
+            {"name": "GitHub", "cat": "Código", "icon": "🐙",
+             "desc": "Repositorio del proyecto (deploys de Railway salen de acá).",
+             "url": "https://github.com/diegoezce/blest-saas-agent",
+             "note": "main → auto-deploy en Railway."},
+        ]
+        if verifier in ("neverbounce",):
+            providers.append({"name": "NeverBounce", "cat": "Enrichment", "icon": "✅",
+                              "desc": "Verificador de emails (SMTP).", "url": "https://app.neverbounce.com",
+                              "note": "Mantené créditos cargados o los emails caen a 'probable'."})
+        elif verifier in ("millionverifier",):
+            providers.append({"name": "MillionVerifier", "cat": "Enrichment", "icon": "✅",
+                              "desc": "Verificador de emails (SMTP).", "url": "https://app.millionverifier.com",
+                              "note": "Mantené créditos cargados o los emails caen a 'probable'."})
+        return render_template("providers.html", providers=providers)
+
     @app.route("/profiles")
     @_require_auth
     def profile_list():

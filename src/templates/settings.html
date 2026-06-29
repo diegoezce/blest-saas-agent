@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Settings — Blest{% endblock %}
+{% block content %}
+
+<style>
+  .set-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1rem; margin-top: 1.5rem; }
+  .set-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 1.25rem 1.4rem; text-decoration: none; color: var(--text);
+    display: flex; flex-direction: column; gap: 0.4rem; transition: all 0.12s;
+  }
+  .set-card:hover { border-color: var(--accent); transform: translateY(-2px); text-decoration: none; }
+  .set-card-icon { font-size: 1.6rem; }
+  .set-card-title { font-size: 1.05rem; font-weight: 700; }
+  .set-card-desc { font-size: 0.85rem; color: var(--muted); line-height: 1.5; }
+</style>
+
+<div style="margin-top:0.5rem">
+  <h1 style="font-size:1.5rem;font-weight:700">⚙ Settings</h1>
+  <p class="text-muted mt-1" style="font-size:0.9rem;color:var(--muted)">Configuración del agente y servicios.</p>
+</div>
+
+<div class="set-grid">
+  <a class="set-card" href="/profiles">
+    <span class="set-card-icon">🏷️</span>
+    <span class="set-card-title">Profiles</span>
+    <span class="set-card-desc">Perfiles de producto/servicio: targeting, tono, scoring e instrucciones de outreach. Elegís uno al correr el discovery.</span>
+  </a>
+  <a class="set-card" href="/settings/providers">
+    <span class="set-card-icon">🔌</span>
+    <span class="set-card-title">Providers</span>
+    <span class="set-card-desc">Accesos directos a todos tus servicios externos: Railway, Tavily, Anthropic, Zoho, Hunter y más.</span>
+  </a>
+</div>
+
+{% endblock %}

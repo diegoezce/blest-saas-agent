@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Providers — Blest{% endblock %}
+{% block content %}
+
+<style>
+  .prov-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem; margin-top: 1.5rem; }
+  .prov-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 1.1rem 1.3rem; display: flex; flex-direction: column; gap: 0.4rem;
+    transition: all 0.12s;
+  }
+  .prov-card:hover { border-color: var(--accent); }
+  .prov-head { display: flex; align-items: center; gap: 0.6rem; }
+  .prov-icon { font-size: 1.5rem; }
+  .prov-name { font-size: 1.05rem; font-weight: 700; }
+  .prov-cat {
+    margin-left: auto; font-size: 0.68rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.05em; color: var(--muted); background: var(--bg);
+    border: 1px solid var(--border); border-radius: 20px; padding: 0.1rem 0.55rem;
+  }
+  .prov-desc { font-size: 0.85rem; color: var(--text); line-height: 1.5; }
+  .prov-note { font-size: 0.78rem; color: var(--muted); line-height: 1.45; }
+  .prov-link {
+    margin-top: 0.5rem; align-self: flex-start;
+    background: var(--accent); color: #0f172a; font-weight: 700;
+    border-radius: 8px; padding: 0.4rem 0.9rem; font-size: 0.83rem; text-decoration: none;
+  }
+  .prov-link:hover { filter: brightness(1.08); text-decoration: none; }
+  .crumbs { font-size: 0.85rem; color: var(--muted); margin-top: 0.5rem; }
+  .crumbs a { color: var(--accent); text-decoration: none; }
+</style>
+
+<div style="margin-top:0.5rem">
+  <div class="crumbs"><a href="/settings">⚙ Settings</a> / Providers</div>
+  <h1 style="font-size:1.5rem;font-weight:700;margin-top:0.3rem">🔌 Providers</h1>
+  <p style="font-size:0.9rem;color:var(--muted);margin-top:0.25rem">
+    Accesos directos a los servicios externos del agente. Abren en una pestaña nueva.
+  </p>
+</div>
+
+<div class="prov-grid">
+  {% for p in providers %}
+  <div class="prov-card">
+    <div class="prov-head">
+      <span class="prov-icon">{{ p.icon }}</span>
+      <span class="prov-name">{{ p.name }}</span>
+      <span class="prov-cat">{{ p.cat }}</span>
+    </div>
+    <div class="prov-desc">{{ p.desc }}</div>
+    {% if p.note %}<div class="prov-note">💡 {{ p.note }}</div>{% endif %}
+    <a class="prov-link" href="{{ p.url }}" target="_blank" rel="noopener">Abrir ↗</a>
+  </div>
+  {% endfor %}
+</div>
+
+{% endblock %}
