@@ -12,13 +12,15 @@ site (rejecting social / job-board / directory hosts). Resolved domain persists 
 to `Company` (unique constraint prevents overwrites). Contacts with **no name** are 
 skipped at persist time (can't be pattern-matched).
 
-⚠ **Fallback guard**: a domain whose root doesn't match a company-name token is only
-accepted as fallback if the **search result title names the company** (`_title_mentions_name`).
-This prevents adopting an investor/news/partner domain that merely shares a page with the
-company — e.g. "Technisys" → `kaszek.com` (its VC), which then generated bouncing
-`first.last@kaszek.com` emails. If no confident match, returns `None` (enrichment fails
-gracefully) rather than a wrong domain. Acronym domains whose title names the company
-(e.g. `bacp.com.ar`) still pass.
+⚠ **Name-match only**: a web-resolved domain is accepted **only if its root matches a
+company-name token** (`_domain_matches_name`). Non-matching domains are rejected outright
+(returns `None` → contact stays `not_found`, which is safe). This kills the wrong-domain
+class entirely — investor/news/data-tool pages that merely name the company
+(Technisys → `kaszek.com` its VC; Grupo MSA → `prospeo.io` an email tool) no longer leak
+in, since a wrong domain generates bouncing or false-`verified` `first.last@wrong` emails.
+Known tool/VC domains are also in `_BLOCKED_HOSTS` as defense-in-depth. Trade-off:
+companies whose real domain shares no token with their name (e.g. short/acronym-only names)
+won't resolve — accepted as the safer failure mode.
 
 **Module**: `src/enrichment/domain_resolver.py`
 
