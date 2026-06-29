@@ -52,6 +52,11 @@ class Settings(BaseSettings):
     # interest). Comma-separated tokens matched (substring, case-insensitive)
     # against each candidate's normalized name and domain. Survives DB deletion.
     excluded_companies: str = "chevron"
+    # IP prefixes that are the SENDER's own devices (e.g. reviewing drafts on a
+    # phone), so /track/stats counts them as self-opens, not recipient opens.
+    # Comma-separated; matched as a prefix on the leftmost X-Forwarded-For hop.
+    # Mobile IPs rotate, so use the carrier range (e.g. "181.111.") and adjust.
+    self_open_ips: str = ""
 
     # Business targeting (defaults — overridable by Profile)
     target_cities: str = "Buenos Aires,Córdoba,Rosario,Mendoza,Neuquén"

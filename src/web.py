@@ -22,18 +22,23 @@ _GOOGLE_IP_PREFIXES = (             # GoogleImageProxy → recipient opened in G
 )
 
 
-def _classify_open(user_agent: str | None, ip_address: str | None) -> str:
+def _classify_open(user_agent: str | None, ip_address: str | None,
+                   self_ips: tuple = ()) -> str:
     """Classify a tracking-pixel hit using UA + originating IP.
 
-    Returns: 'self' (sender viewing own draft/sent via Zoho), 'gmail', 'outlook',
-    or 'other' (real recipient open). Image-proxy fetches are the norm — Gmail and
-    Zoho both proxy remote images, so the IP range is the most reliable signal.
+    Returns: 'self' (sender viewing own draft/sent via Zoho or own device),
+    'gmail', 'outlook', or 'other' (real recipient open). Image-proxy fetches are
+    the norm — Gmail and Zoho both proxy remote images, so IP range is the most
+    reliable signal. `self_ips` = sender's own device IP prefixes (e.g. mobile
+    carrier range) from config, so reviewing drafts on a phone counts as self.
     """
     ua = (user_agent or "").lower()
     # X-Forwarded-For is "client, proxy1, ..."; the leftmost hop is the image proxy.
     ip = (ip_address or "").split(",")[0].strip()
 
     if "zohomailimageproxy" in ua or ip.startswith(_ZOHO_IP_PREFIXES):
+        return "self"
+    if self_ips and ip.startswith(self_ips):
         return "self"
     if ("googleimageproxy" in ua or "chrome/42.0.23" in ua
             or ip.startswith(_GOOGLE_IP_PREFIXES)):
@@ -391,7 +396,9 @@ def create_app() -> Flask:
             """)).fetchall()
 
         # Aggregate per contact, classifying each open as the sender's own view
-        # (Zoho image proxy) vs a real recipient open (Gmail/Outlook proxy/device).
+        # (Zoho image proxy / own device) vs a real recipient open.
+        from src.config import get_settings
+        self_ips = tuple(p.strip() for p in (get_settings().self_open_ips or "").split(",") if p.strip())
         by_contact: dict = {}
         for r in rows:
             g = by_contact.setdefault(r.email_id, {
@@ -401,7 +408,7 @@ def create_app() -> Flask:
                 "self_opens": 0, "real_opens": 0, "total_opens": 0,
                 "client": None, "first_real": None, "last_real": None,
             })
-            kind = _classify_open(r.user_agent, r.ip_address)
+            kind = _classify_open(r.user_agent, r.ip_address, self_ips)
             g["total_opens"] += 1
             if kind == "self":
                 g["self_opens"] += 1
