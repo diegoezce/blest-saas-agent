@@ -9,7 +9,7 @@ _SIGNOFF_RE = re.compile(
     r"más info|para más info|podés conocer|conocé más en|"
     r"https?://|www\.|"
     r"saludos|atentamente|hasta pronto|quedo a|cordialmente|"
-    r"mariela|blest\s*learning|directora|hello@|"
+    r"virginia|mariela|blest\s*learning|directora|hello@|"
     r"📧|🌐|💼|💬|\+54|tel[ée]fono|whatsapp"
     r")"
 )
@@ -266,8 +266,7 @@ def create_draft(to_address: str, subject: str, content: str, email_id: str | No
     _SIG = (
         '<div style="' + _STYLE + ';margin-top:18px;padding-top:12px;'
         'border-top:1px solid #d0d0d0;color:#555">'
-        "Mariela Minetti<br>"
-        "Directora<br>"
+        "Virginia M.<br>"
         "Blest Learning<br>"
         "📧 hello@blestlearning.com<br>"
         '🌐 <a href="https://www.blestlearning.com">www.blestlearning.com</a><br>'
@@ -334,8 +333,7 @@ def send_email(to_address: str, subject: str, content: str, email_id: str | None
     _SIG = (
         '<div style="' + _STYLE + ';margin-top:18px;padding-top:12px;'
         'border-top:1px solid #d0d0d0;color:#555">'
-        "Mariela Minetti<br>"
-        "Directora<br>"
+        "Virginia M.<br>"
         "Blest Learning<br>"
         "📧 hello@blestlearning.com<br>"
         '🌐 <a href="https://www.blestlearning.com">www.blestlearning.com</a><br>'
