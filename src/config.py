@@ -34,6 +34,9 @@ class Settings(BaseSettings):
 
     # Workflow tuning
     discovery_queries_per_run: int = 6
+    # Layer 4 web email search caps queries per contact (each = 1 Tavily credit).
+    # A failed lookup runs the full list, so this directly bounds worst-case cost.
+    web_search_max_queries: int = 4
     max_companies_to_score: int = 50
     max_companies_for_contacts: int = 30
     max_companies_for_insights: int = 0

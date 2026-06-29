@@ -101,7 +101,10 @@ def find_emails_via_web_search(
         log["error"] = "missing domain or company_name"
         return WebEmailCandidateResult(log=log)
 
-    # Build search queries (ordered by specificity: named → company+role → generic company).
+    # Build search queries (ordered by specificity: named → company+role → generic).
+    # Each query = 1 Tavily credit and a failed lookup runs the whole list, so the
+    # list is capped (web_search_max_queries) and near-duplicate terms are dropped
+    # (employees/team/staff email were three ways to ask the same thing).
     queries = []
 
     # High specificity: named contact + company
@@ -112,17 +115,16 @@ def find_emails_via_web_search(
     # Medium specificity: company + role/context
     if role:
         queries.append(f'"{company_name}" {role} email')
-        queries.append(f'"{company_name}" {role} contacto')
 
-    # Company + generic terms (captures "The Functionary email" style)
+    # Company + generic terms (one English, one Spanish — covers the common cases)
     queries.append(f'"{company_name}" email')
-    queries.append(f'"{company_name}" employees email')
-    queries.append(f'"{company_name}" team email')
-    queries.append(f'"{company_name}" staff email')
-
-    # Spanish variants
     queries.append(f'"{company_name}" contacto email')
-    queries.append(f'"{company_name}" empleados email')
+
+    # Cap to bound worst-case credit cost (failed lookups run the full list).
+    from src.config import get_settings
+    max_q = get_settings().web_search_max_queries
+    if max_q and max_q > 0:
+        queries = queries[:max_q]
 
     log["queries"] = queries
 
