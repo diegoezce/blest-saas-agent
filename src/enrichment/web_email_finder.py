@@ -184,6 +184,13 @@ def find_emails_via_web_search(
             logger.warning(f"Web search failed for query '{query}': {e}")
             log.setdefault("exceptions", []).append(str(e))
 
+        # Early-stop to save Tavily credits: once we have a named, non-generic
+        # candidate (the highest-confidence outcome `named_match` returns anyway),
+        # there's no point running the remaining queries.
+        if any(m["matches_name"] and not m["is_generic"] for m in candidates.values()):
+            log["early_stopped_after"] = i + 1
+            break
+
     if not candidates:
         log["result"] = "no candidates found"
         return WebEmailCandidateResult(log=log)

@@ -14,7 +14,9 @@ class Settings(BaseSettings):
 
     # Search
     tavily_api_key: str = ""
-    tavily_max_results: int = 10
+    # Tavily bills per query, not per result, so fewer queries with more results
+    # each keeps the LLM's ~80-result input constant at half the credit cost.
+    tavily_max_results: int = 20
     tavily_search_depth: str = "basic"
 
     # Database
@@ -31,7 +33,7 @@ class Settings(BaseSettings):
     scheduler_timezone: str = "America/Argentina/Buenos_Aires"
 
     # Workflow tuning
-    discovery_queries_per_run: int = 12
+    discovery_queries_per_run: int = 6
     max_companies_to_score: int = 50
     max_companies_for_contacts: int = 30
     max_companies_for_insights: int = 0
