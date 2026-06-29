@@ -16,9 +16,17 @@ _TRACKING_PIXEL = base64.b64decode(
 )
 
 # IP prefixes for the image proxies we see (X-Forwarded-For leftmost hop).
-_ZOHO_IP_PREFIXES = ("136.143.",)  # Zoho Mail image proxy → the SENDER viewing their own mail
+_ZOHO_IP_PREFIXES = (               # Zoho Mail image proxy → the SENDER viewing their own mail
+    "136.143.", "202.144.192.", "202.144.193.", "202.144.194.", "202.144.195.",
+)
 _GOOGLE_IP_PREFIXES = (             # GoogleImageProxy → recipient opened in Gmail
     "66.249.", "64.233.", "72.14.", "74.125.", "209.85.", "173.194.", "108.177.", "142.250.",
+)
+# Known email security scanners that pre-fetch images (false "open" signals).
+_SCANNER_UA_FRAGMENTS = (
+    "barracuda", "proofpoint", "mimecast", "ironport", "cisco", "sophos",
+    "symantec", "messagelabs", "postfix", "spamassassin", "rspamd",
+    "emailsecuritycheck", "mail-tester", "mailtester",
 )
 
 
@@ -27,6 +35,7 @@ def _classify_open(user_agent: str | None, ip_address: str | None,
     """Classify a tracking-pixel hit using UA + originating IP.
 
     Returns: 'self' (sender viewing own draft/sent via Zoho or own device),
+    'scanner' (email security pre-fetch — not a real open),
     'gmail', 'outlook', or 'other' (real recipient open). Image-proxy fetches are
     the norm — Gmail and Zoho both proxy remote images, so IP range is the most
     reliable signal. `self_ips` = sender's own device IP prefixes (e.g. mobile
@@ -36,10 +45,16 @@ def _classify_open(user_agent: str | None, ip_address: str | None,
     # X-Forwarded-For is "client, proxy1, ..."; the leftmost hop is the image proxy.
     ip = (ip_address or "").split(",")[0].strip()
 
+    # Localhost (dev/test hits)
+    if ip in ("127.0.0.1", "::1") or ip.startswith("192.168.") or ip.startswith("10."):
+        return "self"
     if "zohomailimageproxy" in ua or ip.startswith(_ZOHO_IP_PREFIXES):
         return "self"
     if self_ips and ip.startswith(self_ips):
         return "self"
+    # Email security scanners pre-fetch before delivery — not a real open
+    if any(frag in ua for frag in _SCANNER_UA_FRAGMENTS):
+        return "scanner"
     if ("googleimageproxy" in ua or "chrome/42.0.23" in ua
             or ip.startswith(_GOOGLE_IP_PREFIXES)):
         return "gmail"
@@ -396,7 +411,7 @@ def create_app() -> Flask:
             """)).fetchall()
 
         # Aggregate per contact, classifying each open as the sender's own view
-        # (Zoho image proxy / own device) vs a real recipient open.
+        # (Zoho image proxy / own device), a security scanner pre-fetch, or a real open.
         from src.config import get_settings
         self_ips = tuple(p.strip() for p in (get_settings().self_open_ips or "").split(",") if p.strip())
         by_contact: dict = {}
@@ -405,13 +420,22 @@ def create_app() -> Flask:
                 "email_id": r.email_id, "contact_name": r.contact_name,
                 "contact_email": r.contact_email, "contact_role": r.contact_role,
                 "company_name": r.company_name, "company_id": r.company_id,
-                "self_opens": 0, "real_opens": 0, "total_opens": 0,
+                "self_opens": 0, "scanner_opens": 0, "real_opens": 0, "total_opens": 0,
                 "client": None, "first_real": None, "last_real": None,
+                "hits": [],
             })
             kind = _classify_open(r.user_agent, r.ip_address, self_ips)
             g["total_opens"] += 1
+            g["hits"].append({
+                "opened_at": r.opened_at,
+                "ip": r.ip_address or "",
+                "ua": r.user_agent or "",
+                "kind": kind,
+            })
             if kind == "self":
                 g["self_opens"] += 1
+            elif kind == "scanner":
+                g["scanner_opens"] += 1
             else:
                 g["real_opens"] += 1
                 if g["client"] is None:
@@ -432,6 +456,9 @@ def create_app() -> Flask:
             for k in ("first_real", "last_real"):
                 if d[k] is not None:
                     d[k] = d[k].replace(tzinfo=ZoneInfo("UTC")).astimezone(_tz)
+            for h in d["hits"]:
+                if h["opened_at"] is not None:
+                    h["opened_at"] = h["opened_at"].replace(tzinfo=ZoneInfo("UTC")).astimezone(_tz)
 
         contacts_opened_real = sum(1 for d in stats if d["real_opens"] > 0)
         total_real_opens = sum(d["real_opens"] for d in stats)

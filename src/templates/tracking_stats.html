@@ -42,11 +42,24 @@
   .ts { font-size: 0.78rem; color: var(--muted); white-space: nowrap; }
 
   .chip { display: inline-block; font-size: 0.72rem; padding: 0.15rem 0.45rem; border-radius: 4px; font-weight: 600; white-space: nowrap; }
-  .chip-gmail   { background: #14532d; color: #bbf7d0; }
-  .chip-outlook { background: #1e3a5f; color: #bae6fd; }
-  .chip-other   { background: #3b2f1e; color: #fde68a; }
-  .chip-self    { background: #7f1d1d; color: #fecaca; }
+  .chip-gmail    { background: #14532d; color: #bbf7d0; }
+  .chip-outlook  { background: #1e3a5f; color: #bae6fd; }
+  .chip-other    { background: #3b2f1e; color: #fde68a; }
+  .chip-self     { background: #7f1d1d; color: #fecaca; }
+  .chip-scanner  { background: #44403c; color: #d6d3d1; }
   .self-note { font-size: 0.72rem; color: var(--muted); margin-left: 0.35rem; }
+
+  details.hits-detail { margin-top: 0.3rem; }
+  details.hits-detail summary { font-size: 0.72rem; color: var(--muted); cursor: pointer; user-select: none; }
+  .hits-list { margin: 0.3rem 0 0 0; padding: 0; list-style: none; font-size: 0.72rem; font-family: monospace; }
+  .hits-list li { padding: 0.15rem 0; border-bottom: 1px solid var(--border); color: var(--muted); }
+  .hits-list li:last-child { border-bottom: none; }
+  .hit-kind { font-weight: 700; }
+  .hit-kind-self     { color: #f87171; }
+  .hit-kind-scanner  { color: #a8a29e; }
+  .hit-kind-gmail    { color: #4ade80; }
+  .hit-kind-outlook  { color: #60a5fa; }
+  .hit-kind-other    { color: #fbbf24; }
 
   .empty-state { text-align: center; padding: 3rem 1rem; color: var(--muted); }
 </style>
@@ -111,11 +124,31 @@
           {% if r.client == 'gmail' %}<span class="chip chip-gmail">📧 Gmail</span>
           {% elif r.client == 'outlook' %}<span class="chip chip-outlook">📧 Outlook</span>
           {% else %}<span class="chip chip-other">📧 Otro</span>{% endif %}
+        {% elif r.scanner_opens > 0 and r.self_opens == 0 %}
+          <span class="chip chip-scanner">🤖 scanner</span>
         {% else %}
           <span class="chip chip-self">⚠ solo vos (Zoho)</span>
         {% endif %}
         {% if r.real_opens > 0 and r.self_opens > 0 %}
           <span class="self-note">+{{ r.self_opens }} tuya(s)</span>
+        {% endif %}
+        {% if r.scanner_opens > 0 %}
+          <span class="self-note">+{{ r.scanner_opens }} scanner</span>
+        {% endif %}
+        {% if r.hits %}
+        <details class="hits-detail">
+          <summary>ver {{ r.hits|length }} hit(s)</summary>
+          <ul class="hits-list">
+            {% for h in r.hits %}
+            <li>
+              <span class="hit-kind hit-kind-{{ h.kind }}">{{ h.kind }}</span>
+              {{ h.opened_at.strftime('%d/%m %H:%M:%S') }}
+              — {{ h.ip or '?' }}
+              — {{ (h.ua[:80] + '…') if h.ua|length > 80 else h.ua or '?' }}
+            </li>
+            {% endfor %}
+          </ul>
+        </details>
         {% endif %}
       </td>
       <td class="ts">{{ r.first_real.strftime('%d/%m %H:%M') if r.first_real else '—' }}</td>
@@ -127,9 +160,10 @@
 
 <p style="font-size:0.75rem;color:var(--muted);margin-top:0.75rem;line-height:1.6">
   <strong>Cómo se lee:</strong> el conteo verde son aperturas <strong>reales del destinatario</strong>
-  (detectadas por el proxy de Gmail/Outlook). Las aperturas vía <span class="chip chip-self">⚠ solo vos (Zoho)</span>
-  son tuyas mirando el draft o el enviado, y NO cuentan como apertura real. Gmail cachea el pixel, así que el
-  conteo de aperturas reales es aproximado (sirve para «abrió / no abrió», no para «cuántas veces exactas»).
+  (detectadas por el proxy de Gmail/Outlook). Las aperturas <span class="chip chip-self" style="font-size:0.7rem">⚠ solo vos (Zoho)</span>
+  son tuyas mirando el draft/enviado, y NO cuentan. Las <span class="chip chip-scanner" style="font-size:0.7rem">🤖 scanner</span>
+  son pre-fetches de filtros antispam del destinatario (Barracuda, Proofpoint, etc.) — tampoco cuentan como apertura real.
+  Expandí «ver hits» para ver el IP y UA de cada golpe y verificar la clasificación.
 </p>
 
 {% else %}
