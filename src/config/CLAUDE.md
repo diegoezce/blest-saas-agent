@@ -42,6 +42,7 @@ This merges profile values **on top of** global `Settings` defaults:
 | `max_companies_for_outreach` | 20 | Companies to draft outreach for |
 | `exclude_known_companies` | true | Skip companies already in DB (net-new leads only) |
 | `rediscover_after_days` | 0 | 0 = never re-surface known company; >0 = re-allow after N days |
+| `excluded_companies` | "chevron" | Comma-separated blocklist (employer/conflicts); substring-matched on normalized name + domain in discovery. Survives DB deletion |
 
 **Net effect**: ~15–20 leads/run, ~$0.12 Claude API cost (vs old $0.48 with AI scoring + insights).
 
