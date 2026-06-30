@@ -253,6 +253,7 @@ def _run_push_phase(db) -> int:
         .join(Company, Opportunity.company_id == Company.id)
         .join(DiscoveryRun, Opportunity.run_id == DiscoveryRun.id)
         .outerjoin(Profile, DiscoveryRun.profile_id == Profile.id)
+        .filter(Company.excluded == False)
         .filter(Opportunity.zoho_pushed_at.is_(None))
         .filter(Opportunity.score >= 40)  # skip low_priority (incl. oversized companies)
         .filter(~Opportunity.company_id.in_(contacted_sq))

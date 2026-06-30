@@ -1340,6 +1340,7 @@ def create_app() -> Flask:
             ]
             run_companies = session.query(Company).filter(Company.id.in_(run_company_ids)).all()
             company_name_by_id = {c.id: c.name for c in run_companies}
+            excluded_company_names = {c.name for c in run_companies if c.excluded}
             primary_contacts = (
                 session.query(Contact)
                 .filter(Contact.company_id.in_(run_company_ids))
@@ -1357,6 +1358,9 @@ def create_app() -> Flask:
         errors = []
         pushed_company_names: list[str] = []
         for company_name, draft in companies_seen.items():
+            if company_name in excluded_company_names:
+                skipped += 1
+                continue
             to_address = primary_emails.get(company_name) or draft.get("contact_email")
             if not to_address:
                 skipped += 1
@@ -2256,6 +2260,8 @@ def create_app() -> Flask:
                 draft = email_drafts.get(co.name, {})
                 body = draft.get("body", "")
                 # Eligibility (same guards as the worker push)
+                if co.excluded:
+                    skipped += 1; _bump("empresa excluida"); continue
                 if co.id in statuses:
                     skipped += 1; _bump("ya contactado"); continue
                 if opp is None or opp.zoho_pushed_at is not None:
