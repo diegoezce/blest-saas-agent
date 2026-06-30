@@ -3123,7 +3123,7 @@ def create_app() -> Flask:
             cs_rows = db.query(ContactStatus.company_id, ContactStatus.response_received).all()
             companies_map = {
                 c.id: {"id": c.id, "name": c.name, "domain": c.domain}
-                for c in db.query(Company).all()
+                for c in db.query(Company).filter(Company.excluded == False).all()
             }
 
         score_by_company = {}
