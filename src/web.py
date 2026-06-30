@@ -1143,6 +1143,39 @@ def create_app() -> Flask:
     def settings_home():
         return render_template("settings.html")
 
+    @app.route("/settings/rules")
+    @_require_auth
+    def settings_rules():
+        from src.database.session import get_engine
+        from sqlalchemy import text
+        from src.config import get_settings
+
+        with get_engine().connect() as conn:
+            r = conn.execute(text("""
+                SELECT
+                  (SELECT COUNT(*) FROM companies) AS total_companies,
+                  (SELECT COUNT(*) FROM companies WHERE excluded = TRUE) AS excluded,
+                  (SELECT COUNT(DISTINCT o.company_id) FROM opportunities o
+                   WHERE o.company_id NOT IN (
+                     SELECT DISTINCT company_id FROM contacts WHERE company_id IS NOT NULL
+                   )) AS no_contacts,
+                  (SELECT COUNT(*) FROM contacts WHERE email IS NULL) AS contacts_no_email,
+                  (SELECT COUNT(*) FROM contacts WHERE enriched_at IS NOT NULL AND email IS NULL) AS enriched_no_email,
+                  (SELECT COUNT(*) FROM contacts WHERE email_status = 'bounced') AS bounced
+            """)).fetchone()
+
+        cfg = get_settings()
+        stats = {
+            "total_companies":  r[0],
+            "excluded":         r[1],
+            "no_contacts":      r[2],
+            "contacts_no_email": r[3],
+            "enriched_no_email": r[4],
+            "bounced":          r[5],
+            "enrich_batch":     getattr(cfg, "worker_enrich_batch", 15),
+        }
+        return render_template("settings_rules.html", stats=stats)
+
     @app.route("/settings/providers")
     @_require_auth
     def settings_providers():

@@ -1,0 +1,359 @@
+{% extends "base.html" %}
+{% block title %}Reglas del sistema — Blest{% endblock %}
+{% block content %}
+
+<style>
+  .rules-header {
+    display: flex; align-items: center; gap: 1rem; margin-bottom: 1.75rem;
+  }
+  .rules-header h1 { font-size: 1.4rem; font-weight: 700; }
+  .rules-back {
+    font-size: 0.82rem; color: var(--muted); border: 1px solid var(--border);
+    border-radius: 6px; padding: 0.3rem 0.7rem; text-decoration: none;
+  }
+  .rules-back:hover { border-color: var(--accent); color: var(--accent); text-decoration: none; }
+
+  .section { margin-bottom: 2.5rem; }
+  .section-title {
+    font-size: 0.75rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--muted); margin-bottom: 0.75rem;
+    padding-bottom: 0.4rem; border-bottom: 1px solid var(--border);
+  }
+
+  table.rules-table { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
+  table.rules-table th {
+    text-align: left; font-size: 0.73rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.06em; color: var(--muted); padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border); white-space: nowrap;
+  }
+  table.rules-table td {
+    padding: 0.65rem 0.75rem; border-bottom: 1px solid var(--border);
+    vertical-align: top; line-height: 1.5;
+  }
+  table.rules-table tr:last-child td { border-bottom: none; }
+  table.rules-table tr:hover td { background: var(--surface-hover); }
+
+  .tag {
+    display: inline-block; font-size: 0.7rem; font-weight: 700;
+    padding: 0.1rem 0.45rem; border-radius: 4px; white-space: nowrap;
+  }
+  .tag-worker   { background: #1e3a5f; color: #93c5fd; }
+  .tag-web      { background: #3b2f1e; color: #fde68a; }
+  .tag-both     { background: #14532d; color: #4ade80; }
+  .tag-auto     { background: #1e1b4b; color: #a5b4fc; }
+  .tag-manual   { background: #451a03; color: var(--amber); }
+
+  .check { color: #4ade80; font-weight: 700; }
+  .cross { color: #f87171; font-weight: 700; }
+  .dash  { color: var(--muted); }
+
+  .stat-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 0.75rem;
+  }
+  .stat-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 0.9rem 1.1rem;
+  }
+  .stat-num { font-size: 1.8rem; font-weight: 800; line-height: 1; color: var(--accent); }
+  .stat-num.warn { color: var(--amber); }
+  .stat-num.ok   { color: #4ade80; }
+  .stat-num.muted { color: var(--muted); }
+  .stat-label { font-size: 0.75rem; color: var(--muted); margin-top: 0.25rem; line-height: 1.4; }
+
+  .note {
+    font-size: 0.8rem; color: var(--muted); background: var(--surface);
+    border: 1px solid var(--border); border-radius: 8px; padding: 0.6rem 0.9rem;
+    margin-top: 0.6rem; line-height: 1.6;
+  }
+  .note strong { color: var(--text); }
+</style>
+
+<div class="rules-header">
+  <a class="rules-back" href="/settings">← Settings</a>
+  <h1>📋 Reglas del sistema</h1>
+</div>
+
+<!-- ── Stats actuales ──────────────────────────────────────────────────── -->
+<div class="section">
+  <div class="section-title">Estado actual de la DB</div>
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-num">{{ stats.total_companies }}</div>
+      <div class="stat-label">empresas en DB</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num {{ 'warn' if stats.excluded > 0 else 'muted' }}">{{ stats.excluded }}</div>
+      <div class="stat-label">empresas excluidas<br><a href="/settings/excluded-companies" style="color:var(--accent)">ver listado →</a></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num {{ 'warn' if stats.no_contacts > 0 else 'ok' }}">{{ stats.no_contacts }}</div>
+      <div class="stat-label">empresas con oportunidades pero sin contacto<br>
+        {% if stats.no_contacts == 0 %}<span style="color:#4ade80">✓ ninguna</span>{% else %}<span style="color:var(--amber)">⚠ el botón "Buscar emails" las crearía</span>{% endif %}
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num {{ 'warn' if stats.contacts_no_email > 0 else 'ok' }}">{{ stats.contacts_no_email }}</div>
+      <div class="stat-label">contactos sin email<br><span style="font-size:0.72rem">el worker los enriquece en Phase 1</span></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num {{ 'warn' if stats.enriched_no_email > 0 else 'muted' }}">{{ stats.enriched_no_email }}</div>
+      <div class="stat-label">ya intentados,<br>sin email encontrado</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num">{{ stats.bounced }}</div>
+      <div class="stat-label">contactos rebotados<br><a href="/reporting/insight/bounced" style="color:var(--accent)">ver listado →</a></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Enriquecimiento ──────────────────────────────────────────────────── -->
+<div class="section">
+  <div class="section-title">Enriquecimiento de contactos</div>
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden">
+    <table class="rules-table">
+      <thead>
+        <tr>
+          <th>Qué hace</th>
+          <th>Dónde corre</th>
+          <th>Cuándo</th>
+          <th>Respeta exclusión</th>
+          <th>Crea contactos</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Phase 1 — enrich contactos sin email</strong><br>
+            <span style="color:var(--muted);font-size:0.78rem">Contactos que ya existen en DB pero no tienen email. Corre Layer 0–4.</span>
+          </td>
+          <td><span class="tag tag-worker">Worker</span></td>
+          <td>Automático, diario</td>
+          <td><span class="check">✓</span> sí</td>
+          <td><span class="cross">✗</span> no</td>
+        </tr>
+        <tr>
+          <td><strong>Buscar emails faltantes</strong> (botón en Contacts Report)<br>
+            <span style="color:var(--muted);font-size:0.78rem">Empresas con oportunidades y cero contactos. Crea placeholders y los enriquece.</span>
+          </td>
+          <td><span class="tag tag-web">Web</span></td>
+          <td>Manual</td>
+          <td><span class="check">✓</span> sí</td>
+          <td><span class="check">✓</span> sí (placeholders)</td>
+        </tr>
+        <tr>
+          <td><strong>Enrich individual</strong> (botón ⚡ por contacto en run)<br>
+            <span style="color:var(--muted);font-size:0.78rem">Enriquece un contacto específico a demanda.</span>
+          </td>
+          <td><span class="tag tag-web">Web</span></td>
+          <td>Manual</td>
+          <td><span class="dash">—</span> manual</td>
+          <td><span class="cross">✗</span> no</td>
+        </tr>
+        <tr>
+          <td><strong>Phase 1b — recuperar rebotados</strong><br>
+            <span style="color:var(--muted);font-size:0.78rem">Bloquea email malo, re-enriquece buscando alternativa.</span>
+          </td>
+          <td><span class="tag tag-worker">Worker</span></td>
+          <td>Automático, diario</td>
+          <td><span class="check">✓</span> sí</td>
+          <td><span class="cross">✗</span> no</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="note">
+    <strong>No hay duplicación:</strong> el worker enriquece contactos existentes sin email; el botón crea contactos donde no había ninguno. Son complementarios.
+    Actualmente hay <strong>{{ stats.contacts_no_email }} contactos sin email</strong> — el worker los procesará en el próximo ciclo (batch de {{ stats.enrich_batch }}/día).
+  </div>
+</div>
+
+<!-- ── Envío de emails / Zoho push ─────────────────────────────────────── -->
+<div class="section">
+  <div class="section-title">Envío de emails y drafts Zoho</div>
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden">
+    <table class="rules-table">
+      <thead>
+        <tr>
+          <th>Acción</th>
+          <th>Dónde corre</th>
+          <th>Cuándo</th>
+          <th>Respeta exclusión</th>
+          <th>Requiere email verificado</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Phase 2 — Zoho push diario</strong><br>
+            <span style="color:var(--muted);font-size:0.78rem">Crea drafts para oportunidades con score ≥ 40 y email verificado, sin contacto previo.</span>
+          </td>
+          <td><span class="tag tag-worker">Worker</span></td>
+          <td>Automático, diario</td>
+          <td><span class="check">✓</span> sí</td>
+          <td><span class="check">✓</span> solo <code>verified</code></td>
+        </tr>
+        <tr>
+          <td><strong>Botón 📧 Zoho Drafts (reporte de run)</strong><br>
+            <span style="color:var(--muted);font-size:0.78rem">Crea drafts en bulk para todas las empresas del run.</span>
+          </td>
+          <td><span class="tag tag-web">Web</span></td>
+          <td>Manual</td>
+          <td><span class="check">✓</span> sí</td>
+          <td><span class="cross">✗</span> no (cualquier email)</td>
+        </tr>
+        <tr>
+          <td><strong>Quick Run — push automático</strong><br>
+            <span style="color:var(--muted);font-size:0.78rem">Push Zoho al finalizar un Quick Run si está habilitado.</span>
+          </td>
+          <td><span class="tag tag-web">Web</span></td>
+          <td>Automático post-run</td>
+          <td><span class="check">✓</span> sí</td>
+          <td><span class="cross">✗</span> no</td>
+        </tr>
+        <tr>
+          <td><strong>Push individual por contacto / empresa</strong><br>
+            <span style="color:var(--muted);font-size:0.78rem">Botones manuales uno por uno: <code>/contact/id/zoho-draft</code>, <code>/zoho-send</code>, <code>/create-manual-draft</code>.</span>
+          </td>
+          <td><span class="tag tag-web">Web</span></td>
+          <td>Manual</td>
+          <td><span class="dash">—</span> manual</td>
+          <td><span class="cross">✗</span> no</td>
+        </tr>
+        <tr>
+          <td><strong>Phase 4 — Follow-ups</strong><br>
+            <span style="color:var(--muted);font-size:0.78rem">Envío real (no draft). Cadencia: +4d primer follow-up, +6d segundo. Máx 2.</span>
+          </td>
+          <td><span class="tag tag-both">Worker + Web</span></td>
+          <td>Worker: automático. Web: manual ("Hacer hoy")</td>
+          <td><span class="check">✓</span> sí</td>
+          <td><span class="check">✓</span> verified o probable</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ── Detección de bounces / replies ──────────────────────────────────── -->
+<div class="section">
+  <div class="section-title">Detección de bounces y replies</div>
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden">
+    <table class="rules-table">
+      <thead>
+        <tr>
+          <th>Acción</th>
+          <th>Dónde corre</th>
+          <th>Cuándo</th>
+          <th>Qué hace</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Phase 3 — Bounce check</strong></td>
+          <td><span class="tag tag-worker">Worker</span></td>
+          <td>Automático, diario</td>
+          <td>Escanea inbox Zoho, marca <code>email_status="bounced"</code></td>
+        </tr>
+        <tr>
+          <td><strong>Scan bounces manual</strong> (<code>GET /bounces/scan</code>)</td>
+          <td><span class="tag tag-web">Web</span></td>
+          <td>Manual</td>
+          <td>Preview sin escribir en DB</td>
+        </tr>
+        <tr>
+          <td><strong>Apply bounces</strong> (<code>POST /bounces/apply</code>)</td>
+          <td><span class="tag tag-web">Web</span></td>
+          <td>Manual</td>
+          <td>Aplica bounces escaneados a DB</td>
+        </tr>
+        <tr>
+          <td><strong>Detección de replies / OOO</strong></td>
+          <td><span class="tag tag-both">Worker + Web</span></td>
+          <td>Worker: Phase 4. Web: Follow-ups page</td>
+          <td>Marca <code>replied_at</code>, OOO adelanta cadencia</td>
+        </tr>
+        <tr>
+          <td><strong>Auto-corrección falsos bounces</strong></td>
+          <td><span class="tag tag-auto">Automático</span></td>
+          <td>Al recibir pixel de apertura real</td>
+          <td>Si hay open real → <code>email_status="verified"</code>. También backfill en <a href="/track/stats" style="color:var(--accent)">/track/stats</a>.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ── Exclusión de empresas ──────────────────────────────────────────── -->
+<div class="section">
+  <div class="section-title">Exclusión de empresas</div>
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden">
+    <table class="rules-table">
+      <thead>
+        <tr>
+          <th>Superficie</th>
+          <th>¿Aparecen empresas excluidas?</th>
+          <th>Notas</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Buscador (<code>/search</code>)</td>
+          <td><span class="check">✓ ocultas</span></td>
+          <td>También en paginación y exports CSV/MD</td>
+        </tr>
+        <tr>
+          <td>Reporting insights (email_not_reached, hot, etc.)</td>
+          <td><span class="check">✓ ocultas</span></td>
+          <td>Todos los 5 slugs de <code>/reporting/insight/*</code></td>
+        </tr>
+        <tr>
+          <td>Discovery runs (futuros)</td>
+          <td><span class="check">✓ no se redescubren</span></td>
+          <td>El dedup cross-run ya las filtra por estar en DB</td>
+        </tr>
+        <tr>
+          <td>Zoho push — Worker Phase 2</td>
+          <td><span class="check">✓ no se envía</span></td>
+          <td></td>
+        </tr>
+        <tr>
+          <td>Follow-ups — Worker Phase 4</td>
+          <td><span class="check">✓ no se envía</span></td>
+          <td></td>
+        </tr>
+        <tr>
+          <td>Quick Run push automático</td>
+          <td><span class="check">✓ no se envía</span></td>
+          <td></td>
+        </tr>
+        <tr>
+          <td>Botón bulk Zoho Drafts (reporte de run)</td>
+          <td><span class="check">✓ se omite</span></td>
+          <td></td>
+        </tr>
+        <tr>
+          <td>Buscar emails faltantes</td>
+          <td><span class="check">✓ se omite</span></td>
+          <td></td>
+        </tr>
+        <tr>
+          <td>Push / draft individual por contacto o empresa</td>
+          <td><span class="dash">— no aplica</span></td>
+          <td>Acción manual uno por uno, sin filtro automático</td>
+        </tr>
+        <tr>
+          <td>Runs pasados (<code>/run/id</code>)</td>
+          <td><span class="cross">✗ siguen visibles</span></td>
+          <td>Historial intacto, no se borra retroactivamente</td>
+        </tr>
+        <tr>
+          <td>Contacts Report (<code>/contacts-report</code>)</td>
+          <td><span class="cross">✗ siguen visibles</span></td>
+          <td>Si ya fueron contactadas, siguen en el reporte</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="note">
+    Podés ver y desexcluir empresas en <a href="/settings/excluded-companies" style="color:var(--accent)">Settings → Empresas excluidas →</a>
+  </div>
+</div>
+
+{% endblock %}
