@@ -1164,18 +1164,18 @@ def create_app() -> Flask:
                   (SELECT COUNT(*) FROM contacts WHERE email_status = 'bounced') AS bounced
             """)).fetchone()
 
-        # Companies with opps but no contacts, broken down by domain presence
-        no_contact_rows = conn.execute(text("""
-            SELECT c.id, c.name, c.domain, c.industry, c.location
-            FROM companies c
-            WHERE c.id IN (
-                SELECT DISTINCT o.company_id FROM opportunities o
-                WHERE o.company_id NOT IN (
-                    SELECT DISTINCT company_id FROM contacts WHERE company_id IS NOT NULL
+            no_contact_rows = conn.execute(text("""
+                SELECT c.id, c.name, c.domain, c.industry, c.location
+                FROM companies c
+                WHERE c.id IN (
+                    SELECT DISTINCT o.company_id FROM opportunities o
+                    WHERE o.company_id NOT IN (
+                        SELECT DISTINCT company_id FROM contacts WHERE company_id IS NOT NULL
+                    )
                 )
-            )
-            ORDER BY c.name
-        """)).fetchall()
+                ORDER BY c.name
+            """)).fetchall()
+
         no_contact_companies = [
             {"id": row[0], "name": row[1], "domain": row[2] or "", "industry": row[3] or "", "location": row[4] or ""}
             for row in no_contact_rows
