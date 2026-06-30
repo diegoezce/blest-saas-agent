@@ -71,6 +71,18 @@
   </div>
 </div>
 
+{% if email_not_reached %}
+<a href="/reporting/insight/email_not_reached" style="text-decoration:none;display:block;margin-bottom:1.25rem">
+  <div style="background:var(--surface);border:1px solid var(--border);border-left:4px solid var(--accent);border-radius:10px;padding:1rem 1.25rem;display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap">
+    <div>
+      <div style="font-size:1.5rem;font-weight:800;line-height:1;color:var(--accent)">{{ email_not_reached }} <span style="font-size:1rem;font-weight:700;color:var(--text)">empresas con email listas para contactar</span></div>
+      <div style="font-size:0.84rem;color:var(--muted);margin-top:0.35rem">De las {{ email_total }} con email usable, {{ email_already_reached }} ya fueron contactadas — quedan {{ email_not_reached }} pendientes.</div>
+    </div>
+    <div style="font-size:0.88rem;font-weight:700;color:var(--accent);white-space:nowrap;flex-shrink:0">Ver listado →</div>
+  </div>
+</a>
+{% endif %}
+
 <!-- KPIs -->
 <div class="rep-grid">
   <div class="kpi">

@@ -3156,11 +3156,16 @@ def create_app() -> Flask:
                 "qw": qw, "strat": strat, "low": low,
             }
 
+        email_already_reached = len(companies_with_email & reached)
+
         return render_template(
             "reporting.html",
             kpis=kpis, funnel=funnel, rates=rates, email_quality=email_quality,
             response_counts=response_counts, profile_perf=profile_perf,
             activity=activity, insights=insights,
+            email_not_reached=email_not_reached,
+            email_total=len(companies_with_email),
+            email_already_reached=email_already_reached,
         )
 
     @app.route("/reporting/insight/<slug>")
