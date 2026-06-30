@@ -88,7 +88,19 @@
     <span class="cr-stat-num">{{ total_contacts }}</span>
     <span class="cr-stat-label">contactos con<br>algún registro</span>
   </div>
+  {% if bounce_cleared > 0 %}
+  <div class="cr-stat" style="border-color:#14532d;background:#14532d22">
+    <span class="cr-stat-num" style="color:#4ade80">{{ bounce_cleared }}</span>
+    <span class="cr-stat-label" style="color:#4ade80">falsos bounces<br>corregidos ✓</span>
+  </div>
+  {% endif %}
 </div>
+
+{% if bounce_cleared > 0 %}
+<div style="background:#14532d22;border:1px solid #14532d;border-radius:8px;padding:0.65rem 1rem;margin-bottom:1rem;font-size:0.83rem;color:#4ade80">
+  <strong>{{ bounce_cleared }} bounce(s) corregido(s)</strong> — estos contactos tenían aperturas reales registradas pero estaban marcados como rebotados. Se revirtió su estado a <em>verified</em> y vuelven a estar en rotación.
+</div>
+{% endif %}
 
 {% if stats %}
 <table class="track-table">
@@ -114,7 +126,12 @@
       </td>
       <td>
         {% if r.contact_name %}
-          <div class="contact-name">{{ r.contact_name }}</div>
+          <div class="contact-name">
+            {{ r.contact_name }}
+            {% if r.bounce_cleared %}
+              <span style="font-size:0.7rem;background:#14532d;color:#4ade80;border-radius:4px;padding:0.05rem 0.35rem;margin-left:0.3rem;font-weight:700">bounce corregido</span>
+            {% endif %}
+          </div>
           {% if r.contact_role %}<div class="contact-role">{{ r.contact_role }}</div>{% endif %}
           {% if r.contact_email %}<div class="contact-email">{{ r.contact_email }}</div>{% endif %}
         {% else %}

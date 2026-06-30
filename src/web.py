@@ -375,15 +375,33 @@ def create_app() -> Flask:
         """Record an email open event and return a 1×1 tracking pixel."""
         import datetime
         from src.database.session import get_session
-        from src.database.models import EmailOpenEvent
+        from src.database.models import EmailOpenEvent, Contact
+        ip  = request.headers.get("X-Forwarded-For", request.remote_addr)
+        ua  = request.headers.get("User-Agent", "")
         try:
             with get_session() as db:
                 db.add(EmailOpenEvent(
                     email_id=str(email_id),
                     opened_at=datetime.datetime.utcnow(),
-                    ip_address=request.headers.get("X-Forwarded-For", request.remote_addr),
-                    user_agent=request.headers.get("User-Agent", ""),
+                    ip_address=ip,
+                    user_agent=ua,
                 ))
+                # If this is a real recipient open, a bounced status is wrong —
+                # the email was delivered. Clear it so the contact stays in rotation.
+                kind = _classify_open(ua, ip)
+                if kind not in ("self", "scanner"):
+                    try:
+                        cid = int(email_id)
+                        contact = db.get(Contact, cid)
+                        if contact and contact.email_status == "bounced":
+                            contact.email_status = "verified"
+                            contact.email_source = "open_confirmed"
+                            logger.info(
+                                f"Contact {cid} ({contact.email}): bounce cleared — "
+                                f"open confirmed ({kind})"
+                            )
+                    except (ValueError, TypeError):
+                        pass
         except Exception:
             pass  # never 404
         return Response(
@@ -403,6 +421,7 @@ def create_app() -> Flask:
                 SELECT
                     e.email_id, e.opened_at, e.ip_address, e.user_agent,
                     c.name AS contact_name, c.email AS contact_email, c.role AS contact_role,
+                    c.email_status AS email_status,
                     co.name AS company_name, co.id AS company_id
                 FROM email_open_events e
                 LEFT JOIN contacts c ON c.id = CAST(e.email_id AS INTEGER)
@@ -419,9 +438,11 @@ def create_app() -> Flask:
             g = by_contact.setdefault(r.email_id, {
                 "email_id": r.email_id, "contact_name": r.contact_name,
                 "contact_email": r.contact_email, "contact_role": r.contact_role,
+                "email_status": r.email_status,
                 "company_name": r.company_name, "company_id": r.company_id,
                 "self_opens": 0, "scanner_opens": 0, "real_opens": 0, "total_opens": 0,
                 "client": None, "first_real": None, "last_real": None,
+                "bounce_cleared": False,
                 "hits": [],
             })
             kind = _classify_open(r.user_agent, r.ip_address, self_ips)
@@ -443,6 +464,29 @@ def create_app() -> Flask:
                 if g["first_real"] is None:
                     g["first_real"] = r.opened_at
                 g["last_real"] = r.opened_at
+
+        # Backfill: contacts with real opens still marked bounced (historical data
+        # pre-dating the auto-fix on pixel hit). Clear them now.
+        from src.database.models import Contact as _Contact
+        bounce_cleared = 0
+        with get_session() as db:
+            for g in by_contact.values():
+                if g["real_opens"] > 0 and g["email_status"] == "bounced":
+                    try:
+                        cid = int(g["email_id"])
+                        contact = db.get(_Contact, cid)
+                        if contact and contact.email_status == "bounced":
+                            contact.email_status = "verified"
+                            contact.email_source = "open_confirmed"
+                            g["email_status"] = "verified"
+                            g["bounce_cleared"] = True
+                            bounce_cleared += 1
+                            logger.info(
+                                f"Backfill: contact {cid} ({contact.email}) bounce cleared "
+                                f"— {g['real_opens']} real open(s) on record"
+                            )
+                    except (ValueError, TypeError):
+                        pass
 
         stats = list(by_contact.values())
         # Real opens first, then most-recent real open (sort on naive UTC).
@@ -469,7 +513,8 @@ def create_app() -> Flask:
                                contacts_opened_real=contacts_opened_real,
                                total_real_opens=total_real_opens,
                                total_contacts=len(stats),
-                               tracking_configured=tracking_configured)
+                               tracking_configured=tracking_configured,
+                               bounce_cleared=bounce_cleared)
 
     @app.route("/schedule/update", methods=["POST"])
     @_require_auth
