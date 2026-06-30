@@ -1051,7 +1051,7 @@ def create_app() -> Flask:
             if not data:
                 return jsonify({"error": "No data provided"}), 400
 
-            editable_fields = ['industry', 'size_estimate', 'location', 'description', 'website_url', 'linkedin_url']
+            editable_fields = ['industry', 'size_estimate', 'location', 'description', 'website_url', 'linkedin_url', 'domain']
             for field in editable_fields:
                 if field in data:
                     setattr(company, field, data[field] or None)
