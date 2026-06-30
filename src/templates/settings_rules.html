@@ -280,6 +280,60 @@
   </div>
 </div>
 
+<!-- ── Empresas sin contacto ───────────────────────────────────────────── -->
+{% if no_contact_companies %}
+<div class="section">
+  <div class="section-title">
+    Empresas con oportunidades pero sin contacto
+    <span style="background:var(--surface);border:1px solid var(--border);border-radius:999px;padding:0.05rem 0.5rem;font-size:0.7rem;color:var(--muted);margin-left:0.4rem">{{ no_contact_companies|length }}</span>
+  </div>
+  {% set with_domain = no_contact_companies | selectattr("domain") | list %}
+  {% set no_domain   = no_contact_companies | rejectattr("domain") | list %}
+
+  {% if with_domain %}
+  <div class="note" style="margin-bottom:0.75rem">
+    <strong>{{ with_domain|length }} con dominio</strong> — el botón "Buscar emails faltantes" puede procesarlas.
+  </div>
+  {% endif %}
+  {% if no_domain %}
+  <div class="note" style="border-color:#451a03;background:#451a0322;margin-bottom:0.75rem">
+    <strong style="color:var(--amber)">⚠ {{ no_domain|length }} sin dominio</strong> — el enriquecimiento no puede arrancar sin dominio. Agregálo manualmente en la empresa para desbloquearlas.
+  </div>
+  {% endif %}
+
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden">
+    <table class="rules-table">
+      <thead>
+        <tr>
+          <th>Empresa</th>
+          <th>Dominio</th>
+          <th>Industria</th>
+          <th>Ubicación</th>
+          <th>Estado</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in no_contact_companies %}
+        <tr>
+          <td><strong>{{ c.name }}</strong></td>
+          <td style="font-family:monospace;font-size:0.78rem">{{ c.domain or '—' }}</td>
+          <td style="color:var(--muted)">{{ c.industry or '—' }}</td>
+          <td style="color:var(--muted)">{{ c.location or '—' }}</td>
+          <td>
+            {% if c.domain %}
+              <span style="color:#4ade80;font-size:0.78rem">✓ lista para enriquecer</span>
+            {% else %}
+              <span style="color:var(--amber);font-size:0.78rem">⚠ falta dominio</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
 <!-- ── Exclusión de empresas ──────────────────────────────────────────── -->
 <div class="section">
   <div class="section-title">Exclusión de empresas</div>

@@ -1181,7 +1181,11 @@ async function enrichMissingContacts() {
     const r = await fetch('/enrich-missing-contacts', { method: 'POST' });
     const d = await r.json();
     if (!r.ok) {
-      statusEl.textContent = 'Error: ' + (d.error || r.status);
+      if (d.error === 'no_domain') {
+        statusEl.innerHTML = `⚠️ ${d.message}<br><a href="/settings/rules" style="color:var(--accent)">Ver empresas sin dominio en Settings →</a>`;
+      } else {
+        statusEl.textContent = 'Error: ' + (d.message || d.error || r.status);
+      }
       btn.disabled = false;
       btn.textContent = '🔍 Buscar emails faltantes';
       return;

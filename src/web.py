@@ -1164,17 +1164,34 @@ def create_app() -> Flask:
                   (SELECT COUNT(*) FROM contacts WHERE email_status = 'bounced') AS bounced
             """)).fetchone()
 
+        # Companies with opps but no contacts, broken down by domain presence
+        no_contact_rows = conn.execute(text("""
+            SELECT c.id, c.name, c.domain, c.industry, c.location
+            FROM companies c
+            WHERE c.id IN (
+                SELECT DISTINCT o.company_id FROM opportunities o
+                WHERE o.company_id NOT IN (
+                    SELECT DISTINCT company_id FROM contacts WHERE company_id IS NOT NULL
+                )
+            )
+            ORDER BY c.name
+        """)).fetchall()
+        no_contact_companies = [
+            {"id": row[0], "name": row[1], "domain": row[2] or "", "industry": row[3] or "", "location": row[4] or ""}
+            for row in no_contact_rows
+        ]
+
         cfg = get_settings()
         stats = {
-            "total_companies":  r[0],
-            "excluded":         r[1],
-            "no_contacts":      r[2],
+            "total_companies":   r[0],
+            "excluded":          r[1],
+            "no_contacts":       r[2],
             "contacts_no_email": r[3],
             "enriched_no_email": r[4],
-            "bounced":          r[5],
-            "enrich_batch":     getattr(cfg, "worker_enrich_batch", 15),
+            "bounced":           r[5],
+            "enrich_batch":      getattr(cfg, "worker_enrich_batch", 15),
         }
-        return render_template("settings_rules.html", stats=stats)
+        return render_template("settings_rules.html", stats=stats, no_contact_companies=no_contact_companies)
 
     @app.route("/settings/providers")
     @_require_auth
@@ -1998,13 +2015,28 @@ def create_app() -> Flask:
             # Companies that have at least one opportunity but zero contacts
             contacted_company_ids = {o.company_id for o in db.query(Opportunity.company_id).all()}
             companies_with_contacts = {c.company_id for c in db.query(Contact.company_id).distinct().all()}
-            missing = [
-                db.get(Company, cid) for cid in contacted_company_ids - companies_with_contacts
-                if db.get(Company, cid) and db.get(Company, cid).domain
-                and not db.get(Company, cid).excluded
+            no_contact_ids = contacted_company_ids - companies_with_contacts
+            all_missing = [
+                co for cid in no_contact_ids
+                if (co := db.get(Company, cid)) and not co.excluded
             ]
-            if not missing:
+            missing = [co for co in all_missing if co.domain]
+            no_domain = [co for co in all_missing if not co.domain]
+
+            if not all_missing:
                 return jsonify({"error": "no companies without contacts found"}), 404
+            if not missing:
+                names = ", ".join(co.name for co in no_domain[:10])
+                return jsonify({
+                    "error": "no_domain",
+                    "message": (
+                        f"{len(no_domain)} empresa(s) sin contacto encontrada(s), "
+                        f"pero ninguna tiene dominio — agregá el dominio manualmente "
+                        f"para poder enriquecerlas: {names}"
+                    ),
+                    "no_domain_count": len(no_domain),
+                    "companies": [{"id": co.id, "name": co.name} for co in no_domain],
+                }), 422
 
             # Create placeholder contacts
             contact_ids = []
