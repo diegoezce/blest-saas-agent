@@ -6,6 +6,11 @@ No local data storage; worker only reads/writes shared DB. Full runbook: `worker
 
 ## What It Does (Per Run)
 
+**Phase 0 — Seed missing contacts** (optional, `WORKER_SEED_MISSING` default on):
+- Finds companies that have at least one opportunity + a domain but zero contacts
+- Creates a nameless placeholder contact so they enter the enrichment queue
+- Runs before enrichment so placeholders are picked up in the same run
+
 **Phase 1b — Recovery** (optional, `WORKER_RECOVER_BOUNCED` default on):
 - Retries up to `WORKER_RECOVER_BATCH` bounced contacts
 - Blocklists bad addresses + re-enriches to find alternatives
@@ -16,6 +21,8 @@ No local data storage; worker only reads/writes shared DB. Full runbook: `worker
 - Runs full Layer 0–4 pipeline (domain resolve → scrape → SMTP → Hunter → web search if needed)
 - If `WORKER_RETRY_FAILED` on: also retries previously-failed *named* contacts 
   up to `WORKER_MAX_ATTEMPTS` (stored in `enrichment_log.attempts`)
+- If `WORKER_RETRY_NAMELESS` on: also retries nameless placeholders up to `WORKER_MAX_ATTEMPTS`
+  (Layer 1 scraping + Layer 4 web search can still find generic inboxes like `info@`, `contacto@`)
 - 2s delay between contacts (avoid rate-limiting)
 
 **Phase 2 — Zoho Push** (`WORKER_PUSH_BATCH`, default 15):

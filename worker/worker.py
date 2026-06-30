@@ -66,6 +66,8 @@ FOLLOWUP_DELAY_S = float(os.getenv("WORKER_FOLLOWUP_DELAY", "1"))   # between Zo
 RECOVER_BOUNCED = os.getenv("WORKER_RECOVER_BOUNCED", "true").lower() in ("1", "true", "yes")
 RECOVER_BATCH   = int(os.getenv("WORKER_RECOVER_BATCH", "10"))
 RECOVER_DELAY_S = float(os.getenv("WORKER_RECOVER_DELAY", "2"))     # between contacts
+SEED_MISSING    = os.getenv("WORKER_SEED_MISSING", "true").lower() in ("1", "true", "yes")
+RETRY_NAMELESS  = os.getenv("WORKER_RETRY_NAMELESS", "true").lower() in ("1", "true", "yes")
 
 
 # ── Draft generation (only called when Opportunity.outreach_draft is NULL) ──
@@ -141,6 +143,55 @@ def _generate_draft(company, contact, opportunity, profile) -> tuple[str, str]:
     return email_draft.subject_line, email_draft.body
 
 
+# ── Phase 0: Seed missing contacts ───────────────────────────────────────────
+
+def _run_seed_missing_phase(db) -> int:
+    """Create placeholder contacts for companies that have an opportunity and a domain
+    but zero contacts. These companies would otherwise never enter the enrichment queue.
+
+    Returns the number of placeholders created.
+    """
+    if not SEED_MISSING:
+        logger.info("Seed missing: disabled (WORKER_SEED_MISSING=false)")
+        return 0
+
+    from src.database.models import Contact, Company, Opportunity
+
+    contacted_company_ids = {cid for (cid,) in db.query(Contact.company_id).distinct().all()}
+
+    candidates = (
+        db.query(Company)
+        .join(Opportunity, Opportunity.company_id == Company.id)
+        .filter(Company.domain.isnot(None))
+        .filter(Company.domain != "")
+        .filter(Company.excluded == False)
+        .filter(~Company.id.in_(contacted_company_ids))
+        .distinct()
+        .all()
+    )
+
+    if not candidates:
+        logger.info("Seed missing: no companies without contacts")
+        return 0
+
+    created = 0
+    for co in candidates:
+        placeholder = Contact(
+            company_id=co.id,
+            name=None,
+            role="Unknown",
+            role_category="other",
+            confidence_score=0.3,
+            source="worker_seed_missing",
+        )
+        db.add(placeholder)
+        created += 1
+
+    db.flush()
+    logger.info(f"Seed missing: created {created} placeholder contact(s) for companies without contacts")
+    return created
+
+
 # ── Phase 1: Enrichment ──────────────────────────────────────────────────────
 
 def _run_enrichment_phase(db) -> list[int]:
@@ -181,6 +232,30 @@ def _run_enrichment_phase(db) -> list[int]:
             attempts = ct.enrichment_log.get("attempts", 1) if isinstance(ct.enrichment_log, dict) else 1
             if attempts < MAX_ATTEMPTS:
                 batch.append(ct)
+            if len(batch) >= ENRICH_BATCH:
+                break
+
+    # Also retry nameless placeholders (can still find info@ / contacto@ via scraping/web search)
+    if RETRY_NAMELESS and len(batch) < ENRICH_BATCH:
+        remaining = ENRICH_BATCH - len(batch)
+        nameless_candidates = (
+            db.query(Contact)
+            .filter(Contact.enriched_at.isnot(None))
+            .filter(Contact.company_id.isnot(None))
+            .filter(Contact.email.is_(None))
+            .filter((Contact.name.is_(None)) | (Contact.name == ""))
+            .order_by(Contact.enriched_at.asc())
+            .limit(remaining * 5)
+            .all()
+        )
+        already_ids = {c.id for c in batch}
+        for ct in nameless_candidates:
+            if ct.id in already_ids:
+                continue
+            attempts = ct.enrichment_log.get("attempts", 1) if isinstance(ct.enrichment_log, dict) else 1
+            if attempts < MAX_ATTEMPTS:
+                batch.append(ct)
+                already_ids.add(ct.id)
             if len(batch) >= ENRICH_BATCH:
                 break
 
@@ -447,6 +522,7 @@ def main():
     _run_recovery_phase()  # Phase 1b — retry bounced contacts (own session)
 
     with get_session() as db:
+        _run_seed_missing_phase(db)   # Phase 0 — seed placeholders for companies without contacts
         _run_enrichment_phase(db)
         _run_push_phase(db)
 
