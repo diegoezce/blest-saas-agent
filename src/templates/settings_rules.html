@@ -315,7 +315,13 @@
       <tbody>
         {% for c in no_contact_companies %}
         <tr id="company-row-{{ c.id }}">
-          <td><strong>{{ c.name }}</strong></td>
+          <td>
+            <div style="display:flex;align-items:center;gap:0.4rem">
+              <strong>{{ c.name }}</strong>
+              <button onclick="toggleInfo({{ c.id }})" title="Ver info disponible"
+                style="background:none;border:1px solid var(--border);border-radius:4px;color:var(--muted);font-size:0.7rem;padding:0.1rem 0.35rem;cursor:pointer;line-height:1">ℹ</button>
+            </div>
+          </td>
           <td>
             <div style="display:flex;align-items:center;gap:0.4rem">
               <input
@@ -340,6 +346,35 @@
             {% else %}
               <span style="color:var(--amber);font-size:0.78rem">⚠ falta dominio</span>
             {% endif %}
+          </td>
+        </tr>
+        <tr id="info-row-{{ c.id }}" style="display:none">
+          <td colspan="5" style="padding:0.5rem 0.75rem 0.9rem 1.5rem;background:var(--bg)">
+            <div style="font-size:0.8rem;display:flex;flex-direction:column;gap:0.3rem">
+              {% if c.description %}
+                <div style="color:var(--muted);line-height:1.5">{{ c.description[:300] }}{% if c.description|length > 300 %}…{% endif %}</div>
+              {% endif %}
+              <div style="display:flex;flex-wrap:wrap;gap:0.5rem 1.25rem;margin-top:0.2rem">
+                {% if c.size_estimate %}
+                  <span style="color:var(--muted)">👥 {{ c.size_estimate }}</span>
+                {% endif %}
+                {% if c.location %}
+                  <span style="color:var(--muted)">📍 {{ c.location }}</span>
+                {% endif %}
+                {% if c.industry %}
+                  <span style="color:var(--muted)">🏭 {{ c.industry }}</span>
+                {% endif %}
+                {% if c.website_url %}
+                  <a href="{{ c.website_url }}" target="_blank" rel="noopener" style="color:var(--accent)">🌐 {{ c.website_url }}</a>
+                {% endif %}
+                {% if c.linkedin_url %}
+                  <a href="{{ c.linkedin_url }}" target="_blank" rel="noopener" style="color:var(--accent)">🔗 LinkedIn</a>
+                {% endif %}
+              </div>
+              {% if not c.description and not c.website_url and not c.linkedin_url and not c.size_estimate %}
+                <span style="color:var(--muted);font-style:italic">Sin información adicional en la DB.</span>
+              {% endif %}
+            </div>
           </td>
         </tr>
         {% endfor %}
@@ -426,6 +461,11 @@
 </div>
 
 <script>
+function toggleInfo(companyId) {
+  const row = document.getElementById('info-row-' + companyId);
+  row.style.display = row.style.display === 'none' ? 'table-row' : 'none';
+}
+
 async function saveDomain(companyId) {
   const input  = document.getElementById('domain-input-' + companyId);
   const status = document.getElementById('domain-status-' + companyId);

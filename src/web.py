@@ -1165,7 +1165,8 @@ def create_app() -> Flask:
             """)).fetchone()
 
             no_contact_rows = conn.execute(text("""
-                SELECT c.id, c.name, c.domain, c.industry, c.location
+                SELECT c.id, c.name, c.domain, c.industry, c.location,
+                       c.description, c.website_url, c.linkedin_url, c.size_estimate
                 FROM companies c
                 WHERE c.id IN (
                     SELECT DISTINCT o.company_id FROM opportunities o
@@ -1177,7 +1178,12 @@ def create_app() -> Flask:
             """)).fetchall()
 
         no_contact_companies = [
-            {"id": row[0], "name": row[1], "domain": row[2] or "", "industry": row[3] or "", "location": row[4] or ""}
+            {
+                "id": row[0], "name": row[1], "domain": row[2] or "",
+                "industry": row[3] or "", "location": row[4] or "",
+                "description": row[5] or "", "website_url": row[6] or "",
+                "linkedin_url": row[7] or "", "size_estimate": row[8] or "",
+            }
             for row in no_contact_rows
         ]
 
