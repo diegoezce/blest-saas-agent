@@ -314,12 +314,27 @@
       </thead>
       <tbody>
         {% for c in no_contact_companies %}
-        <tr>
+        <tr id="company-row-{{ c.id }}">
           <td><strong>{{ c.name }}</strong></td>
-          <td style="font-family:monospace;font-size:0.78rem">{{ c.domain or '—' }}</td>
+          <td>
+            <div style="display:flex;align-items:center;gap:0.4rem">
+              <input
+                id="domain-input-{{ c.id }}"
+                type="text"
+                value="{{ c.domain }}"
+                placeholder="ej: acme.com"
+                style="background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:0.25rem 0.5rem;color:var(--text);font-size:0.78rem;font-family:monospace;width:160px"
+              >
+              <button onclick="saveDomain({{ c.id }})"
+                style="background:var(--accent);color:#0f172a;border:none;border-radius:5px;padding:0.25rem 0.55rem;font-size:0.75rem;font-weight:700;cursor:pointer;white-space:nowrap">
+                Guardar
+              </button>
+              <span id="domain-status-{{ c.id }}" style="font-size:0.75rem;display:none"></span>
+            </div>
+          </td>
           <td style="color:var(--muted)">{{ c.industry or '—' }}</td>
           <td style="color:var(--muted)">{{ c.location or '—' }}</td>
-          <td>
+          <td id="domain-state-{{ c.id }}">
             {% if c.domain %}
               <span style="color:#4ade80;font-size:0.78rem">✓ lista para enriquecer</span>
             {% else %}
@@ -410,4 +425,39 @@
   </div>
 </div>
 
+<script>
+async function saveDomain(companyId) {
+  const input  = document.getElementById('domain-input-' + companyId);
+  const status = document.getElementById('domain-status-' + companyId);
+  const state  = document.getElementById('domain-state-' + companyId);
+  const domain = input.value.trim();
+
+  status.style.display = 'inline';
+  status.style.color = 'var(--muted)';
+  status.textContent = 'Guardando…';
+
+  try {
+    const r = await fetch('/company/' + companyId + '/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ domain }),
+    });
+    const d = await r.json();
+    if (r.ok && d.success) {
+      status.style.color = '#4ade80';
+      status.textContent = '✓ guardado';
+      state.innerHTML = domain
+        ? '<span style="color:#4ade80;font-size:0.78rem">✓ lista para enriquecer</span>'
+        : '<span style="color:var(--amber);font-size:0.78rem">⚠ falta dominio</span>';
+      setTimeout(() => { status.style.display = 'none'; }, 2500);
+    } else {
+      status.style.color = 'var(--red)';
+      status.textContent = '✗ error';
+    }
+  } catch (e) {
+    status.style.color = 'var(--red)';
+    status.textContent = '✗ error';
+  }
+}
+</script>
 {% endblock %}
