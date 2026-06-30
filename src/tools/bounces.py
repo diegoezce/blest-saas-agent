@@ -98,10 +98,13 @@ def scan_and_match(max_messages: int = 200) -> dict:
                     if not _domain_matches(c.company.domain, _email_domain(addr)):
                         continue
                     # Narrow by first name: local part of bounced addr must contain
-                    # the contact's first name (case-insensitive) to avoid false positives
+                    # the contact's first name (case-insensitive) to avoid false positives.
+                    # Skip contacts with no name or no email — can't confirm identity.
+                    if not c.name or not c.email:
+                        continue
                     local = addr.split("@")[0].lower()
-                    first = (c.name or "").split()[0].lower() if c.name else ""
-                    if first and first not in local:
+                    first = c.name.split()[0].lower()
+                    if first not in local:
                         continue
                     matched.append({
                         "contact_id": c.id, "name": c.name or "", "email": c.email,
