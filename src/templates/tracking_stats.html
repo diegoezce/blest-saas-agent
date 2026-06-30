@@ -68,6 +68,13 @@
   <h1>📬 Email Opens</h1>
 </div>
 
+{% if not tracking_configured %}
+<div style="background:#7f1d1d;color:#fecaca;border:1px solid #991b1b;border-radius:8px;padding:0.65rem 1rem;margin-bottom:1rem;font-size:0.83rem;">
+  <strong>TRACKING_BASE_URL no configurado</strong> — el pixel de seguimiento no se inserta en los borradores/envíos.
+  Las aperturas no se registrarán hasta que configures esta variable de entorno.
+</div>
+{% endif %}
+
 <div class="cr-stats">
   <div class="cr-stat">
     <span class="cr-stat-num green">{{ contacts_opened_real }}</span>

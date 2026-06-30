@@ -288,6 +288,12 @@ def create_draft(to_address: str, subject: str, content: str, email_id: str | No
                 f'<img src="{pixel_url}" width="1" height="1" '
                 f'style="display:none;" alt="" />'
             )
+        else:
+            logger.warning(
+                "create_draft: email_id=%s set but TRACKING_BASE_URL is unset — "
+                "tracking pixel skipped, opens will not be recorded",
+                email_id,
+            )
 
     payload = {
         "toAddress": to_address,
@@ -354,6 +360,12 @@ def send_email(to_address: str, subject: str, content: str, email_id: str | None
             html_content += (
                 f'<img src="{pixel_url}" width="1" height="1" '
                 f'style="display:none;" alt="" />'
+            )
+        else:
+            logger.warning(
+                "send_email: email_id=%s set but TRACKING_BASE_URL is unset — "
+                "tracking pixel skipped, opens will not be recorded",
+                email_id,
             )
 
     payload = {

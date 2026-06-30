@@ -462,12 +462,14 @@ def create_app() -> Flask:
 
         contacts_opened_real = sum(1 for d in stats if d["real_opens"] > 0)
         total_real_opens = sum(d["real_opens"] for d in stats)
+        tracking_configured = bool(get_settings().tracking_base_url)
 
         return render_template("tracking_stats.html",
                                stats=stats,
                                contacts_opened_real=contacts_opened_real,
                                total_real_opens=total_real_opens,
-                               total_contacts=len(stats))
+                               total_contacts=len(stats),
+                               tracking_configured=tracking_configured)
 
     @app.route("/schedule/update", methods=["POST"])
     @_require_auth
