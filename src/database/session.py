@@ -225,6 +225,27 @@ def _run_migrations() -> None:
     except Exception as e:
         logger.info(f"Migration note (non-fatal): {e}")
 
+    # Company exclusion columns
+    try:
+        engine = get_engine()
+        inspector = inspect(engine)
+        company_cols = {c["name"] for c in inspector.get_columns("companies")}
+        with engine.connect() as conn:
+            if "excluded" not in company_cols:
+                conn.execute(text(
+                    "ALTER TABLE companies ADD COLUMN IF NOT EXISTS excluded BOOLEAN NOT NULL DEFAULT FALSE"
+                ))
+                conn.commit()
+                logger.info("Migration: added companies.excluded")
+            if "excluded_at" not in company_cols:
+                conn.execute(text(
+                    "ALTER TABLE companies ADD COLUMN IF NOT EXISTS excluded_at TIMESTAMP"
+                ))
+                conn.commit()
+                logger.info("Migration: added companies.excluded_at")
+    except Exception as e:
+        logger.info(f"Migration note (non-fatal): {e}")
+
     # Email open tracking table
     try:
         engine = get_engine()

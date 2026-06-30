@@ -272,6 +272,8 @@
         {% endif %}
         <button type="button" class="rc-link"
           onclick="openFeedbackModal({{ c.id }}, '{{ c.name|replace("'", "\\'")|e }}')">💬 Feedback</button>
+        <button type="button" class="rc-link" style="color:var(--red);border-color:#450a0a"
+          onclick="openExcludeModal({{ c.id }}, '{{ c.name|replace("'", "\\'")|e }}')">✕ Excluir</button>
         <form method="POST" action="/company/{{ c.id }}/toggle-contact" style="display:contents">
           {% if c.contacted %}
             <button type="submit" class="rc-link contacted"
@@ -459,6 +461,53 @@ function closeFeedbackModal() {
 }
 document.getElementById('feedback-modal').addEventListener('click', function(e) {
   if (e.target === this) closeFeedbackModal();
+});
+</script>
+
+<!-- ── Exclude Modal ─────────────────────────────────────────────────── -->
+<div id="exclude-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:300;align-items:center;justify-content:center">
+  <div class="card" style="width:100%;max-width:420px;padding:1.75rem">
+    <div style="font-size:2rem;text-align:center;margin-bottom:0.75rem">⚠️</div>
+    <h2 style="font-size:1.1rem;font-weight:700;text-align:center;margin-bottom:0.5rem">Excluir empresa</h2>
+    <p style="font-size:0.88rem;color:var(--muted);text-align:center;margin-bottom:1.25rem">
+      ¿Excluir <strong id="exclude-company-name"></strong>? Dejará de aparecer en los resultados de búsqueda
+      y en futuros runs. Podés desexcluirla desde <strong>Settings → Empresas excluidas</strong>.
+    </p>
+    <div style="display:flex;gap:0.75rem">
+      <button id="exclude-confirm-btn"
+        style="flex:1;background:#7f1d1d;color:#fecaca;font-weight:700;border:none;padding:0.65rem;border-radius:6px;cursor:pointer;font-size:0.9rem">
+        Sí, excluir
+      </button>
+      <button onclick="closeExcludeModal()"
+        style="flex:1;background:var(--surface-hover);color:var(--text);border:1px solid var(--border);padding:0.65rem;border-radius:6px;cursor:pointer;font-size:0.9rem">
+        Cancelar
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+let _excludeCompanyId = null;
+
+function openExcludeModal(id, name) {
+  _excludeCompanyId = id;
+  document.getElementById('exclude-company-name').textContent = name;
+  document.getElementById('exclude-modal').style.display = 'flex';
+}
+function closeExcludeModal() {
+  document.getElementById('exclude-modal').style.display = 'none';
+  _excludeCompanyId = null;
+}
+document.getElementById('exclude-confirm-btn').addEventListener('click', function() {
+  if (!_excludeCompanyId) return;
+  fetch('/company/' + _excludeCompanyId + '/exclude', { method: 'POST' })
+    .then(r => r.json())
+    .then(() => { location.reload(); })
+    .catch(() => { location.reload(); });
+  closeExcludeModal();
+});
+document.getElementById('exclude-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeExcludeModal();
 });
 </script>
 {% endblock %}

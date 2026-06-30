@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+{% block title %}Empresas excluidas — Blest{% endblock %}
+{% block content %}
+
+<style>
+  .excl-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1.75rem;
+  }
+  .excl-header h1 {
+    font-size: 1.4rem;
+    font-weight: 700;
+  }
+  .excl-back {
+    font-size: 0.82rem;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.3rem 0.7rem;
+    text-decoration: none;
+  }
+  .excl-back:hover { border-color: var(--accent); color: var(--accent); text-decoration: none; }
+  .excl-count {
+    font-size: 0.78rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 0.1rem 0.55rem;
+    color: var(--muted);
+    font-weight: 600;
+  }
+
+  .excl-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.88rem;
+  }
+  .excl-table th {
+    text-align: left;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--muted);
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .excl-table td {
+    padding: 0.7rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+    color: var(--text);
+  }
+  .excl-table tr:last-child td { border-bottom: none; }
+  .excl-table tr:hover td { background: var(--surface-hover); }
+
+  .unexclude-btn {
+    font-size: 0.78rem;
+    color: var(--green);
+    border: 1px solid #14532d;
+    border-radius: 5px;
+    padding: 0.2rem 0.55rem;
+    background: none;
+    cursor: pointer;
+    font-family: inherit;
+    white-space: nowrap;
+  }
+  .unexclude-btn:hover { background: #14532d22; }
+
+  .empty-state {
+    text-align: center;
+    color: var(--muted);
+    padding: 3rem 0;
+    font-size: 0.9rem;
+  }
+</style>
+
+<div class="excl-header">
+  <a class="excl-back" href="/settings">← Settings</a>
+  <h1>🚫 Empresas excluidas <span class="excl-count">{{ companies|length }}</span></h1>
+</div>
+
+{% if not companies %}
+  <div class="empty-state">
+    <div style="font-size:2rem;margin-bottom:0.5rem">✅</div>
+    No hay empresas excluidas.
+  </div>
+{% else %}
+<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden">
+  <table class="excl-table">
+    <thead>
+      <tr>
+        <th>Empresa</th>
+        <th>Industria</th>
+        <th>Ubicación</th>
+        <th>Excluida el</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for c in companies %}
+      <tr id="row-{{ c.id }}">
+        <td>
+          <strong>{{ c.name }}</strong>
+          {% if c.domain %}<br><span style="font-size:0.78rem;color:var(--muted)">{{ c.domain }}</span>{% endif %}
+        </td>
+        <td style="color:var(--muted)">{{ c.industry or '—' }}</td>
+        <td style="color:var(--muted)">{{ c.location or '—' }}</td>
+        <td style="color:var(--muted)">{{ c.excluded_at or '—' }}</td>
+        <td style="text-align:right">
+          <button class="unexclude-btn"
+            onclick="openUnexcludeModal({{ c.id }}, '{{ c.name|replace("'", "\\'")|e }}')">
+            ↩ Desexcluir
+          </button>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<!-- ── Unexclude Modal ──────────────────────────────────────────────────── -->
+<div id="unexclude-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:300;align-items:center;justify-content:center">
+  <div class="card" style="width:100%;max-width:420px;padding:1.75rem">
+    <div style="font-size:2rem;text-align:center;margin-bottom:0.75rem">⚠️</div>
+    <h2 style="font-size:1.1rem;font-weight:700;text-align:center;margin-bottom:0.5rem">Desexcluir empresa</h2>
+    <p style="font-size:0.88rem;color:var(--muted);text-align:center;margin-bottom:1.25rem">
+      ¿Volver a incluir <strong id="unexclude-company-name"></strong>?
+      Volverá a aparecer en los resultados de búsqueda y podrá ser contactada en futuros runs.
+    </p>
+    <div style="display:flex;gap:0.75rem">
+      <button id="unexclude-confirm-btn"
+        style="flex:1;background:#14532d;color:#4ade80;font-weight:700;border:none;padding:0.65rem;border-radius:6px;cursor:pointer;font-size:0.9rem">
+        Sí, desexcluir
+      </button>
+      <button onclick="closeUnexcludeModal()"
+        style="flex:1;background:var(--surface-hover);color:var(--text);border:1px solid var(--border);padding:0.65rem;border-radius:6px;cursor:pointer;font-size:0.9rem">
+        Cancelar
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+let _unexcludeId = null;
+
+function openUnexcludeModal(id, name) {
+  _unexcludeId = id;
+  document.getElementById('unexclude-company-name').textContent = name;
+  document.getElementById('unexclude-modal').style.display = 'flex';
+}
+function closeUnexcludeModal() {
+  document.getElementById('unexclude-modal').style.display = 'none';
+  _unexcludeId = null;
+}
+document.getElementById('unexclude-confirm-btn').addEventListener('click', function() {
+  if (!_unexcludeId) return;
+  const rowId = _unexcludeId;
+  fetch('/company/' + rowId + '/unexclude', { method: 'POST' })
+    .then(r => r.json())
+    .then(() => {
+      const row = document.getElementById('row-' + rowId);
+      if (row) row.remove();
+      const tbody = document.querySelector('.excl-table tbody');
+      if (tbody && !tbody.querySelector('tr')) location.reload();
+    })
+    .catch(() => { location.reload(); });
+  closeUnexcludeModal();
+});
+document.getElementById('unexclude-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeUnexcludeModal();
+});
+</script>
+{% endblock %}

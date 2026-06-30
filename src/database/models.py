@@ -83,6 +83,8 @@ class Company(Base):
     source = Column(Text, nullable=True)
     source_url = Column(Text, nullable=True)
     raw_data = Column(JSONB, nullable=True)
+    excluded = Column(Boolean, default=False, nullable=False, server_default="false")
+    excluded_at = Column(DateTime, nullable=True)
     first_seen_at = Column(DateTime, server_default=func.now())
     last_updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 

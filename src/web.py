@@ -258,7 +258,7 @@ def _search_companies_data(db, q: str, limit: int | None = None, offset: int = 0
     from src.database.models import Company, Opportunity, ContactStatus
     from sqlalchemy import or_
 
-    base = db.query(Company)
+    base = db.query(Company).filter(Company.excluded == False)
     if q:
         like = f"%{q}%"
         base = base.filter(or_(
@@ -1022,6 +1022,63 @@ def create_app() -> Flask:
 
             session.commit()
             return jsonify({"success": True, "message": "Company updated"})
+
+    @app.route("/company/<int:company_id>/exclude", methods=["POST"])
+    @_require_auth
+    def exclude_company(company_id):
+        import datetime
+        from src.database.session import get_session
+        from src.database.models import Company
+
+        with get_session() as session:
+            company = session.get(Company, company_id)
+            if not company:
+                return jsonify({"error": "Not found"}), 404
+            company.excluded = True
+            company.excluded_at = datetime.datetime.utcnow()
+
+        return jsonify({"ok": True})
+
+    @app.route("/company/<int:company_id>/unexclude", methods=["POST"])
+    @_require_auth
+    def unexclude_company(company_id):
+        from src.database.session import get_session
+        from src.database.models import Company
+
+        with get_session() as session:
+            company = session.get(Company, company_id)
+            if not company:
+                return jsonify({"error": "Not found"}), 404
+            company.excluded = False
+            company.excluded_at = None
+
+        return jsonify({"ok": True})
+
+    @app.route("/settings/excluded-companies")
+    @_require_auth
+    def excluded_companies():
+        from src.database.session import get_session
+        from src.database.models import Company
+
+        with get_session() as session:
+            rows = (
+                session.query(Company)
+                .filter(Company.excluded == True)
+                .order_by(Company.excluded_at.desc())
+                .all()
+            )
+            companies = [
+                {
+                    "id": c.id,
+                    "name": c.name,
+                    "domain": c.domain or "",
+                    "industry": c.industry or "",
+                    "location": c.location or "",
+                    "excluded_at": str(c.excluded_at)[:16] if c.excluded_at else "",
+                }
+                for c in rows
+            ]
+        return render_template("excluded_companies.html", companies=companies)
 
     # ── Profile Management ───────────────────────────────────────────────────
 
