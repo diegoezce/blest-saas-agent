@@ -215,6 +215,7 @@ def _eligible_followup_opps(session) -> list:
         .join(Company, Opportunity.company_id == Company.id)
         .join(DiscoveryRun, Opportunity.run_id == DiscoveryRun.id)
         .outerjoin(Profile, DiscoveryRun.profile_id == Profile.id)
+        .filter(Company.excluded == False)
         .filter(Opportunity.zoho_pushed_at.isnot(None))
         .filter(func.coalesce(Opportunity.followup_count, 0) < FOLLOWUP_MAX)
         .filter(~Opportunity.company_id.in_(replied_sq))
