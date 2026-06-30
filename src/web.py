@@ -1968,6 +1968,7 @@ def create_app() -> Flask:
             missing = [
                 db.get(Company, cid) for cid in contacted_company_ids - companies_with_contacts
                 if db.get(Company, cid) and db.get(Company, cid).domain
+                and not db.get(Company, cid).excluded
             ]
             if not missing:
                 return jsonify({"error": "no companies without contacts found"}), 404
