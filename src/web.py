@@ -1898,14 +1898,19 @@ def create_app() -> Flask:
             try:
                 create_draft(to_address=contact.email, subject=subject, content=body, email_id=str(contact.id))
                 import datetime
-                contact.draft_sent_at = datetime.datetime.utcnow()
+                now = datetime.datetime.utcnow()
+                contact.draft_sent_at = now
+                opp_to_save = db.query(Opportunity).filter_by(company_id=company_id).order_by(Opportunity.id.desc()).first()
                 if action == "ai":
-                    opp_to_save = db.query(Opportunity).filter_by(company_id=company_id).order_by(Opportunity.id.desc()).first()
                     if opp_to_save:
                         opp_to_save.outreach_draft = body
                         opp_to_save.outreach_subject = subject
                     else:
-                        db.add(Opportunity(company_id=company_id, outreach_draft=body, outreach_subject=subject))
+                        opp_to_save = Opportunity(company_id=company_id, outreach_draft=body, outreach_subject=subject)
+                        db.add(opp_to_save)
+                        db.flush()
+                if opp_to_save and not opp_to_save.zoho_pushed_at:
+                    opp_to_save.zoho_pushed_at = now
                 from src.tools.db_tools import mark_company_contacted
                 mark_company_contacted(db, company_id, method="email")
                 return jsonify({"ok": True})

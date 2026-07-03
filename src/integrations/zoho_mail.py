@@ -314,6 +314,11 @@ def create_draft(to_address: str, subject: str, content: str, email_id: str | No
         json=payload,
         timeout=15,
     )
+    if not resp.ok:
+        logger.error(
+            "create_draft failed %s for %s — Zoho response: %s",
+            resp.status_code, to_address, resp.text[:500],
+        )
     resp.raise_for_status()
     return resp.json()
 
@@ -378,15 +383,27 @@ def send_email(to_address: str, subject: str, content: str, email_id: str | None
     if from_address:
         payload["fromAddress"] = from_address
 
-    resp = requests.post(
-        f"{_ACCOUNTS_URL}/{account_id}/messages",
-        headers={
-            "Authorization": f"Zoho-oauthtoken {access_token}",
-            "Content-Type": "application/json",
-        },
-        json=payload,
-        timeout=15,
-    )
+    url = f"{_ACCOUNTS_URL}/{account_id}/messages"
+    headers_req = {
+        "Authorization": f"Zoho-oauthtoken {access_token}",
+        "Content-Type": "application/json",
+    }
+    for attempt in range(3):
+        resp = requests.post(url, headers=headers_req, json=payload, timeout=15)
+        if resp.status_code in (500, 429) and attempt < 2:
+            wait = 3 * (attempt + 1)
+            logger.warning(
+                "send_email %s for %s (attempt %d) — retrying in %ds. Zoho: %s",
+                resp.status_code, to_address, attempt + 1, wait, resp.text[:200],
+            )
+            time.sleep(wait)
+            continue
+        break
+    if not resp.ok:
+        logger.error(
+            "send_email failed %s for %s — Zoho response: %s",
+            resp.status_code, to_address, resp.text[:500],
+        )
     resp.raise_for_status()
     return resp.json()
 
