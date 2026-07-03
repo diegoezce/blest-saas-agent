@@ -48,12 +48,21 @@ if _env_path.exists():
     from dotenv import load_dotenv
     load_dotenv(_env_path)
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname).1s] %(message)s",
-    datefmt="%H:%M:%S",
-    handlers=[logging.StreamHandler(sys.stdout)],
-)
+def _setup_logging() -> None:
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except (AttributeError, ValueError):
+        pass
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        handlers=[
+            logging.StreamHandler(sys.stdout),
+            logging.FileHandler(Path(__file__).parent / "backup_task.log", encoding="utf-8"),
+        ],
+    )
+
+_setup_logging()
 logger = logging.getLogger(__name__)
 
 BACKUP_PREFIX = os.getenv("BACKUP_PREFIX", "backups/blest/")
@@ -177,7 +186,7 @@ def run_backup() -> None:
 
         _prune_old_backups()
         logger.info("=" * 60)
-        logger.info("BACKUP DONE  — %s", run_ts)
+        logger.info("BACKUP DONE  -- %s", run_ts)
         logger.info("=" * 60)
 
     finally:
