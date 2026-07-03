@@ -52,10 +52,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname).1s] %(message)s",
     datefmt="%H:%M:%S",
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler(Path(__file__).parent / "backup.log", encoding="utf-8"),
-    ],
+    handlers=[logging.StreamHandler(sys.stdout)],
 )
 logger = logging.getLogger(__name__)
 
@@ -91,7 +88,7 @@ def _find_pg_dump() -> str:
     if found:
         return found
     # Common Windows install paths
-    for ver in ("17", "16", "15", "14"):
+    for ver in ("18", "17", "16", "15", "14"):
         candidate = Path(f"C:/Program Files/PostgreSQL/{ver}/bin/pg_dump.exe")
         if candidate.exists():
             return str(candidate)
@@ -113,6 +110,11 @@ def _s3_client():
 
 
 def run_backup() -> None:
+    run_ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    logger.info("=" * 60)
+    logger.info("BACKUP START — %s", run_ts)
+    logger.info("=" * 60)
+
     _require_env("DATABASE_URL", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY",
                  "R2_ENDPOINT_URL", "R2_BUCKET_NAME")
 
@@ -171,9 +173,12 @@ def run_backup() -> None:
         bucket = os.environ["R2_BUCKET_NAME"]
         logger.info("Uploading to R2 bucket '%s'...", bucket)
         _s3_client().upload_file(tmp_path, bucket, object_key)
-        logger.info("✅ Backup uploaded: %s", object_key)
+        logger.info("Backup uploaded OK: %s", object_key)
 
         _prune_old_backups()
+        logger.info("=" * 60)
+        logger.info("BACKUP DONE  — %s", run_ts)
+        logger.info("=" * 60)
 
     finally:
         if Path(tmp_path).exists():
