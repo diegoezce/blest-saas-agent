@@ -3283,6 +3283,40 @@ def create_app() -> Flask:
             title=title, slug=slug, rows=rows,
         )
 
+    @app.route("/company/<int:company_id>/mark-replied", methods=["POST"])
+    @_require_auth
+    def company_mark_replied(company_id: int):
+        """Manually mark a company as replied (sets replied_at on its primary contact)."""
+        import datetime
+        from src.database.session import get_session
+        from src.database.models import Contact, ContactStatus
+        with get_session() as db:
+            # Pick the most recently enriched contact with an email, fallback to any contact
+            contact = (
+                db.query(Contact)
+                .filter_by(company_id=company_id)
+                .order_by(Contact.enriched_at.desc().nullslast(), Contact.id.asc())
+                .first()
+            )
+            if not contact:
+                flash("No hay contactos para esta empresa.", "error")
+                return redirect(url_for("excluded_companies"))
+            contact.replied_at = datetime.datetime.utcnow()
+            # Ensure ContactStatus exists and has response_received set
+            cs = db.query(ContactStatus).filter_by(company_id=company_id).first()
+            if cs:
+                if not cs.response_received:
+                    cs.response_received = "replied"
+            else:
+                db.add(ContactStatus(
+                    company_id=company_id,
+                    contacted_at=datetime.datetime.utcnow(),
+                    response_received="replied",
+                ))
+            db.commit()
+        flash("Empresa marcada como respondida — aparecerá en Follow-ups > Respondidas.", "success")
+        return redirect(url_for("excluded_companies"))
+
     @app.route("/contact/<int:contact_id>/clear-replied", methods=["POST"])
     @_require_auth
     def contact_clear_replied(contact_id: int):
