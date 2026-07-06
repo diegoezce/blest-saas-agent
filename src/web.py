@@ -3297,18 +3297,14 @@ def create_app() -> Flask:
         from src.database.session import get_session
         from src.database.models import Contact, ContactStatus
         with get_session() as db:
-            # Pick the most recently enriched contact with an email, fallback to any contact
             contact = (
                 db.query(Contact)
                 .filter_by(company_id=company_id)
                 .order_by(Contact.enriched_at.desc().nullslast(), Contact.id.asc())
                 .first()
             )
-            if not contact:
-                flash("No hay contactos para esta empresa.", "error")
-                return redirect(url_for("excluded_companies"))
-            contact.replied_at = datetime.datetime.utcnow()
-            # Ensure ContactStatus exists and has response_received set
+            if contact:
+                contact.replied_at = datetime.datetime.utcnow()
             cs = db.query(ContactStatus).filter_by(company_id=company_id).first()
             if cs:
                 if not cs.response_received:

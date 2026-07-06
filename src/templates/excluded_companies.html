@@ -113,6 +113,16 @@
   }
 </style>
 
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% for category, message in messages %}
+    <div style="margin-bottom:1rem;padding:0.75rem 1rem;border-radius:8px;font-size:0.88rem;font-weight:600;
+      {% if category == 'error' %}background:#7f1d1d33;border:1px solid #f87171;color:#f87171;
+      {% else %}background:#14532d33;border:1px solid #4ade80;color:#4ade80;{% endif %}">
+      {{ message }}
+    </div>
+  {% endfor %}
+{% endwith %}
+
 <div class="excl-header">
   <a class="excl-back" href="/settings">← Settings</a>
   <h1>🚫 Empresas excluidas <span class="excl-count">{{ companies|length }}</span></h1>
