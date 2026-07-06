@@ -1103,7 +1103,7 @@ def create_app() -> Flask:
     @_require_auth
     def excluded_companies():
         from src.database.session import get_session
-        from src.database.models import Company
+        from src.database.models import Company, ContactStatus
 
         with get_session() as session:
             rows = (
@@ -1112,6 +1112,11 @@ def create_app() -> Flask:
                 .order_by(Company.excluded_at.desc())
                 .all()
             )
+            company_ids = [c.id for c in rows]
+            statuses = {
+                cs.company_id: cs
+                for cs in session.query(ContactStatus).filter(ContactStatus.company_id.in_(company_ids)).all()
+            }
             companies = [
                 {
                     "id": c.id,
@@ -1120,6 +1125,7 @@ def create_app() -> Flask:
                     "industry": c.industry or "",
                     "location": c.location or "",
                     "excluded_at": str(c.excluded_at)[:16] if c.excluded_at else "",
+                    "has_note": bool(statuses.get(c.id) and (statuses[c.id].comment or statuses[c.id].follow_up_date)),
                 }
                 for c in rows
             ]

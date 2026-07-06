@@ -82,6 +82,29 @@
   }
   .mark-replied-btn:hover { background: #1e3a5f44; }
 
+  .notes-btn {
+    font-size: 0.82rem;
+    color: var(--accent);
+    border: 1px solid rgba(56,189,248,0.3);
+    border-radius: 5px;
+    padding: 0.2rem 0.55rem;
+    background: none;
+    cursor: pointer;
+    font-family: inherit;
+    white-space: nowrap;
+  }
+  .notes-btn:hover { background: rgba(56,189,248,0.08); }
+
+  .has-note-dot {
+    display: inline-block;
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    vertical-align: middle;
+    margin-left: 3px;
+    margin-bottom: 2px;
+  }
+
   .empty-state {
     text-align: center;
     color: var(--muted);
@@ -123,6 +146,10 @@
         <td style="color:var(--muted)">{{ c.location or '—' }}</td>
         <td style="color:var(--muted)">{{ c.excluded_at or '—' }}</td>
         <td style="text-align:right;display:flex;gap:0.4rem;justify-content:flex-end;align-items:center">
+          <button class="notes-btn"
+            onclick="openFeedbackModal({{ c.id }}, '{{ c.name|replace("'", "\\'")|e }}')">
+            💬 Notas{% if c.has_note %}<span class="has-note-dot"></span>{% endif %}
+          </button>
           <button class="mark-replied-btn"
             onclick="openMarkRepliedModal({{ c.id }}, '{{ c.name|replace("'", "\\'")|e }}')">
             ✉ Respondida
@@ -138,6 +165,49 @@
   </table>
 </div>
 {% endif %}
+
+<!-- ── Feedback / Notes Modal ───────────────────────────────────────────── -->
+<div id="feedback-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:300;align-items:center;justify-content:center">
+  <div class="card" style="width:100%;max-width:520px;padding:1.75rem;max-height:90vh;overflow-y:auto">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.1rem">
+      <h2 style="font-size:1.15rem;font-weight:700" id="feedback-company-name">Notas</h2>
+      <button onclick="closeFeedbackModal()" style="background:none;border:none;color:var(--muted);font-size:1.3rem;cursor:pointer;line-height:1">×</button>
+    </div>
+    <form id="feedback-form" method="POST" action="">
+      <div style="margin-bottom:1rem">
+        <label style="font-size:0.78rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;display:block;margin-bottom:0.35rem">Notas</label>
+        <textarea name="comment" rows="4" placeholder="¿Qué pasó? Contexto para el próximo contacto..."
+          style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:0.6rem 0.75rem;color:var(--text);font-size:0.88rem;font-family:inherit;resize:vertical;box-sizing:border-box"></textarea>
+      </div>
+      <div style="margin-bottom:1rem">
+        <label style="font-size:0.78rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;display:block;margin-bottom:0.35rem">Respuesta recibida</label>
+        <select name="response_received"
+          style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:0.6rem 0.75rem;color:var(--text);font-size:0.88rem;font-family:inherit">
+          <option value="">— ninguna —</option>
+          <option value="replied">Respondió</option>
+          <option value="interested">Interesado</option>
+          <option value="meeting_scheduled">Reunión agendada</option>
+          <option value="not_interested">No interesado</option>
+        </select>
+      </div>
+      <div style="margin-bottom:1.25rem">
+        <label style="font-size:0.78rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;display:block;margin-bottom:0.35rem">Recordatorio / Follow-up</label>
+        <input type="date" name="follow_up_date"
+          style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:0.6rem 0.75rem;color:var(--text);font-size:0.88rem;font-family:inherit;width:100%;box-sizing:border-box">
+      </div>
+      <div style="display:flex;gap:0.75rem">
+        <button type="submit"
+          style="flex:1;background:var(--accent);color:#000;font-weight:700;border:none;padding:0.65rem;border-radius:6px;cursor:pointer;font-size:0.9rem">
+          Guardar
+        </button>
+        <button type="button" onclick="closeFeedbackModal()"
+          style="flex:1;background:var(--surface-hover);color:var(--text);border:1px solid var(--border);padding:0.65rem;border-radius:6px;cursor:pointer;font-size:0.9rem">
+          Cancelar
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
 
 <!-- ── Mark Replied Modal ───────────────────────────────────────────────── -->
 <div id="mark-replied-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:300;align-items:center;justify-content:center">
@@ -186,6 +256,31 @@
 </div>
 
 <script>
+// ── Feedback modal ──
+function openFeedbackModal(id, name) {
+  const modal = document.getElementById('feedback-modal');
+  const form  = document.getElementById('feedback-form');
+  document.getElementById('feedback-company-name').textContent = '💬 ' + name;
+  form.action = '/company/' + id + '/feedback';
+  form.comment.value = '';
+  form.response_received.value = '';
+  form.follow_up_date.value = '';
+  fetch('/company/' + id + '/feedback')
+    .then(r => r.json())
+    .then(data => {
+      if (data.comment)           form.comment.value = data.comment;
+      if (data.response_received) form.response_received.value = data.response_received;
+      if (data.follow_up_date)    form.follow_up_date.value = data.follow_up_date;
+    }).catch(() => {});
+  modal.style.display = 'flex';
+}
+function closeFeedbackModal() {
+  document.getElementById('feedback-modal').style.display = 'none';
+}
+document.getElementById('feedback-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeFeedbackModal();
+});
+
 let _markRepliedId = null;
 
 function openMarkRepliedModal(id, name) {
