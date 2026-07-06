@@ -3344,6 +3344,62 @@ def create_app() -> Flask:
         flash("Respuesta borrada — la empresa vuelve al circuito de follow-ups.", "success")
         return redirect(url_for("follow_ups"))
 
+    @app.route("/company/<int:company_id>/contacts", methods=["GET"])
+    @_require_auth
+    def company_contacts(company_id: int):
+        from src.database.session import get_session
+        from src.database.models import Contact
+        with get_session() as db:
+            contacts = (
+                db.query(Contact)
+                .filter_by(company_id=company_id)
+                .order_by(Contact.enriched_at.desc().nullslast(), Contact.id.asc())
+                .all()
+            )
+            return jsonify([{
+                "id": c.id,
+                "name": c.name or "",
+                "email": c.email or "",
+                "role": c.role or "",
+                "replied_at": c.replied_at.isoformat() if c.replied_at else None,
+            } for c in contacts])
+
+    @app.route("/company/<int:company_id>/reassign-replied", methods=["POST"])
+    @_require_auth
+    def company_reassign_replied(company_id: int):
+        """Move replied_at to a different contact of the same company."""
+        import datetime
+        from src.database.session import get_session
+        from src.database.models import Contact, ContactStatus
+        contact_id = request.form.get("contact_id", type=int)
+        if not contact_id:
+            flash("Falta el contacto.", "error")
+            return redirect(url_for("follow_ups"))
+        with get_session() as db:
+            # Clear replied_at from all contacts of this company
+            db.query(Contact).filter_by(company_id=company_id).update({"replied_at": None})
+            # Set it on the chosen contact
+            chosen = db.query(Contact).filter_by(id=contact_id, company_id=company_id).first()
+            if not chosen:
+                flash("Contacto no encontrado.", "error")
+                db.rollback()
+                return redirect(url_for("follow_ups"))
+            chosen.replied_at = datetime.datetime.utcnow()
+            # Ensure ContactStatus reflects the reply
+            cs = db.query(ContactStatus).filter_by(company_id=company_id).first()
+            if cs:
+                if not cs.response_received:
+                    cs.response_received = "replied"
+            else:
+                db.add(ContactStatus(
+                    company_id=company_id,
+                    contacted_at=datetime.datetime.utcnow(),
+                    response_received="replied",
+                ))
+            db.commit()
+        flash("Contacto actualizado.", "success")
+        return redirect(url_for("follow_ups"))
+
     @app.route("/search")
     @_require_auth
     def search():

@@ -262,12 +262,15 @@
         <td data-label="Contacto">{{ r.contact_name }}</td>
         <td data-label="Email"><a href="mailto:{{ r.contact_email }}" style="color:var(--accent)">{{ r.contact_email }}</a></td>
         <td data-label="Respondió">{{ r.when }}</td>
-        <td>
+        <td style="display:flex;gap:0.35rem;flex-wrap:wrap">
           <form method="POST" action="/contact/{{ r.contact_id }}/clear-replied" style="display:inline">
             <button type="submit" title="Borrar respuesta y reactivar follow-ups"
               style="font-size:0.72rem;padding:0.15rem 0.45rem;border:1px solid var(--border);border-radius:4px;background:transparent;color:var(--muted);cursor:pointer"
               onclick="return confirm('¿Borrar la respuesta de {{ r.contact_name }} y reactivar follow-ups?')">↩ Reactivar</button>
           </form>
+          <button type="button" title="Cambiar el contacto que respondió"
+            style="font-size:0.72rem;padding:0.15rem 0.45rem;border:1px solid var(--border);border-radius:4px;background:transparent;color:var(--accent);cursor:pointer"
+            onclick="openReassignModal({{ r.company_id }}, '{{ r.company|replace("'","\\'")|e }}', {{ r.contact_id }})">✎ Cambiar</button>
         </td>
       </tr>
       {% endfor %}
@@ -372,6 +375,59 @@ async function toggleApproval(companyId, cb) {
     if (label) label.style.opacity = '1';
   }
 }
+
+// ── Reassign replied contact modal ──
+function openReassignModal(companyId, companyName, currentContactId) {
+  const modal = document.getElementById('reassign-modal');
+  document.getElementById('reassign-company-name').textContent = companyName;
+  document.getElementById('reassign-form').action = '/company/' + companyId + '/reassign-replied';
+  const sel = document.getElementById('reassign-contact-select');
+  sel.innerHTML = '<option value="">Cargando…</option>';
+  modal.style.display = 'flex';
+  fetch('/company/' + companyId + '/contacts')
+    .then(r => r.json())
+    .then(contacts => {
+      sel.innerHTML = '';
+      contacts.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.id;
+        opt.textContent = c.name + (c.role ? ' · ' + c.role : '') + (c.email ? ' <' + c.email + '>' : '');
+        if (c.id === currentContactId) opt.selected = true;
+        sel.appendChild(opt);
+      });
+    })
+    .catch(() => { sel.innerHTML = '<option value="">Error cargando contactos</option>'; });
+}
+function closeReassignModal() {
+  document.getElementById('reassign-modal').style.display = 'none';
+}
+document.getElementById('reassign-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeReassignModal();
+});
 </script>
+
+<!-- Reassign replied contact modal -->
+<div id="reassign-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:300;align-items:center;justify-content:center">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;width:100%;max-width:420px;padding:1.75rem">
+    <h2 style="font-size:1.05rem;font-weight:700;margin-bottom:0.35rem">Cambiar contacto que respondió</h2>
+    <p id="reassign-company-name" style="font-size:0.85rem;color:var(--muted);margin-bottom:1rem"></p>
+    <form id="reassign-form" method="POST">
+      <label style="font-size:0.78rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:0.35rem">Contacto que respondió</label>
+      <select id="reassign-contact-select" name="contact_id"
+        style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:0.6rem 0.75rem;color:var(--text);font-size:0.88rem;font-family:inherit;margin-bottom:1.25rem">
+      </select>
+      <div style="display:flex;gap:0.75rem">
+        <button type="submit"
+          style="flex:1;background:var(--accent);color:#000;font-weight:700;border:none;padding:0.65rem;border-radius:6px;cursor:pointer;font-size:0.9rem">
+          Guardar
+        </button>
+        <button type="button" onclick="closeReassignModal()"
+          style="flex:1;background:var(--surface-hover);color:var(--text);border:1px solid var(--border);padding:0.65rem;border-radius:6px;cursor:pointer;font-size:0.9rem">
+          Cancelar
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
 
 {% endblock %}
