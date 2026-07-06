@@ -2837,6 +2837,11 @@ def create_app() -> Flask:
                 .order_by(Contact.replied_at.desc())
                 .all()
             )
+            # Deduplicate by company — keep the most-recently-replied contact per company
+            _seen_replied = {}
+            for contact, company in replied_rows:
+                if company.id not in _seen_replied:
+                    _seen_replied[company.id] = (contact, company)
             replied = [{
                 "company_id": company.id,
                 "contact_id": contact.id,
@@ -2844,7 +2849,7 @@ def create_app() -> Flask:
                 "contact_name": contact.name or "",
                 "contact_email": contact.email or "",
                 "when": contact.replied_at.strftime("%d/%m/%Y") if contact.replied_at else "",
-            } for contact, company in replied_rows]
+            } for contact, company in _seen_replied.values()]
 
             # ── Stats: contacted & waiting for a response ──
             replied_sq = db.query(Contact.company_id).filter(Contact.replied_at.isnot(None))
