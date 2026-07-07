@@ -3365,6 +3365,127 @@ def create_app() -> Flask:
                 "replied_at": c.replied_at.isoformat() if c.replied_at else None,
             } for c in contacts])
 
+    @app.route("/company/<int:company_id>/generate-insights", methods=["POST"])
+    @_require_auth
+    def company_generate_insights(company_id: int):
+        """Generate on-demand AI insights for a single company using Haiku."""
+        import json as _json
+        import anthropic
+        import instructor
+        from src.database.session import get_session
+        from src.database.models import Company, Contact, Opportunity, Profile
+        from src.schemas.outputs import CompanyInsightList
+        from src.prompts.insights import INSIGHTS_STATIC, INSIGHTS_BATCH_PROMPT
+        from sqlalchemy import desc
+
+        with get_session() as db:
+            company = db.get(Company, company_id)
+            if not company:
+                return jsonify({"error": "Empresa no encontrada"}), 404
+
+            contacts = db.query(Contact).filter_by(company_id=company_id).all()
+            opp = (
+                db.query(Opportunity)
+                .filter_by(company_id=company_id)
+                .order_by(desc(Opportunity.score))
+                .first()
+            )
+
+            # Resolve profile: prefer run's profile, fall back to default
+            profile_dict = None
+            profile_id = (
+                db.query(Opportunity.run_id)
+                .filter_by(company_id=company_id)
+                .order_by(desc(Opportunity.score))
+                .scalar()
+            )
+            if profile_id:
+                from src.database.models import DiscoveryRun
+                run = db.get(DiscoveryRun, profile_id)
+                if run and run.profile_id:
+                    p = db.get(Profile, run.profile_id)
+                    if p:
+                        profile_dict = {c.name: getattr(p, c.name) for c in Profile.__table__.columns}
+            if not profile_dict:
+                p = db.query(Profile).filter_by(is_default=True).first()
+                if p:
+                    profile_dict = {c.name: getattr(p, c.name) for c in Profile.__table__.columns}
+
+            po = get_profile_overrides(profile_dict)
+
+            company_payload = {
+                "name": company.name,
+                "domain": company.domain,
+                "industry": company.industry,
+                "size_estimate": company.size_estimate,
+                "location": company.location,
+                "description": company.description,
+                "has_international_clients": company.has_international_clients,
+                "has_english_job_postings": company.has_english_job_postings,
+                "remote_friendly": company.remote_friendly,
+            }
+            scoring_payload = {
+                "company_name": company.name,
+                "score": opp.score if opp else None,
+                "priority": opp.priority if opp else None,
+                "score_explanation": opp.score_explanation if opp else None,
+            }
+            contacts_payload = [
+                {"name": c.name, "role": c.role, "email": c.email}
+                for c in contacts
+            ]
+
+            payload = [{"company": company_payload, "scoring": scoring_payload, "contacts": contacts_payload}]
+            static_prompt = INSIGHTS_STATIC.format(
+                agent_name=po["agent_company_name"],
+                agent_description=po["agent_description"],
+                agent_service_description=po.get("search_focus_terms") or "improve their business communication skills",
+            )
+
+        try:
+            cfg = get_settings()
+            client = instructor.from_anthropic(anthropic.Anthropic(api_key=cfg.anthropic_api_key))
+            result = client.messages.create(
+                model=cfg.fast_model,
+                max_tokens=2048,
+                messages=[{
+                    "role": "user",
+                    "content": static_prompt + "\n\n" + INSIGHTS_BATCH_PROMPT.format(
+                        companies_json=_json.dumps(payload, ensure_ascii=False, indent=2)
+                    ),
+                }],
+                response_model=CompanyInsightList,
+            )
+        except Exception as e:
+            logger.error(f"On-demand insights failed for company {company_id}: {e}", exc_info=True)
+            return jsonify({"error": str(e)}), 500
+
+        if not result.insights:
+            return jsonify({"error": "El modelo no devolvió resultados"}), 500
+
+        insight = result.insights[0]
+
+        with get_session() as db:
+            opp = (
+                db.query(Opportunity)
+                .filter_by(company_id=company_id)
+                .order_by(desc(Opportunity.score))
+                .first()
+            )
+            if opp:
+                opp.insights = insight.why_they_need_training
+                opp.evidence = _json.dumps(insight.evidence_found, ensure_ascii=False)
+                opp.suggested_approach = insight.suggested_approach
+                opp.conversation_angle = insight.conversation_starter
+                db.commit()
+
+        return jsonify({
+            "why": insight.why_they_need_training,
+            "evidence": insight.evidence_found,
+            "approach": insight.suggested_approach,
+            "starter": insight.conversation_starter,
+        })
+
     @app.route("/company/<int:company_id>/reassign-replied", methods=["POST"])
     @_require_auth
     def company_reassign_replied(company_id: int):

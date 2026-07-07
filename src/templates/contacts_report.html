@@ -73,6 +73,15 @@
   .lead-meta { display: flex; flex-wrap: wrap; gap: 0.35rem; font-size: 0.78rem; color: var(--muted); align-items: center; }
   .lead-desc { font-size: 0.8rem; color: var(--muted); line-height: 1.5; }
   .lead-notable { font-size: 0.77rem; color: var(--muted); font-style: italic; border-left: 2px solid var(--border); padding-left: 0.5rem; }
+  .btn-insights { background: none; border: 1px dashed var(--border); border-radius: 6px; color: var(--muted); font-size: 0.75rem; padding: 0.3rem 0.65rem; cursor: pointer; display: inline-flex; align-items: center; gap: 0.35rem; transition: border-color 0.15s, color 0.15s; }
+  .btn-insights:hover { border-color: var(--accent); color: var(--accent); }
+  .insights-cost { font-size: 0.68rem; opacity: 0.7; }
+  .insights-result { margin-top: 0.5rem; border-left: 2px solid var(--accent); padding-left: 0.65rem; display: flex; flex-direction: column; gap: 0.45rem; }
+  .insights-block-label { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-bottom: 0.1rem; }
+  .insights-block-text { font-size: 0.8rem; color: var(--text); line-height: 1.5; }
+  .insights-evidence { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.2rem; }
+  .insights-evidence li { font-size: 0.78rem; color: var(--muted); padding-left: 0.9rem; position: relative; }
+  .insights-evidence li::before { content: "·"; position: absolute; left: 0.2rem; }
 
   .contact-rows { display: flex; flex-direction: column; gap: 0.2rem; border-top: 1px solid var(--border); padding-top: 0.4rem; }
   .contact-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem; font-size: 0.79rem; }
@@ -366,6 +375,12 @@
 
   {% if d.description %}<div class="lead-desc">{{ d.description }}</div>{% endif %}
   {% if d.notable %}<div class="lead-notable">⭐ {{ d.notable }}</div>{% endif %}
+
+  <div class="insights-area" id="insights-area-{{ d.id }}">
+    <button class="btn-insights" onclick="generateInsights({{ d.id }}, this)" title="Genera análisis con IA (Haiku ~$0.002)">
+      🔍 Generar análisis <span class="insights-cost">⚠ ~$0.002</span>
+    </button>
+  </div>
 
   {% if d.contacts %}
   <div class="contact-rows">
@@ -1344,6 +1359,48 @@ async function saveEmail(contactId) {
     if (d.error) { showNotification('Error: ' + d.error, 'error'); return; }
     location.reload();
   } catch (e) {
+    showNotification('Error: ' + e, 'error');
+  }
+}
+
+async function generateInsights(companyId, btn) {
+  const area = document.getElementById('insights-area-' + companyId);
+  btn.disabled = true;
+  btn.textContent = '⏳ Generando…';
+
+  try {
+    const r = await fetch('/company/' + companyId + '/generate-insights', { method: 'POST' });
+    const d = await r.json();
+    if (d.error) {
+      btn.disabled = false;
+      btn.innerHTML = '🔍 Generar análisis <span class="insights-cost">⚠ ~$0.002</span>';
+      showNotification('Error: ' + d.error, 'error');
+      return;
+    }
+
+    const evidenceHtml = d.evidence.map(e => `<li>${e}</li>`).join('');
+    area.innerHTML = `
+      <div class="insights-result">
+        <div>
+          <div class="insights-block-label">💡 Por qué lo necesitan</div>
+          <div class="insights-block-text">${d.why}</div>
+        </div>
+        <div>
+          <div class="insights-block-label">📋 Evidencia</div>
+          <ul class="insights-evidence">${evidenceHtml}</ul>
+        </div>
+        <div>
+          <div class="insights-block-label">🎯 Approach sugerido</div>
+          <div class="insights-block-text">${d.approach}</div>
+        </div>
+        <div>
+          <div class="insights-block-label">💬 Pregunta de apertura</div>
+          <div class="insights-block-text" style="font-style:italic">"${d.starter}"</div>
+        </div>
+      </div>`;
+  } catch (e) {
+    btn.disabled = false;
+    btn.innerHTML = '🔍 Generar análisis <span class="insights-cost">⚠ ~$0.002</span>';
     showNotification('Error: ' + e, 'error');
   }
 }
