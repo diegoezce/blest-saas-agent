@@ -72,6 +72,12 @@ def run_discovery_node(state: AgentState) -> AgentState:
                 f"- Additional signals: {po['search_focus_terms']}"
             )
 
+        discovery_strategy_block = ""
+        if po.get("discovery_strategy"):
+            discovery_strategy_block = (
+                f"\n## Discovery Strategy (follow this)\n{po['discovery_strategy']}\n"
+            )
+
         query_resp = _llm().messages.create(
             model=cfg.fast_model,
             max_tokens=1024,
@@ -86,6 +92,7 @@ def run_discovery_node(state: AgentState) -> AgentState:
                     min_employees=po["min_employees"],
                     max_employees=po["max_employees"],
                     search_focus=search_focus_block,
+                    discovery_strategy_block=discovery_strategy_block,
                 ),
             }],
             response_model=SearchQueryList,
@@ -121,6 +128,7 @@ def run_discovery_node(state: AgentState) -> AgentState:
                     min_employees=po["min_employees"],
                     max_employees=po["max_employees"],
                     industry_signals=industry_signals,
+                    discovery_strategy_block=discovery_strategy_block,
                 ),
             }],
             response_model=CompanyList,

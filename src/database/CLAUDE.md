@@ -64,6 +64,7 @@ on startup via `_run_migrations()` in `src/database/session.py` — uses
 - Enrichment columns: `contacts.email`, `email_status`, `email_source`, 
   `phone_whatsapp`, `enriched_at`, `enrichment_log`
 - `contacts.replied_at`
+- `profiles.discovery_strategy` (TEXT — free-text discovery strategy injected into query-gen + extraction prompts)
 - `opportunities.outreach_subject`, `opportunities.zoho_pushed_at`
 - Follow-up columns: `opportunities.followup_count`, `last_followup_at`, 
   `followup_subject`, `followup_draft`

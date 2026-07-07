@@ -118,8 +118,8 @@ def get_profile_overrides(profile: dict | None) -> dict:
     """Merge a Profile's overrides on top of global Settings defaults.
 
     Returns a dict with keys: target_cities_list, target_industries_list,
-    min_employees, max_employees, search_focus_terms, scoring_rubric,
-    outreach_tone, target_roles, agent_company_name, agent_description.
+    min_employees, max_employees, search_focus_terms, discovery_strategy,
+    scoring_rubric, outreach_tone, target_roles, agent_company_name, agent_description.
     """
     cfg = get_settings()
     overrides: dict = {
@@ -128,6 +128,7 @@ def get_profile_overrides(profile: dict | None) -> dict:
         "min_employees": cfg.min_employees,
         "max_employees": cfg.max_employees,
         "search_focus_terms": "",
+        "discovery_strategy": "",
         "scoring_rubric": None,
         "outreach_tone": "warm",
         "outreach_language": "es",
@@ -150,6 +151,8 @@ def get_profile_overrides(profile: dict | None) -> dict:
         overrides["max_employees"] = profile["max_employees"]
     if profile.get("search_focus_terms"):
         overrides["search_focus_terms"] = profile["search_focus_terms"]
+    if profile.get("discovery_strategy"):
+        overrides["discovery_strategy"] = profile["discovery_strategy"]
     if profile.get("scoring_rubric"):
         overrides["scoring_rubric"] = profile["scoring_rubric"]
     if profile.get("outreach_tone"):

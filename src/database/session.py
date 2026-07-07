@@ -155,6 +155,13 @@ def _run_migrations() -> None:
                 ))
                 conn.commit()
                 logger.info("Migration: added profiles.is_default")
+        if "discovery_strategy" not in profile_cols:
+            with engine.connect() as conn:
+                conn.execute(text(
+                    "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS discovery_strategy TEXT"
+                ))
+                conn.commit()
+                logger.info("Migration: added profiles.discovery_strategy")
     except Exception as e:
         logger.info(f"Migration note (non-fatal): {e}")
 

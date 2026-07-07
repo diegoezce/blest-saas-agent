@@ -29,6 +29,7 @@ class Profile(Base):
     min_employees = Column(Integer, nullable=True)
     max_employees = Column(Integer, nullable=True)
     search_focus_terms = Column(Text, nullable=True, comment="Extra context for query generation")
+    discovery_strategy = Column(Text, nullable=True, comment="Free-text discovery strategy: ecosystem-first, intent signals, quality vs quantity")
 
     # How to score
     scoring_rubric = Column(JSONB, nullable=True, comment="Custom scoring rubric JSON")

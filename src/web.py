@@ -119,6 +119,7 @@ def _profile_form_data() -> dict:
         "min_employees": _int_or_none(request.form.get("min_employees")),
         "max_employees": _int_or_none(request.form.get("max_employees")),
         "search_focus_terms": request.form.get("search_focus_terms", "").strip() or None,
+        "discovery_strategy": request.form.get("discovery_strategy", "").strip() or None,
         "outreach_tone": request.form.get("outreach_tone", "warm"),
         "outreach_language": request.form.get("outreach_language", "es"),
         "outreach_instructions": request.form.get("outreach_instructions", "").strip() or None,

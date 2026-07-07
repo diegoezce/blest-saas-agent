@@ -8,7 +8,7 @@ Target profile:
 - Employee range: {min_employees} to {max_employees} employees
 - Industries: {target_industries}
 {search_focus}
-
+{discovery_strategy_block}
 Generate {num_queries} diverse web search queries to find these companies.
 Mix Spanish and English. Cover different sources: LinkedIn, Bumeran, Computrabajo, Glassdoor,
 Infobae, La Nación Tecnología, Cronista, Clutch.co, Crunchbase, G2.
@@ -44,6 +44,7 @@ Signals of need:
 - US/EU market presence
 - Recently funded startup with international investors
 {industry_signals}
+{discovery_strategy_block}
 
 For each qualifying company extract:
 - name: Company name (string)

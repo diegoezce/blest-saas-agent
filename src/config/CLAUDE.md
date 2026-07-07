@@ -15,6 +15,7 @@ Each profile defines targeting, messaging, and scoring for one product/service:
 | `min_employees` | int | — | Overrides global config |
 | `max_employees` | int | — | Overrides global config |
 | `search_focus_terms` | string | — | Extra context for query generation |
+| `discovery_strategy` | text | — | Free-text strategy: ecosystem-first, intent signals, quality vs quantity — injected into both discovery prompts |
 | `scoring_rubric` | JSONB | DEFAULT_SCORING_RUBRIC | Custom scoring rules |
 | `outreach_tone` | enum | "warm" | One of: warm, direct, professional, referral |
 | `outreach_language` | enum | "es" | `es` (Argentine voseo) or `en` |
