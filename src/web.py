@@ -3411,6 +3411,7 @@ def create_app() -> Flask:
                 if p:
                     profile_dict = {c.name: getattr(p, c.name) for c in Profile.__table__.columns}
 
+            from src.config import get_profile_overrides
             po = get_profile_overrides(profile_dict)
 
             company_payload = {
