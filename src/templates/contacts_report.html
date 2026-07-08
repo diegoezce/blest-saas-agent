@@ -860,8 +860,9 @@
 
     <div style="margin-bottom:1.25rem">
       <label style="font-size:0.85rem;color:var(--muted);display:block;margin-bottom:0.35rem;font-weight:600">Tipo de contenido</label>
+      <div id="draft-existing-note" style="display:none;font-size:0.8rem;color:var(--muted);margin-bottom:0.5rem"></div>
       <div style="display:flex;flex-direction:column;gap:0.4rem;font-size:0.87rem">
-        <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer">
+        <label id="draft-type-existing-label" style="display:flex;align-items:center;gap:0.5rem;cursor:pointer">
           <input type="radio" name="draft-type" value="use_existing" style="accent-color:var(--accent)" checked> Usar draft existente
         </label>
         <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer">
@@ -1061,7 +1062,41 @@ function openDraftModal(companyId, companyName) {
   _currentDraftContactId = card ? card.dataset.firstContactId : null;
   document.getElementById('draft-modal').style.display = 'flex';
   document.getElementById('draft-profile-select').value = '';
-  document.querySelector('input[name="draft-type"][value="use_existing"]').checked = true;
+
+  const existingRadio = document.querySelector('input[name="draft-type"][value="use_existing"]');
+  const aiRadio = document.querySelector('input[name="draft-type"][value="ai"]');
+  const existingLabel = document.getElementById('draft-type-existing-label');
+  const note = document.getElementById('draft-existing-note');
+  note.style.display = 'none';
+  existingRadio.disabled = false;
+  existingLabel.style.opacity = '1';
+  existingRadio.checked = true;
+
+  if (!_currentDraftContactId) return;
+
+  // Probe whether this company already has a generated draft, so we don't
+  // default to "use_existing" and 404 when none exists (e.g. contacts added
+  // via "Buscar emails faltantes" for companies without an outreach draft).
+  fetch('/company/' + companyId + '/create-manual-draft', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({contact_id: _currentDraftContactId})
+  })
+    .then(r => r.json())
+    .then(data => {
+      if (data.no_draft) {
+        existingRadio.disabled = true;
+        existingRadio.checked = false;
+        existingLabel.style.opacity = '0.5';
+        aiRadio.checked = true;
+        note.textContent = 'Esta empresa no tiene un draft generado todavía. Elegí "Generar con IA" o "Vacío".';
+        note.style.display = 'block';
+      } else if (data.has_existing) {
+        note.textContent = 'Draft existente: "' + (data.subject || '') + '"';
+        note.style.display = 'block';
+      }
+    })
+    .catch(() => {});
 }
 function closeDraftModal() {
   document.getElementById('draft-modal').style.display = 'none';

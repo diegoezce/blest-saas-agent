@@ -2517,7 +2517,7 @@ def create_app() -> Flask:
             contacts_rows = (
                 db.query(Contact)
                 .filter(Contact.company_id.in_(company_ids))
-                .order_by(Contact.confidence_score.desc())
+                .order_by(Contact.is_primary.desc().nullslast(), Contact.confidence_score.desc().nullslast())
                 .all()
             )
             contacts_by_company: dict = {}
