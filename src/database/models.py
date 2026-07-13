@@ -195,3 +195,20 @@ class EmailOpenEvent(Base):
     ip_address = Column(String(50), nullable=True)
     user_agent = Column(String(500), nullable=True)
 
+
+class IntakeSubmission(Base):
+    __tablename__ = "intake_submissions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    token = Column(String(64), nullable=False, unique=True, index=True)
+    label = Column(Text, nullable=False, comment="Operator-facing name, e.g. 'Estudio García'")
+    language = Column(String(5), nullable=True, comment="Language the client used: es|en")
+    status = Column(String(20), nullable=False, default="pending",
+                    comment="pending | submitted | generating | generated | error")
+    answers = Column(JSONB, nullable=True, comment="Raw intake answers keyed by question key")
+    error_message = Column(Text, nullable=True)
+    profile_id = Column(Integer, ForeignKey("profiles.id"), nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+    submitted_at = Column(DateTime, nullable=True)
+    generated_at = Column(DateTime, nullable=True)
+

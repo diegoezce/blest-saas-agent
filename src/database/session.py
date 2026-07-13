@@ -274,3 +274,31 @@ def _run_migrations() -> None:
             logger.info("Migration: email_open_events table ready")
     except Exception as e:
         logger.info(f"Migration note (non-fatal): {e}")
+
+    # Client intake submissions table
+    try:
+        engine = get_engine()
+        with engine.connect() as conn:
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS intake_submissions (
+                    id SERIAL PRIMARY KEY,
+                    token VARCHAR(64) NOT NULL,
+                    label TEXT NOT NULL,
+                    language VARCHAR(5),
+                    status VARCHAR(20) NOT NULL DEFAULT 'pending',
+                    answers JSONB,
+                    error_message TEXT,
+                    profile_id INTEGER REFERENCES profiles(id),
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    submitted_at TIMESTAMP,
+                    generated_at TIMESTAMP
+                )
+            """))
+            conn.execute(text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS ix_intake_submissions_token "
+                "ON intake_submissions (token)"
+            ))
+            conn.commit()
+            logger.info("Migration: intake_submissions table ready")
+    except Exception as e:
+        logger.info(f"Migration note (non-fatal): {e}")

@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="{{ lang }}">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% if lang == 'en' %}Tell us about your business{% else %}Contanos sobre tu negocio{% endif %}</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --surface: #1e293b;
+      --surface-hover: #263549;
+      --border: #2d3f55;
+      --text: #f1f5f9;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+      --green: #4ade80;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+      font-size: 15px;
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+    main { max-width: 680px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.25rem 1.5rem;
+    }
+    label {
+      display: block;
+      font-size: 0.92rem;
+      font-weight: 600;
+      margin-bottom: 0.35rem;
+    }
+    .hint { font-size: 0.78rem; color: var(--muted); margin-top: 0.3rem; }
+    input[type=text], textarea, select {
+      width: 100%;
+      padding: 0.6rem 0.75rem;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-size: 0.92rem;
+      font-family: inherit;
+    }
+    input:focus, textarea:focus, select:focus { outline: none; border-color: var(--accent); }
+    textarea { min-height: 92px; resize: vertical; }
+    .lang-toggle { display: flex; gap: 0.5rem; }
+    .lang-toggle a {
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 0.85rem;
+      padding: 0.25rem 0.7rem;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+    }
+    .lang-toggle a.active { color: #0f172a; background: var(--accent); border-color: var(--accent); font-weight: 700; }
+    .submit-btn {
+      background: var(--accent);
+      color: #0f172a;
+      font-weight: 700;
+      border: none;
+      padding: 0.8rem 2rem;
+      border-radius: 8px;
+      font-size: 1rem;
+      cursor: pointer;
+      width: 100%;
+    }
+    .submit-btn:hover { filter: brightness(1.1); }
+    .req { color: var(--accent); }
+  </style>
+</head>
+<body>
+<main>
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem;gap:1rem;flex-wrap:wrap">
+    <div style="font-weight:800;font-size:1.05rem">🎯 <span style="color:var(--accent)">Lead Discovery</span></div>
+    <div class="lang-toggle">
+      <a href="?lang=es" class="{{ 'active' if lang == 'es' else '' }}">Español</a>
+      <a href="?lang=en" class="{{ 'active' if lang == 'en' else '' }}">English</a>
+    </div>
+  </div>
+
+  {% if submitted %}
+  <div class="card" style="text-align:center;padding:3rem 2rem">
+    <div style="font-size:2.5rem;margin-bottom:1rem">✅</div>
+    {% if lang == 'en' %}
+      <h1 style="font-size:1.3rem;margin-bottom:0.5rem">Thank you!</h1>
+      <p style="color:var(--muted)">We received your answers. We'll use them to start finding the right leads for your business.</p>
+      <p style="color:var(--muted);font-size:0.85rem;margin-top:0.75rem">Need to change something? You can reopen this link and submit again.</p>
+    {% else %}
+      <h1 style="font-size:1.3rem;margin-bottom:0.5rem">¡Gracias!</h1>
+      <p style="color:var(--muted)">Recibimos tus respuestas. Las vamos a usar para empezar a buscar los clientes indicados para tu negocio.</p>
+      <p style="color:var(--muted);font-size:0.85rem;margin-top:0.75rem">¿Necesitás cambiar algo? Podés volver a abrir este link y enviar de nuevo.</p>
+    {% endif %}
+  </div>
+
+  {% elif locked %}
+  <div class="card" style="text-align:center;padding:3rem 2rem">
+    <div style="font-size:2.5rem;margin-bottom:1rem">📬</div>
+    {% if lang == 'en' %}
+      <h1 style="font-size:1.3rem;margin-bottom:0.5rem">We already received your answers</h1>
+      <p style="color:var(--muted)">This form has been completed and is being processed. If you need to change something, please contact us.</p>
+    {% else %}
+      <h1 style="font-size:1.3rem;margin-bottom:0.5rem">Ya recibimos tus respuestas</h1>
+      <p style="color:var(--muted)">Este formulario ya fue completado y está en proceso. Si necesitás cambiar algo, contactanos.</p>
+    {% endif %}
+  </div>
+
+  {% else %}
+  <div style="margin-bottom:1.5rem">
+    {% if lang == 'en' %}
+      <h1 style="font-size:1.4rem;font-weight:800">Tell us about your business</h1>
+      <p style="color:var(--muted);font-size:0.92rem;margin-top:0.35rem">
+        Your answers help us find the right companies and write emails that sound like you.
+        The more specific, the better — it takes about 10 minutes.
+      </p>
+    {% else %}
+      <h1 style="font-size:1.4rem;font-weight:800">Contanos sobre tu negocio</h1>
+      <p style="color:var(--muted);font-size:0.92rem;margin-top:0.35rem">
+        Tus respuestas nos ayudan a encontrar las empresas correctas y escribir emails que suenen como vos.
+        Cuanto más específico, mejor — toma unos 10 minutos.
+      </p>
+    {% endif %}
+  </div>
+
+  <form method="post" action="/intake/{{ token }}?lang={{ lang }}" style="display:flex;flex-direction:column;gap:1rem">
+    {% for q in questions %}
+    <div class="card">
+      <label for="{{ q.key }}">
+        {{ q[lang] }}{% if q.required %} <span class="req">*</span>{% endif %}
+      </label>
+      {% set val = answers.get(q.key, '') %}
+      {% if q.type == 'textarea' %}
+        <textarea id="{{ q.key }}" name="{{ q.key }}" maxlength="4000" {% if q.required %}required{% endif %}>{{ val }}</textarea>
+      {% elif q.type == 'select' %}
+        <select id="{{ q.key }}" name="{{ q.key }}" {% if q.required %}required{% endif %}>
+          {% for opt in q.options %}
+          <option value="{{ opt[0] }}" {% if val == opt[0] %}selected{% endif %}>
+            {{ opt[1] if lang == 'es' else opt[2] }}
+          </option>
+          {% endfor %}
+        </select>
+      {% else %}
+        <input type="text" id="{{ q.key }}" name="{{ q.key }}" maxlength="4000" value="{{ val }}" {% if q.required %}required{% endif %}>
+      {% endif %}
+      {% set hint = q.hint_es if lang == 'es' else q.hint_en %}
+      {% if hint %}<div class="hint">{{ hint }}</div>{% endif %}
+    </div>
+    {% endfor %}
+
+    <button type="submit" class="submit-btn">
+      {% if lang == 'en' %}Send answers{% else %}Enviar respuestas{% endif %}
+    </button>
+  </form>
+  {% endif %}
+</main>
+</body>
+</html>

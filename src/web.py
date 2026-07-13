@@ -2,6 +2,7 @@ import base64
 import concurrent.futures
 import logging
 import os
+import secrets
 import threading
 import time
 import collections
@@ -348,6 +349,80 @@ def _search_contacts_data(db, q: str, limit: int = 40) -> list[dict]:
             "company_domain": co.domain or "",
         })
     return contacts
+
+
+def _generate_profile_draft(submission_id: int) -> None:
+    """Background: convert intake answers into a draft (inactive) Profile via Claude."""
+    import datetime as _dt
+    import json
+    import anthropic
+    import instructor
+    from src.database.session import get_session
+    from src.database.models import IntakeSubmission, Profile
+    from src.prompts.intake import INTAKE_QUESTIONS, PROFILE_DRAFT_PROMPT
+    from src.schemas.outputs import ProfileDraft
+    from src.config import get_settings
+
+    try:
+        with get_session() as db:
+            sub = db.get(IntakeSubmission, submission_id)
+            if not sub or not sub.answers:
+                return
+            answers = dict(sub.answers)
+            existing_profile_id = sub.profile_id
+
+        qa_pairs = [
+            {"question": q["en"], "answer": answers.get(q["key"], "")}
+            for q in INTAKE_QUESTIONS if answers.get(q["key"])
+        ]
+        cfg = get_settings()
+        client = instructor.from_anthropic(anthropic.Anthropic(api_key=cfg.anthropic_api_key))
+        draft = client.messages.create(
+            model=cfg.reasoning_model,
+            max_tokens=4096,
+            messages=[{
+                "role": "user",
+                "content": PROFILE_DRAFT_PROMPT.format(
+                    answers_json=json.dumps(qa_pairs, ensure_ascii=False, indent=2),
+                ),
+            }],
+            response_model=ProfileDraft,
+        )
+
+        with get_session() as db:
+            sub = db.get(IntakeSubmission, submission_id)
+            fields = draft.model_dump()
+            profile = db.get(Profile, existing_profile_id) if existing_profile_id else None
+            if profile is not None and not profile.active:
+                # Re-generation: overwrite the still-inactive draft in place
+                dup = db.query(Profile).filter(
+                    Profile.name == fields["name"], Profile.id != profile.id
+                ).first()
+                if dup:
+                    fields["name"] = f"{fields['name']} (intake {submission_id})"
+                for key, val in fields.items():
+                    setattr(profile, key, val)
+            else:
+                if db.query(Profile).filter_by(name=fields["name"]).first():
+                    fields["name"] = f"{fields['name']} (intake {submission_id})"
+                profile = Profile(**fields, active=False, is_default=False)
+                db.add(profile)
+                db.flush()
+            sub.profile_id = profile.id
+            sub.status = "generated"
+            sub.error_message = None
+            sub.generated_at = _dt.datetime.utcnow()
+        logger.info(f"Intake {submission_id}: draft profile {profile.id} generated")
+    except Exception as exc:
+        logger.error(f"Intake profile generation failed for submission {submission_id}: {exc}", exc_info=True)
+        try:
+            with get_session() as db:
+                sub = db.get(IntakeSubmission, submission_id)
+                if sub:
+                    sub.status = "error"
+                    sub.error_message = str(exc)[:2000]
+        except Exception:
+            pass
 
 
 def create_app() -> Flask:
@@ -1330,6 +1405,153 @@ def create_app() -> Flask:
                 return redirect(url_for("profile_list"))
 
             return render_template("profile_form.html", profile=profile, action=f"/profiles/{profile_id}/edit")
+
+    # ── Client Intake ──────────────────────────────────────────────────────
+    # Public token-protected form for a client company to describe their business;
+    # answers are converted into a draft (inactive) Profile by Claude.
+
+    @app.route("/intake/<token>", methods=["GET", "POST"])
+    def intake_form(token):
+        import datetime as _dt
+        from src.database.session import get_session
+        from src.database.models import IntakeSubmission
+        from src.prompts.intake import INTAKE_QUESTIONS
+
+        lang = request.args.get("lang", "es")
+        if lang not in ("es", "en"):
+            lang = "es"
+
+        with get_session() as db:
+            sub = db.query(IntakeSubmission).filter_by(token=token).first()
+            if not sub:
+                abort(404)
+
+            locked = sub.status in ("generating", "generated")
+
+            if request.method == "POST":
+                if locked:
+                    return render_template(
+                        "intake_form.html", questions=INTAKE_QUESTIONS, lang=lang,
+                        token=token, answers=sub.answers or {}, locked=True, submitted=False,
+                    )
+                answers = {
+                    q["key"]: (request.form.get(q["key"], "") or "").strip()[:4000]
+                    for q in INTAKE_QUESTIONS
+                }
+                sub.answers = answers
+                sub.language = lang
+                sub.status = "submitted"
+                sub.submitted_at = _dt.datetime.utcnow()
+                return render_template(
+                    "intake_form.html", questions=INTAKE_QUESTIONS, lang=lang,
+                    token=token, answers=answers, locked=False, submitted=True,
+                )
+
+            return render_template(
+                "intake_form.html", questions=INTAKE_QUESTIONS, lang=lang,
+                token=token, answers=sub.answers or {}, locked=locked, submitted=False,
+            )
+
+    @app.route("/intake-admin")
+    @_require_auth
+    def intake_admin():
+        from src.config import settings
+        from src.database.session import get_session
+        from src.database.models import IntakeSubmission
+
+        base_url = (settings.tracking_base_url or "").rstrip("/") or request.url_root.rstrip("/")
+        with get_session() as db:
+            subs = db.query(IntakeSubmission).order_by(IntakeSubmission.created_at.desc()).all()
+            rows = [{
+                "id": s.id,
+                "label": s.label,
+                "status": s.status,
+                "url": f"{base_url}/intake/{s.token}",
+                "profile_id": s.profile_id,
+                "created_at": s.created_at,
+                "submitted_at": s.submitted_at,
+                "generated_at": s.generated_at,
+                "error_message": s.error_message,
+            } for s in subs]
+        return render_template("intake_admin.html", submissions=rows)
+
+    @app.route("/intake-admin/new", methods=["POST"])
+    @_require_auth
+    def intake_new():
+        from src.database.session import get_session
+        from src.database.models import IntakeSubmission
+
+        label = request.form.get("label", "").strip()
+        if not label:
+            flash("El nombre del cliente es obligatorio.", "error")
+            return redirect(url_for("intake_admin"))
+        with get_session() as db:
+            db.add(IntakeSubmission(token=secrets.token_urlsafe(24), label=label))
+        flash(f"Link de intake creado para '{label}'.", "success")
+        return redirect(url_for("intake_admin"))
+
+    @app.route("/intake-admin/<int:sid>")
+    @_require_auth
+    def intake_detail(sid):
+        from src.config import settings
+        from src.database.session import get_session
+        from src.database.models import IntakeSubmission
+        from src.prompts.intake import INTAKE_QUESTIONS
+
+        base_url = (settings.tracking_base_url or "").rstrip("/") or request.url_root.rstrip("/")
+        with get_session() as db:
+            sub = db.query(IntakeSubmission).filter_by(id=sid).first()
+            if not sub:
+                abort(404)
+            answers = sub.answers or {}
+            lang = sub.language or "es"
+            qa = [{
+                "question": q[lang] if lang in ("es", "en") else q["es"],
+                "answer": answers.get(q["key"], ""),
+            } for q in INTAKE_QUESTIONS]
+            data = {
+                "id": sub.id,
+                "label": sub.label,
+                "status": sub.status,
+                "url": f"{base_url}/intake/{sub.token}",
+                "profile_id": sub.profile_id,
+                "submitted_at": sub.submitted_at,
+                "generated_at": sub.generated_at,
+                "error_message": sub.error_message,
+            }
+        return render_template("intake_detail.html", sub=data, qa=qa)
+
+    @app.route("/intake-admin/<int:sid>/generate", methods=["POST"])
+    @_require_auth
+    def intake_generate(sid):
+        from src.database.session import get_session
+        from src.database.models import IntakeSubmission
+
+        with get_session() as db:
+            sub = db.query(IntakeSubmission).filter_by(id=sid).first()
+            if not sub:
+                abort(404)
+            if sub.status not in ("submitted", "generated", "error"):
+                flash("Este intake todavía no tiene respuestas para generar.", "error")
+                return redirect(url_for("intake_detail", sid=sid))
+            sub.status = "generating"
+            sub.error_message = None
+        threading.Thread(target=_generate_profile_draft, args=(sid,), daemon=True).start()
+        flash("Generando perfil con IA… refrescá la página en unos segundos.", "success")
+        return redirect(url_for("intake_detail", sid=sid))
+
+    @app.route("/intake-admin/<int:sid>/delete", methods=["POST"])
+    @_require_auth
+    def intake_delete(sid):
+        from src.database.session import get_session
+        from src.database.models import IntakeSubmission
+
+        with get_session() as db:
+            sub = db.query(IntakeSubmission).filter_by(id=sid).first()
+            if sub:
+                db.delete(sub)
+        flash("Intake eliminado.", "success")
+        return redirect(url_for("intake_admin"))
 
     @app.route("/company/<int:company_id>/feedback", methods=["POST"])
     @_require_auth

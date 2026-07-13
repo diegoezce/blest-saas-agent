@@ -47,6 +47,13 @@ on startup via `_run_migrations()` in `src/database/session.py` — uses
 - Aggregates a run's results for the report page
 - Stores all report data as JSONB `report_json`
 
+**`IntakeSubmission`**
+- One row per client-intake link (token-protected public form at `/intake/<token>`)
+- Fields: `token` (unique), `label`, `language`, `status` (pending → submitted → generating → generated | error),
+  `answers` (JSONB keyed by question key from `src/prompts/intake.py`), `error_message`,
+  `profile_id` (FK — the AI-drafted inactive Profile), `submitted_at`, `generated_at`
+- Operator UI: `/intake-admin` (create links, view answers, trigger AI profile draft)
+
 **`EmailOpenEvent`**
 - One row per email open event (triggered by tracking pixel)
 - Fields: `email_id` (VARCHAR 100 — contact ID as string), `opened_at`, `ip_address`, `user_agent`
@@ -69,5 +76,6 @@ on startup via `_run_migrations()` in `src/database/session.py` — uses
 - Follow-up columns: `opportunities.followup_count`, `last_followup_at`, 
   `followup_subject`, `followup_draft`
 - `email_open_events` table (CREATE TABLE IF NOT EXISTS — new table, not ALTER)
+- `intake_submissions` table (CREATE TABLE IF NOT EXISTS — client intake links/answers; see `IntakeSubmission`)
 
 **Module**: `src/database/session.py:_run_migrations()`

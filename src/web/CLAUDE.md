@@ -72,6 +72,20 @@ Follow-ups → Perfiles → Logout. Visual separators.
 - CRUD for profiles
 - Form fields: targeting, tone, language, outreach instructions, custom scoring rubric
 
+**Client Intake** (`/intake-admin`, `/intake/<token>`):
+- Onboard a new client company as a profile without them touching technical fields
+- `GET|POST /intake/<token>` — **public, no auth** — token-protected bilingual (ES/EN via
+  `?lang=`) plain-language questionnaire from `src/prompts/intake.py`; answers stored as
+  JSONB on `IntakeSubmission`; no AI call on this path; re-submittable until generation starts
+- `/intake-admin` — auth: create shareable links (`secrets.token_urlsafe(24)`), list
+  submissions with status, copy link
+- `/intake-admin/<id>` — Q&A readout; `POST .../generate` spawns background thread
+  (`_generate_profile_draft`) that calls Sonnet via instructor (`ProfileDraft` schema) and
+  creates an **inactive** Profile following seed-profile conventions; on re-generate it
+  updates the draft in place while still inactive; operator reviews in `/profiles/<id>/edit`
+  and activates
+- Shareable URL base: `TRACKING_BASE_URL`, falling back to `request.url_root`
+
 ## Key Implementation Notes
 
 - **Async enrichment** — `POST /run/<id>/enrich-all` spawns background thread, 

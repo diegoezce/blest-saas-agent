@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}Intake — Blest{% endblock %}
+
+{% block content %}
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% for category, message in messages %}
+  <div class="card" style="margin-bottom:1rem;border-left:3px solid {{ 'var(--red)' if category == 'error' else 'var(--green)' }};padding:0.75rem 1rem;font-size:0.9rem">
+    {{ message }}
+  </div>
+  {% endfor %}
+{% endwith %}
+
+<div class="flex items-center justify-between mt-2 wrap gap-2" style="margin-bottom:1.5rem">
+  <div>
+    <h1 style="font-size:1.5rem;font-weight:700">Client Intake</h1>
+    <p class="text-muted mt-1" style="font-size:0.9rem">
+      Crea un link para que un cliente nuevo complete su información.
+      Con sus respuestas la IA genera un borrador de perfil que revisás antes de activar.
+    </p>
+  </div>
+</div>
+
+<div class="card" style="margin-bottom:1.5rem">
+  <div class="section-title">Nuevo link de intake</div>
+  <form method="post" action="/intake-admin/new" style="display:flex;gap:0.75rem;flex-wrap:wrap">
+    <input type="text" name="label" placeholder="Nombre del cliente (ej. Estudio García)" required
+           style="flex:1;min-width:220px;padding:0.6rem 0.75rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.9rem">
+    <button type="submit"
+            style="background:var(--accent);color:#0f172a;font-weight:700;border:none;padding:0.6rem 1.25rem;border-radius:6px;font-size:0.9rem;cursor:pointer">
+      + Crear link
+    </button>
+  </form>
+</div>
+
+{% if not submissions %}
+<div class="card" style="text-align:center;padding:3rem;color:var(--muted)">
+  <div style="font-size:2.5rem;margin-bottom:1rem">📝</div>
+  <p style="font-weight:600">Sin intakes todavía</p>
+  <p style="font-size:0.9rem;margin-top:0.25rem">Creá un link y compartilo con el cliente para empezar.</p>
+</div>
+{% else %}
+<div style="display:flex;flex-direction:column;gap:0.75rem">
+  {% for s in submissions %}
+  <div class="card">
+    <div class="flex items-center justify-between wrap gap-2">
+      <div style="flex:1;min-width:200px">
+        <div style="font-weight:700;font-size:1.05rem">
+          <a href="/intake-admin/{{ s.id }}" style="color:inherit;text-decoration:none">{{ s.label }}</a>
+          {% if s.status == 'pending' %}<span class="badge badge-muted">esperando respuestas</span>
+          {% elif s.status == 'submitted' %}<span class="badge badge-amber">respondido</span>
+          {% elif s.status == 'generating' %}<span class="badge badge-blue">generando…</span>
+          {% elif s.status == 'generated' %}<span class="badge badge-green">perfil generado</span>
+          {% elif s.status == 'error' %}<span class="badge badge-red">error</span>
+          {% endif %}
+        </div>
+        <div class="text-muted" style="font-size:0.78rem;margin-top:0.25rem;word-break:break-all">
+          {{ s.url }}
+        </div>
+      </div>
+      <div class="flex items-center wrap" style="gap:0.5rem">
+        <button onclick="copyLink('{{ s.url }}', this)"
+                style="background:var(--surface-hover);color:var(--text);border:1px solid var(--border);padding:0.4rem 0.8rem;border-radius:6px;font-size:0.82rem;cursor:pointer">
+          📋 Copiar link
+        </button>
+        <a href="/intake-admin/{{ s.id }}"
+           style="background:var(--surface-hover);color:var(--text);border:1px solid var(--border);padding:0.4rem 0.8rem;border-radius:6px;font-size:0.82rem;text-decoration:none">
+          Ver respuestas
+        </a>
+        {% if s.status in ('submitted', 'error') %}
+        <form method="post" action="/intake-admin/{{ s.id }}/generate" style="display:inline">
+          <button type="submit"
+                  style="background:var(--accent);color:#0f172a;font-weight:700;border:none;padding:0.4rem 0.8rem;border-radius:6px;font-size:0.82rem;cursor:pointer">
+            ✨ Generar perfil
+          </button>
+        </form>
+        {% elif s.status == 'generated' and s.profile_id %}
+        <a href="/profiles/{{ s.profile_id }}/edit"
+           style="background:var(--green);color:#0f172a;font-weight:700;padding:0.4rem 0.8rem;border-radius:6px;font-size:0.82rem;text-decoration:none">
+          Editar perfil →
+        </a>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<script>
+function copyLink(url, btn) {
+  navigator.clipboard.writeText(url).then(function() {
+    var orig = btn.textContent;
+    btn.textContent = '✓ Copiado';
+    setTimeout(function() { btn.textContent = orig; }, 1500);
+  });
+}
+</script>
+{% endblock %}

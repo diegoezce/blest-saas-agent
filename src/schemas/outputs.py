@@ -93,6 +93,23 @@ class FollowUpEmail(BaseModel):
     body: str = Field(description="Follow-up email body only (no subject; subject is computed as 'Re: <original>')")
 
 
+class ProfileDraft(BaseModel):
+    name: str = Field(description="Profile display name, usually the client company name")
+    description: str = Field(description="Internal one-paragraph summary of what this profile targets")
+    agent_company_name: str
+    agent_description: str = Field(description="Lowercase phrase completing '<company> is ...'")
+    target_industries: str = Field(description="Comma-separated industry tokens")
+    target_cities: str = Field(description="Comma-separated cities")
+    min_employees: Optional[int] = None
+    max_employees: Optional[int] = None
+    search_focus_terms: str
+    discovery_strategy: str
+    outreach_tone: Literal["warm", "direct", "professional", "referral"] = "warm"
+    outreach_language: Literal["es", "en"] = "es"
+    outreach_instructions: str
+    target_roles: str = Field(description="One role per line")
+
+
 class DailyReport(BaseModel):
     run_date: str
     run_id: int
