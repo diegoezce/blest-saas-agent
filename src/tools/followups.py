@@ -342,8 +342,17 @@ def run_followups(session, batch: int = 15, delay: float = 1.0) -> dict:
 
     all_due = select_followup_candidates(session)
     candidates = [c for c in all_due if c[0].followup_approved][:batch]
+    logger.info(
+        "Follow-ups: %d due, %d approved for auto-send%s",
+        len(all_due), len(candidates),
+        "" if candidates else (
+            " — nothing to send" + (
+                " (due but unapproved: " + ", ".join(c[1].name or "?" for c in all_due[:10]) + ")"
+                if all_due else ""
+            )
+        ),
+    )
     if not candidates:
-        logger.info("Follow-ups: nothing due")
         return {"replies_detected": rep["newly_marked"], "ooo_verified": rep.get("ooo_verified", 0), "ooo_alt_captured": rep.get("ooo_alt_captured", 0), "candidates": 0, "drafted": 0}
 
     logger.info(
@@ -361,7 +370,11 @@ def run_followups(session, batch: int = 15, delay: float = 1.0) -> dict:
             opp.last_followup_at = datetime.now(timezone.utc)
             opp.followup_subject = subject
             opp.followup_draft = body
-            opp.followup_approved = False
+            # Clear the approval company-wide: the flag may live on sibling
+            # opportunity rows (the toggle sets all of them).
+            session.query(Opportunity).filter(
+                Opportunity.company_id == opp.company_id
+            ).update({"followup_approved": False})
             session.flush()
             drafted += 1
             logger.info(f"  📨 {label} — follow-up sent")
@@ -399,7 +412,9 @@ def push_followup_now(session, company_id: int) -> dict:
         opp.last_followup_at = datetime.now(timezone.utc)
         opp.followup_subject = subject
         opp.followup_draft = body
-        opp.followup_approved = False
+        session.query(Opportunity).filter(
+            Opportunity.company_id == opp.company_id
+        ).update({"followup_approved": False})
         session.commit()
         logger.info(f"Follow-up #{stage} enviado: {company.name} → {contact.email}")
         return {"ok": True, "message": f"Follow-up #{stage} enviado para {company.name}", "stage": stage}

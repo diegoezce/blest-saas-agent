@@ -1886,7 +1886,13 @@ def create_app() -> Flask:
     @app.route("/company/<int:company_id>/followup-approve", methods=["POST"])
     @_require_auth
     def followup_approve(company_id):
-        """Toggle followup_approved on the latest opportunity for a company."""
+        """Toggle followup_approved on the opportunity the follow-up worker reads.
+
+        Must match `_eligible_followup_opps` (highest score among pushed opps) —
+        writing to the latest opp by id left the flag on a row the worker never
+        checks when a company had multiple opportunities. The flag is set on every
+        opp of the company so stale rows can't shadow the eligible one.
+        """
         from src.database.session import get_session
         from src.database.models import Opportunity
 
@@ -1894,15 +1900,15 @@ def create_app() -> Flask:
         approved = bool(data.get("approved", False))
 
         with get_session() as session:
-            opp = (
+            opps = (
                 session.query(Opportunity)
                 .filter_by(company_id=company_id)
-                .order_by(Opportunity.id.desc())
-                .first()
+                .all()
             )
-            if not opp:
+            if not opps:
                 return jsonify({"error": "Opportunity no encontrada"}), 404
-            opp.followup_approved = approved
+            for opp in opps:
+                opp.followup_approved = approved
         return jsonify({"ok": True, "approved": approved})
 
     # ── Contact Enrichment ───────────────────────────────────────────────────
