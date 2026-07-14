@@ -65,6 +65,27 @@
 
   .empty-state { text-align: center; padding: 2.5rem 1rem; color: var(--muted); }
 
+  /* Search box */
+  .fu-search-wrap { position: relative; margin-bottom: 1.25rem; }
+  .fu-search-wrap .fu-search-icon {
+    position: absolute; left: 0.85rem; top: 50%; transform: translateY(-50%);
+    color: var(--muted); font-size: 0.9rem; pointer-events: none;
+  }
+  #fuSearch {
+    width: 100%; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.6rem 2.2rem 0.6rem 2.3rem;
+    color: var(--text); font-size: 0.9rem; font-family: inherit;
+  }
+  #fuSearch:focus { outline: none; border-color: var(--accent); }
+  #fuSearchClear {
+    position: absolute; right: 0.6rem; top: 50%; transform: translateY(-50%);
+    background: transparent; border: none; color: var(--muted); font-size: 1rem;
+    cursor: pointer; padding: 0.1rem 0.3rem; display: none;
+  }
+  #fuSearchClear:hover { color: var(--text); }
+  .fu-search-count { font-size: 0.76rem; color: var(--muted); margin-top: 0.35rem; }
+  .fu-hidden { display: none !important; }
+
   /* Auto-send approval toggle */
   .fu-approve-wrap {
     display: flex; align-items: center; gap: 0.35rem;
@@ -104,6 +125,13 @@
 <div style="background:rgba(56,189,248,0.07);border:1px solid rgba(56,189,248,0.2);border-radius:8px;padding:0.65rem 1rem;font-size:0.81rem;color:var(--muted);margin-bottom:1.25rem;display:flex;align-items:flex-start;gap:0.6rem">
   <span style="font-size:1rem;flex-shrink:0">⚙️</span>
   <span>El worker envía automáticamente solo los follow-ups marcados con <strong style="color:#4ade80">✅ Auto</strong>. Marcá las empresas que querés que salgan en el próximo ciclo del worker. El botón <strong>⏩ Hacer hoy</strong> siempre funciona, sin necesidad de marcarlos.</span>
+</div>
+
+<div class="fu-search-wrap">
+  <span class="fu-search-icon">🔍</span>
+  <input type="search" id="fuSearch" placeholder="Buscar empresa, contacto o email…" autocomplete="off">
+  <button type="button" id="fuSearchClear" title="Limpiar búsqueda">✕</button>
+  <div class="fu-search-count" id="fuSearchCount" style="display:none"></div>
 </div>
 
 <div class="cr-stats">
@@ -282,6 +310,56 @@
 </details>
 
 <script>
+// ── Global search across all sections ──
+(function() {
+  const input = document.getElementById('fuSearch');
+  const clearBtn = document.getElementById('fuSearchClear');
+  const countEl = document.getElementById('fuSearchCount');
+  const sections = Array.from(document.querySelectorAll('details.fu-section'));
+  const openState = sections.map(s => s.open);
+
+  function normalize(s) {
+    return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  }
+
+  function items() {
+    return document.querySelectorAll('details.fu-section .lead-card, details.fu-section tbody tr');
+  }
+
+  function applyFilter() {
+    const q = normalize(input.value.trim());
+    clearBtn.style.display = q ? 'block' : 'none';
+
+    if (!q) {
+      items().forEach(el => el.classList.remove('fu-hidden'));
+      sections.forEach((s, i) => { s.open = openState[i]; });
+      countEl.style.display = 'none';
+      return;
+    }
+
+    let total = 0;
+    sections.forEach(s => {
+      let matches = 0;
+      s.querySelectorAll('.lead-card, tbody tr').forEach(el => {
+        const hit = normalize(el.textContent).includes(q);
+        el.classList.toggle('fu-hidden', !hit);
+        if (hit) matches++;
+      });
+      s.open = matches > 0;
+      total += matches;
+    });
+    countEl.style.display = 'block';
+    countEl.textContent = total === 0 ? 'Sin resultados'
+      : total + (total === 1 ? ' resultado' : ' resultados');
+  }
+
+  input.addEventListener('input', applyFilter);
+  clearBtn.addEventListener('click', () => { input.value = ''; applyFilter(); input.focus(); });
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { input.value = ''; applyFilter(); }
+  });
+})();
+
 document.querySelectorAll('.fu-push-form').forEach(form => {
   form.addEventListener('submit', function() {
     const button = this.querySelector('.fu-now-btn');
