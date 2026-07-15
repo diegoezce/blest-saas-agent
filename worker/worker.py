@@ -19,6 +19,7 @@ Run from the project root:
 
 import json
 import logging
+import logging.handlers
 import os
 import sys
 import time
@@ -38,17 +39,20 @@ def _setup_logging() -> None:
     log_file = Path(__file__).parent / "worker.log"
     # On Windows, stdout defaults to cp1252 which can't encode the emoji used in
     # log messages (⏭ ✍ 📧 →). run_worker.bat redirects stdout into
-    # worker_task.log, so without this every emoji line raises UnicodeEncodeError.
+    # worker_task_<week>.log, so without this every emoji line raises UnicodeEncodeError.
     try:
         sys.stdout.reconfigure(encoding="utf-8")
     except (AttributeError, ValueError):
         pass
+    rotating = logging.handlers.TimedRotatingFileHandler(
+        log_file, when="W0", backupCount=8, encoding="utf-8"
+    )
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(message)s",
         handlers=[
             logging.StreamHandler(sys.stdout),
-            logging.FileHandler(log_file, encoding="utf-8"),
+            rotating,
         ],
     )
 
