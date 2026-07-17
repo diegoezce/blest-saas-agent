@@ -412,7 +412,8 @@ def _generate_profile_draft(submission_id: int) -> None:
             sub.status = "generated"
             sub.error_message = None
             sub.generated_at = _dt.datetime.utcnow()
-        logger.info(f"Intake {submission_id}: draft profile {profile.id} generated")
+            profile_id = profile.id
+        logger.info(f"Intake {submission_id}: draft profile {profile_id} generated")
     except Exception as exc:
         logger.error(f"Intake profile generation failed for submission {submission_id}: {exc}", exc_info=True)
         try:
