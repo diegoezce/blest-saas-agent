@@ -125,6 +125,7 @@ def run_discovery_node(state: AgentState) -> AgentState:
                     agent_description=agent_desc,
                     search_results=results_text,
                     target_cities=", ".join(po["target_cities_list"]),
+                    target_industries=", ".join(po["target_industries_list"]),
                     min_employees=po["min_employees"],
                     max_employees=po["max_employees"],
                     industry_signals=industry_signals,

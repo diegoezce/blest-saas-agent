@@ -27,47 +27,38 @@ Return exactly {num_queries} queries.
 """
 
 COMPANY_EXTRACTION_PROMPT = """\
-You are extracting structured company data from web search results on behalf of {agent_name}, {agent_description}.
+You are extracting structured organization data from web search results on behalf of {agent_name}, {agent_description}.
 
-Identify companies from the results below that may need {agent_name}'s services.
+Identify organizations from the results below that may need {agent_name}'s services.
 
 Target profile:
-- Based in Argentina ({target_cities} or remote)
-- {min_employees}–{max_employees} employees (skip if clearly outside this range)
+- Located in: {target_cities}
+- Size: {min_employees}–{max_employees} employees/members (skip if clearly outside this range)
+- Target industries/sectors: {target_industries}
 - Has at least ONE signal of need
-
-Signals of need:
-- International or foreign clients
-- Job postings requiring English or bilingual candidates
-- Remote teams working with overseas colleagues
-- Global or cross-border operations
-- US/EU market presence
-- Recently funded startup with international investors
 {industry_signals}
 {discovery_strategy_block}
 
-For each qualifying company extract:
-- name: Company name (string)
-- website_url: Full URL of the company's OWN official site (or null)
+For each qualifying organization extract:
+- name: Organization name (string)
+- website_url: Full URL of the organization's OWN official site (or null)
 - domain: Domain only, e.g. "acme.com" (or null)
-  IMPORTANT: Always extract the company's official website domain when it
+  IMPORTANT: Always extract the organization's official website domain when it
   appears anywhere in the results. Never use social media, job boards, news
   sites or directory links (linkedin.com, facebook.com, bumeran, computrabajo,
   paginasamarillas, crunchbase, etc.) as the domain — leave null if only those
   are present.
 - linkedin_url: LinkedIn company page URL (or null)
-- industry: One of: technology, consulting, accounting, fintech, legaltech, professional_services, oil_gas, energy, other
+- industry: Best matching industry/sector from the target list above, or "other"
 - size_estimate: e.g. "50-100" or "unknown"
-- location: City in Argentina (e.g. "Buenos Aires")
-- description: 1-2 sentence summary of what the company does
+- location: City where the organization is based
+- description: 1-2 sentence summary of what the organization does
 - remote_friendly: true/false based on evidence
 - has_international_clients: true/false based on evidence
 - has_english_job_postings: true/false based on evidence
 - source: "tavily"
-- source_url: The URL where this company was found
-- signals: List of 1-3 specific evidence strings (e.g. "Job posting requires advanced English for US client support")
-
-EXCLUDE: government entities, non-profits, sole traders, companies outside Argentina.
+- source_url: The URL where this organization was found
+- signals: List of 1-3 specific evidence strings showing why they match the target profile
 
 SEARCH RESULTS:
 {search_results}
