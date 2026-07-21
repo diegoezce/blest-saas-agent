@@ -3420,7 +3420,7 @@ def create_app() -> Flask:
         """List the exact companies behind each reporting insight."""
         from sqlalchemy import func
         from src.database.session import get_session
-        from src.database.models import Company, Contact, Opportunity, ContactStatus
+        from src.database.models import Company, Contact, Opportunity, ContactStatus, DiscoveryRun, Profile
         from datetime import date
 
         VALID = {
@@ -3436,10 +3436,18 @@ def create_app() -> Flask:
         today = date.today()
         SUCCESS = ("replied", "interested", "meeting_scheduled")
 
+        profile_filter = request.args.get("profile_id", "")
+        selected_profile_id = int(profile_filter) if profile_filter.isdigit() else None
+
         with get_session() as db:
             opp_rows = db.query(
                 Opportunity.company_id, Opportunity.score, Opportunity.zoho_pushed_at,
-            ).all()
+                DiscoveryRun.profile_id,
+            ).outerjoin(DiscoveryRun, Opportunity.run_id == DiscoveryRun.id).all()
+            profile_options = [
+                {"id": p.id, "name": p.name}
+                for p in db.query(Profile).filter_by(active=True).order_by(Profile.name).all()
+            ]
             contact_rows = db.query(
                 Contact.company_id, Contact.email_status, Contact.email,
             ).all()
@@ -3451,11 +3459,20 @@ def create_app() -> Flask:
 
         score_by_company = {}
         pushed_company_ids = set()
-        for cid, score, pushed in opp_rows:
+        profiles_by_company: dict[int, set] = {}
+        for cid, score, pushed, run_profile_id in opp_rows:
             if score is not None and score > score_by_company.get(cid, -1):
                 score_by_company[cid] = score
             if pushed:
                 pushed_company_ids.add(cid)
+            profiles_by_company.setdefault(cid, set()).add(run_profile_id)
+
+        if selected_profile_id is not None:
+            allowed_ids = {
+                cid for cid, pids in profiles_by_company.items()
+                if selected_profile_id in pids
+            }
+            companies_map = {cid: c for cid, c in companies_map.items() if cid in allowed_ids}
 
         companies_with_contacts = set()
         companies_with_email = set()
@@ -3466,6 +3483,8 @@ def create_app() -> Flask:
                 companies_with_email.add(cid)
             if status == "bounced" and email:
                 c = companies_map.get(cid)
+                if selected_profile_id is not None and c is None:
+                    continue
                 bounced_contacts.append({
                     "id": c["id"] if c else None,
                     "company": c["name"] if c else f"#{cid}",
@@ -3522,6 +3541,8 @@ def create_app() -> Flask:
         return render_template(
             "reporting_insight.html",
             title=title, slug=slug, rows=rows,
+            profile_options=profile_options,
+            selected_profile_id=selected_profile_id,
         )
 
     @app.route("/company/<int:company_id>/mark-replied", methods=["POST"])

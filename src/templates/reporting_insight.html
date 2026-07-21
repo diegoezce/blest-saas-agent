@@ -23,7 +23,16 @@
 <div style="max-width: 860px; margin: 0 auto; padding: 1.5rem 1rem;">
   <a class="back-link" href="/reporting">← Volver al reporte</a>
   <h2 style="margin: 0 0 0.3rem; font-size: 1.25rem;">{{ title }}</h2>
-  <p style="color: var(--muted); font-size: 0.87rem; margin: 0 0 1.5rem;">{{ rows|length }} empresa{% if rows|length != 1 %}s{% endif %}</p>
+  <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin: 0 0 1.5rem; flex-wrap: wrap;">
+    <p style="color: var(--muted); font-size: 0.87rem; margin: 0;">{{ rows|length }} empresa{% if rows|length != 1 %}s{% endif %}</p>
+    <select onchange="location.href='/reporting/insight/{{ slug }}' + (this.value ? '?profile_id=' + this.value : '')"
+            style="background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 0.35rem 0.6rem; font-size: 0.85rem;">
+      <option value="">Todos los perfiles</option>
+      {% for p in profile_options %}
+      <option value="{{ p.id }}" {% if selected_profile_id == p.id %}selected{% endif %}>{{ p.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
 
   {% if rows %}
   <div style="background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden;">
