@@ -29,7 +29,16 @@ def run_outreach_node(state: AgentState) -> AgentState:
     cfg = get_settings()
     po = get_profile_overrides(state.get("profile"))
 
-    top = scored[: cfg.max_companies_for_outreach]
+    # Only draft for companies the worker would actually push (score >= 40,
+    # i.e. quick_win/strategic). low_priority opps are skipped by the Zoho push
+    # floor (worker.py), so drafting them wastes Haiku calls and makes the
+    # Outreach section show empresas that never appear in Top Opportunities.
+    eligible = [s for s in scored if s.get("priority") != "low_priority"]
+    if not eligible:
+        logger.info("No score >= 40 companies — skipping outreach")
+        return {**state, "outreach_drafts": []}
+
+    top = eligible[: cfg.max_companies_for_outreach]
     companies_map = {c["name"]: c for c in state.get("companies", [])}
     contacts_map  = {c["company_name"]: c for c in state.get("contacts", [])}
 
